@@ -1,0 +1,22 @@
+{
+  "name": "localbrisk-root",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LocalBrisk - 本地化全能 AI 智能体工作站",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:icon": "tauri icon ./frontend/public/logo.svg",
+    "backend:dev": "cd backend && python main.py",
+    "fulldev": "concurrently \"npm run backend:dev\" \"sleep 2 && npm run tauri:dev\"",
+    "install:frontend": "cd frontend && npm install",
+    "install:all": "npm install && cd frontend && npm install"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "concurrently": "^8.2.0"
+  }
+}

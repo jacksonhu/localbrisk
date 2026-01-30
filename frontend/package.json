@@ -1,0 +1,46 @@
+{
+  "name": "localbrisk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "cd .. && npx tauri",
+    "tauri:dev": "cd .. && npx tauri dev",
+    "tauri:build": "cd .. && npx tauri build",
+    "tauri:icon": "cd .. && npx tauri icon ./frontend/public/logo.svg",
+    "backend:dev": "cd ../backend && python main.py",
+    "fulldev": "concurrently \"npm run backend:dev\" \"sleep 2 && npm run tauri:dev\"",
+    "package": "bash ../build.sh"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@vueuse/core": "^10.7.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "jszip": "^3.10.1",
+    "lucide-vue-next": "^0.303.0",
+    "mammoth": "^1.11.0",
+    "radix-vue": "^1.4.0",
+    "tailwind-merge": "^2.2.0",
+    "vue": "^3.4.0",
+    "vue-i18n": "^9.14.5",
+    "vue-router": "^4.2.5",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^20.10.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

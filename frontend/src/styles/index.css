@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* LocalBrisk 全局样式 - "Clear & Float" 设计语言 */
+:root {
+  --background: #F5F5F7;
+  --card: #FFFFFF;
+  --foreground: #333333;
+  --primary: #2563EB;
+  --border: #E2E8F0;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  line-height: 1.5;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C1C1C1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A1A1A1;
+}
+
+/* 卡片浮动效果 */
+.card-float {
+  @apply bg-card rounded-lg shadow-float;
+}
+
+.card-float:hover {
+  @apply shadow-float-lg;
+}
+
+/* 树形结构样式 */
+.tree-item {
+  @apply px-2 py-1.5 rounded-md cursor-pointer transition-colors duration-150;
+}
+
+.tree-item:hover {
+  @apply bg-muted;
+}
+
+.tree-item.active {
+  @apply bg-primary/10 text-primary;
+}

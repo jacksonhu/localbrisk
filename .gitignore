@@ -1,0 +1,156 @@
+# ====================================
+# LocalBrisk - Git Ignore Configuration
+# ====================================
+
+# ------------------------------------
+# 构建输出 (Build Outputs)
+# ------------------------------------
+dist/
+dist-ssr/
+build/
+*.local
+
+# ------------------------------------
+# 依赖目录 (Dependencies)
+# ------------------------------------
+# Node.js
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ------------------------------------
+# 虚拟环境 (Virtual Environments)
+# ------------------------------------
+venv/
+.venv/
+ENV/
+env/
+.conda/
+
+# ------------------------------------
+# Tauri / Rust
+# ------------------------------------
+src-tauri/target/
+src-tauri/gen/schemas/
+*.rlib
+*.rmeta
+Cargo.lock
+!src-tauri/Cargo.lock
+
+# ------------------------------------
+# PyInstaller (Python 打包)
+# ------------------------------------
+backend/build/
+backend/dist/
+*.spec
+*.manifest
+*.pyz
+
+# ------------------------------------
+# IDE 和编辑器 (IDE & Editors)
+# ------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------------
+# 系统文件 (System Files)
+# ------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ------------------------------------
+# 日志文件 (Log Files)
+# ------------------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------
+# 测试与覆盖率 (Testing & Coverage)
+# ------------------------------------
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+.nyc_output/
+
+# ------------------------------------
+# 本地配置文件 (Local Config Files)
+# ------------------------------------
+.env
+.env.local
+.env.*.local
+*.local.json
+*.local.yaml
+*.local.yml
+
+# ------------------------------------
+# LocalBrisk 应用数据
+# ------------------------------------
+# 用户数据目录（运行时生成）
+.localbrisk/
+
+# ------------------------------------
+# 临时文件 (Temporary Files)
+# ------------------------------------
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+.vite/
+
+# ------------------------------------
+# 其他 (Miscellaneous)
+# ------------------------------------
+# 编译产物
+*.dll
+*.exe
+*.out
+*.app
+*.dmg
+
+# 压缩文件（通常不需要版本控制）
+# *.zip
+# *.tar.gz
+# *.rar

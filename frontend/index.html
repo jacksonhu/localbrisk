@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LocalBrisk - 本地化全能 AI 智能体工作站</title>
+    <style>
+      /* 防止 Tauri 窗口选中文本 */
+      body {
+        user-select: none;
+        -webkit-user-select: none;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      /* 加载状态样式 */
+      #app-loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #F5F5F7;
+        z-index: 9999;
+      }
+      #app-loading .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #E2E8F0;
+        border-top-color: #2563EB;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      #app-loading .loading-text {
+        margin-top: 16px;
+        color: #666;
+        font-size: 14px;
+      }
+      #app-loading .loading-status {
+        margin-top: 8px;
+        color: #999;
+        font-size: 12px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      /* 错误状态样式 */
+      #app-error {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #F5F5F7;
+        z-index: 9999;
+        padding: 20px;
+        text-align: center;
+      }
+      #app-error h2 {
+        color: #DC2626;
+        margin-bottom: 16px;
+      }
+      #app-error pre {
+        background: #FEF2F2;
+        border: 1px solid #FECACA;
+        border-radius: 8px;
+        padding: 16px;
+        max-width: 600px;
+        overflow: auto;
+        text-align: left;
+        font-size: 12px;
+        color: #991B1B;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 加载状态 -->
+    <div id="app-loading">
+      <div class="spinner"></div>
+      <p class="loading-text">正在加载 LocalBrisk...</p>
+      <p class="loading-status" id="loading-status"></p>
+    </div>
+    
+    <!-- 错误状态 -->
+    <div id="app-error">
+      <h2>⚠️ 加载失败</h2>
+      <p>应用加载过程中发生错误:</p>
+      <pre id="error-message"></pre>
+      <p style="margin-top: 16px; color: #666;">请尝试重新启动应用，或查看日志文件</p>
+    </div>
+    
+    <div id="app"></div>
+    
+    <script>
+      // 全局状态
+      window.__BACKEND_READY__ = false;
+      window.__APP_INITIALIZED__ = false;
+      
+      // 全局错误处理 - 只在应用初始化后捕获
+      window.onerror = function(msg, url, line, col, error) {
+        console.error('Global error:', msg, url, line, col, error);
+        // 只有在后端已就绪且应用已初始化的情况下才显示错误
+        if (window.__APP_INITIALIZED__) {
+          showError('JavaScript Error: ' + msg + '\nAt: ' + url + ':' + line + ':' + col);
+        }
+        return false;
+      };
+      
+      window.onunhandledrejection = function(event) {
+        console.error('Unhandled rejection:', event.reason);
+        // 忽略后端连接相关的 rejection（启动阶段的正常现象）
+        var reason = event.reason?.message || event.reason || '';
+        if (reason.toString().includes('fetch') || reason.toString().includes('network') || reason.toString().includes('connect')) {
+          console.log('Ignoring network rejection during startup');
+          return;
+        }
+        if (window.__APP_INITIALIZED__) {
+          showError('Unhandled Promise Rejection:\n' + (event.reason?.message || event.reason || 'Unknown error'));
+        }
+      };
+      
+      function updateLoadingStatus(message) {
+        var status = document.getElementById('loading-status');
+        if (status) status.textContent = message;
+      }
+      
+      function showError(message) {
+        var loading = document.getElementById('app-loading');
+        var errorDiv = document.getElementById('app-error');
+        var errorMsg = document.getElementById('error-message');
+        if (loading) loading.style.display = 'none';
+        if (errorDiv) errorDiv.style.display = 'flex';
+        if (errorMsg) errorMsg.textContent = message;
+      }
+      
+      function hideLoading() {
+        var loading = document.getElementById('app-loading');
+        if (loading) loading.style.display = 'none';
+      }
+      
+      // 后端健康检查
+      async function checkBackendHealth() {
+        try {
+          var response = await fetch('http://127.0.0.1:8765/health', {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (response.ok) {
+            return true;
+          }
+        } catch (e) {
+          // 连接失败，后端未就绪
+        }
+        return false;
+      }
+      
+      // 等待后端就绪
+      async function waitForBackend(maxAttempts, intervalMs) {
+        maxAttempts = maxAttempts || 30;  // 默认最多尝试 30 次
+        intervalMs = intervalMs || 1000;   // 默认每秒检查一次
+        
+        for (var i = 0; i < maxAttempts; i++) {
+          updateLoadingStatus('正在启动后端服务... (' + (i + 1) + '/' + maxAttempts + ')');
+          
+          var healthy = await checkBackendHealth();
+          if (healthy) {
+            console.log('[startup] 后端服务已就绪');
+            updateLoadingStatus('后端服务已就绪，正在加载界面...');
+            window.__BACKEND_READY__ = true;
+            return true;
+          }
+          
+          // 等待一段时间再重试
+          await new Promise(function(resolve) { setTimeout(resolve, intervalMs); });
+        }
+        
+        return false;
+      }
+      
+      // 暴露给 main.ts 的初始化函数
+      window.__initApp__ = async function() {
+        // 等待后端就绪
+        var backendReady = await waitForBackend(30, 1000);
+        
+        if (!backendReady) {
+          // 后端超时，但仍然尝试启动应用（离线模式）
+          console.warn('[startup] 后端服务未就绪，将以离线模式启动');
+          updateLoadingStatus('后端服务未响应，正在以离线模式启动...');
+          // 给用户看到消息的时间
+          await new Promise(function(resolve) { setTimeout(resolve, 1500); });
+        }
+        
+        return backendReady;
+      };
+    </script>
+    
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
