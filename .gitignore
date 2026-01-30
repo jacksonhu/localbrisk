@@ -49,6 +49,7 @@ env/
 # ------------------------------------
 src-tauri/target/
 src-tauri/gen/schemas/
+src-tauri/binaries/
 *.rlib
 *.rmeta
 Cargo.lock
