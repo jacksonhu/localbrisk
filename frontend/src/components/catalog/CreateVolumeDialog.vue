@@ -1,238 +1,203 @@
+<!--
+  CreateVolumeDialog - 创建 Volume 弹窗
+  支持本地存储和 S3 存储两种模式
+-->
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center">
-        <!-- 背景遮罩 -->
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="close"></div>
-        
-        <!-- 弹窗内容 -->
-        <div class="relative bg-card rounded-xl shadow-float-lg w-[520px] max-h-[85vh] overflow-hidden">
-          <!-- 标题栏 -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <h2 class="text-lg font-semibold text-foreground">
-              {{ t('asset.createVolume') }}
-            </h2>
-            <button
-              @click="close"
-              class="p-1.5 rounded-lg hover:bg-muted transition-colors"
-            >
-              <X class="w-5 h-5 text-muted-foreground" />
-            </button>
-          </div>
-          
-          <!-- 表单内容 -->
-          <form @submit.prevent="handleSubmit" class="p-6 space-y-5 max-h-[calc(85vh-140px)] overflow-y-auto">
-            <!-- Volume 名称 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('asset.volumeName') }}
-                <span class="text-red-500">*</span>
-              </label>
-              <input
-                v-model="form.name"
-                type="text"
-                :placeholder="t('asset.volumeNameHint')"
-                class="w-full px-3 py-2 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                :class="errors.name ? 'border-red-500' : 'border-input'"
-                @input="validateName"
-              />
-              <p v-if="errors.name" class="text-xs text-red-500">{{ errors.name }}</p>
-              <p v-else class="text-xs text-muted-foreground">{{ t('asset.volumeNameHint') }}</p>
+  <BaseDialog
+    :is-open="isOpen"
+    :title="t('asset.createVolume')"
+    :icon="HardDrive"
+    width="lg"
+    max-height="screen"
+    @close="close"
+  >
+    <form @submit.prevent="handleSubmit" class="space-y-5">
+      <!-- Volume 名称 -->
+      <FormField
+        :label="t('asset.volumeName')"
+        :error="errors.name"
+        :hint="t('asset.volumeNameHint')"
+        required
+      >
+        <FormInput
+          v-model="form.name"
+          :placeholder="t('asset.volumeNameHint')"
+          :error="!!errors.name"
+          @input="validateName"
+        />
+      </FormField>
+
+      <!-- Volume 类型 -->
+      <FormField :label="t('asset.volumeType')">
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              v-model="form.volume_type"
+              type="radio"
+              value="local"
+              class="w-4 h-4 text-primary"
+            />
+            <div class="flex items-center gap-1.5">
+              <FolderOpen class="w-4 h-4 text-muted-foreground" />
+              <span class="text-sm">{{ t('asset.volumeTypeLocal') }}</span>
             </div>
-
-            <!-- Volume 类型 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('asset.volumeType') }}
-              </label>
-              <div class="flex gap-4">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input
-                    v-model="form.volume_type"
-                    type="radio"
-                    value="local"
-                    class="w-4 h-4 text-primary"
-                  />
-                  <div class="flex items-center gap-1.5">
-                    <FolderOpen class="w-4 h-4 text-muted-foreground" />
-                    <span class="text-sm">{{ t('asset.volumeTypeLocal') }}</span>
-                  </div>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input
-                    v-model="form.volume_type"
-                    type="radio"
-                    value="s3"
-                    class="w-4 h-4 text-primary"
-                  />
-                  <div class="flex items-center gap-1.5">
-                    <Cloud class="w-4 h-4 text-muted-foreground" />
-                    <span class="text-sm">{{ t('asset.volumeTypeS3') }}</span>
-                  </div>
-                </label>
-              </div>
-              <p class="text-xs text-muted-foreground">
-                {{ form.volume_type === 'local' ? t('asset.volumeTypeLocalDesc') : t('asset.volumeTypeS3Desc') }}
-              </p>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              v-model="form.volume_type"
+              type="radio"
+              value="s3"
+              class="w-4 h-4 text-primary"
+            />
+            <div class="flex items-center gap-1.5">
+              <Cloud class="w-4 h-4 text-muted-foreground" />
+              <span class="text-sm">{{ t('asset.volumeTypeS3') }}</span>
             </div>
+          </label>
+        </div>
+        <p class="text-xs text-muted-foreground mt-2">
+          {{ form.volume_type === 'local' ? t('asset.volumeTypeLocalDesc') : t('asset.volumeTypeS3Desc') }}
+        </p>
+      </FormField>
 
-            <!-- 本地存储路径（仅 local 类型） -->
-            <div v-if="form.volume_type === 'local'" class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('asset.storageLocation') }}
-                <span class="text-red-500">*</span>
-              </label>
-              <div class="flex gap-2">
-                <input
-                  v-model="form.storage_location"
-                  type="text"
-                  :placeholder="t('asset.storageLocationHint')"
-                  class="flex-1 px-3 py-2 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  :class="errors.storage_location ? 'border-red-500' : 'border-input'"
-                  @input="validateStorageLocation"
-                />
-                <button
-                  type="button"
-                  @click="handleSelectFolder"
-                  :disabled="!isTauriEnv"
-                  :title="!isTauriEnv ? t('asset.folderPickerDisabled') : ''"
-                  class="px-3 py-2 text-sm border border-input rounded-lg transition-colors flex items-center gap-2"
-                  :class="isTauriEnv ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'"
-                >
-                  <FolderOpen class="w-4 h-4" />
-                  {{ t('asset.selectFolder') }}
-                </button>
-              </div>
-              <p v-if="errors.storage_location" class="text-xs text-red-500">{{ errors.storage_location }}</p>
-              <p v-else class="text-xs text-muted-foreground">{{ t('asset.storageLocationHint') }}</p>
-            </div>
+      <!-- 本地存储路径（仅 local 类型） -->
+      <FormField
+        v-if="form.volume_type === 'local'"
+        :label="t('asset.storageLocation')"
+        :error="errors.storage_location"
+        :hint="t('asset.storageLocationHint')"
+        required
+      >
+        <div class="flex gap-2">
+          <FormInput
+            v-model="form.storage_location"
+            :placeholder="t('asset.storageLocationHint')"
+            :error="!!errors.storage_location"
+            class="flex-1"
+            @input="validateStorageLocation"
+          />
+          <button
+            type="button"
+            @click="handleSelectFolder"
+            :disabled="!isTauriEnv"
+            :title="!isTauriEnv ? t('asset.folderPickerDisabled') : ''"
+            class="px-3 py-2 text-sm border border-input rounded-lg transition-colors flex items-center gap-2"
+            :class="isTauriEnv ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'"
+          >
+            <FolderOpen class="w-4 h-4" />
+            {{ t('asset.selectFolder') }}
+          </button>
+        </div>
+      </FormField>
 
-            <!-- S3 配置（仅 s3 类型） -->
-            <template v-if="form.volume_type === 's3'">
-              <!-- S3 Endpoint -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('asset.s3Endpoint') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="form.s3_endpoint"
-                  type="text"
-                  :placeholder="t('asset.s3EndpointHint')"
-                  class="w-full px-3 py-2 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  :class="errors.s3_endpoint ? 'border-red-500' : 'border-input'"
-                  @input="validateS3Fields"
-                />
-                <p v-if="errors.s3_endpoint" class="text-xs text-red-500">{{ errors.s3_endpoint }}</p>
-                <p v-else class="text-xs text-muted-foreground">{{ t('asset.s3EndpointHint') }}</p>
-              </div>
+      <!-- S3 配置（仅 s3 类型） -->
+      <template v-if="form.volume_type === 's3'">
+        <!-- S3 Endpoint -->
+        <FormField
+          :label="t('asset.s3Endpoint')"
+          :error="errors.s3_endpoint"
+          :hint="t('asset.s3EndpointHint')"
+          required
+        >
+          <FormInput
+            v-model="form.s3_endpoint"
+            :placeholder="t('asset.s3EndpointHint')"
+            :error="!!errors.s3_endpoint"
+            @input="validateS3Fields"
+          />
+        </FormField>
 
-              <!-- S3 Bucket -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('asset.s3Bucket') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="form.s3_bucket"
-                  type="text"
-                  :placeholder="t('asset.s3BucketHint')"
-                  class="w-full px-3 py-2 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  :class="errors.s3_bucket ? 'border-red-500' : 'border-input'"
-                  @input="validateS3Fields"
-                />
-                <p v-if="errors.s3_bucket" class="text-xs text-red-500">{{ errors.s3_bucket }}</p>
-              </div>
+        <!-- S3 Bucket -->
+        <FormField
+          :label="t('asset.s3Bucket')"
+          :error="errors.s3_bucket"
+          required
+        >
+          <FormInput
+            v-model="form.s3_bucket"
+            :placeholder="t('asset.s3BucketHint')"
+            :error="!!errors.s3_bucket"
+            @input="validateS3Fields"
+          />
+        </FormField>
 
-              <!-- S3 Access Key -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('asset.s3AccessKey') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="form.s3_access_key"
-                  type="text"
-                  :placeholder="t('asset.s3AccessKeyHint')"
-                  class="w-full px-3 py-2 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                  :class="errors.s3_access_key ? 'border-red-500' : 'border-input'"
-                  @input="validateS3Fields"
-                />
-                <p v-if="errors.s3_access_key" class="text-xs text-red-500">{{ errors.s3_access_key }}</p>
-              </div>
+        <!-- S3 Access Key -->
+        <FormField
+          :label="t('asset.s3AccessKey')"
+          :error="errors.s3_access_key"
+          required
+        >
+          <FormInput
+            v-model="form.s3_access_key"
+            :placeholder="t('asset.s3AccessKeyHint')"
+            :error="!!errors.s3_access_key"
+            class="font-mono"
+            @input="validateS3Fields"
+          />
+        </FormField>
 
-              <!-- S3 Secret Key -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('asset.s3SecretKey') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <div class="relative">
-                  <input
-                    v-model="form.s3_secret_key"
-                    :type="showSecretKey ? 'text' : 'password'"
-                    :placeholder="t('asset.s3SecretKeyHint')"
-                    class="w-full px-3 py-2 pr-10 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                    :class="errors.s3_secret_key ? 'border-red-500' : 'border-input'"
-                    @input="validateS3Fields"
-                  />
-                  <button
-                    type="button"
-                    @click="showSecretKey = !showSecretKey"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                  >
-                    <Eye v-if="!showSecretKey" class="w-4 h-4" />
-                    <EyeOff v-else class="w-4 h-4" />
-                  </button>
-                </div>
-                <p v-if="errors.s3_secret_key" class="text-xs text-red-500">{{ errors.s3_secret_key }}</p>
-              </div>
-            </template>
-
-            <!-- 描述 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('common.description') }}
-                <span class="text-muted-foreground text-xs ml-1">({{ t('common.optional') }})</span>
-              </label>
-              <textarea
-                v-model="form.description"
-                rows="3"
-                :placeholder="t('detail.addDescription')"
-                class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-              ></textarea>
-            </div>
-          </form>
-          
-          <!-- 底部按钮 -->
-          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/30">
+        <!-- S3 Secret Key -->
+        <FormField
+          :label="t('asset.s3SecretKey')"
+          :error="errors.s3_secret_key"
+          required
+        >
+          <div class="relative">
+            <FormInput
+              v-model="form.s3_secret_key"
+              :type="showSecretKey ? 'text' : 'password'"
+              :placeholder="t('asset.s3SecretKeyHint')"
+              :error="!!errors.s3_secret_key"
+              class="font-mono pr-10"
+              @input="validateS3Fields"
+            />
             <button
               type="button"
-              @click="close"
-              class="px-4 py-2 text-sm border border-input rounded-lg hover:bg-muted transition-colors"
+              @click="showSecretKey = !showSecretKey"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
             >
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              @click="handleSubmit"
-              :disabled="isSubmitting || !isValid"
-              class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
-              {{ t('common.create') }}
+              <Eye v-if="!showSecretKey" class="w-4 h-4" />
+              <EyeOff v-else class="w-4 h-4" />
             </button>
           </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+        </FormField>
+      </template>
+
+      <!-- 描述 -->
+      <FormField
+        :label="t('common.description')"
+        optional
+      >
+        <FormTextarea
+          v-model="form.description"
+          :placeholder="t('detail.addDescription')"
+          :rows="3"
+        />
+      </FormField>
+    </form>
+
+    <template #footer>
+      <DialogFooter
+        :submitting="isSubmitting"
+        :disabled="!isValid"
+        @cancel="close"
+        @submit="handleSubmit"
+      />
+    </template>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { X, Loader2, FolderOpen, Cloud, Eye, EyeOff } from 'lucide-vue-next';
+import { FolderOpen, Cloud, Eye, EyeOff, HardDrive } from 'lucide-vue-next';
 import type { AssetCreate, VolumeType } from '@/types/catalog';
+import { NAME_REGEX } from '@/utils/validationUtils';
+import BaseDialog from '@/components/common/BaseDialog.vue';
+import DialogFooter from '@/components/common/DialogFooter.vue';
+import FormField from '@/components/common/FormField.vue';
+import FormInput from '@/components/common/FormInput.vue';
+import FormTextarea from '@/components/common/FormTextarea.vue';
 
 const { t } = useI18n();
 
@@ -257,7 +222,6 @@ const form = reactive({
   name: '',
   volume_type: 'local' as VolumeType,
   storage_location: '',
-  // S3 配置
   s3_endpoint: '',
   s3_bucket: '',
   s3_access_key: '',
@@ -277,12 +241,7 @@ const errors = reactive({
 
 // 提交状态
 const isSubmitting = ref(false);
-
-// 显示密钥
 const showSecretKey = ref(false);
-
-// 名称验证正则
-const nameRegex = /^[a-zA-Z][a-zA-Z0-9_]*$/;
 
 // 验证名称
 function validateName() {
@@ -290,7 +249,7 @@ function validateName() {
     errors.name = t('errors.volumeNameRequired');
     return false;
   }
-  if (!nameRegex.test(form.name)) {
+  if (!NAME_REGEX.test(form.name)) {
     errors.name = t('errors.volumeNameInvalid');
     return false;
   }
@@ -347,7 +306,7 @@ function validateS3Fields() {
 
 // 表单是否有效
 const isValid = computed(() => {
-  if (!form.name || !nameRegex.test(form.name)) {
+  if (!form.name || !NAME_REGEX.test(form.name)) {
     return false;
   }
   
@@ -367,13 +326,11 @@ const isValid = computed(() => {
 // 选择文件夹
 async function handleSelectFolder() {
   if (!isTauriEnv) {
-    // 非 Tauri 环境，提示用户手动输入路径
     console.warn('Folder picker is only available in Tauri app. Please enter the path manually.');
     return;
   }
   
   try {
-    // 动态导入 Tauri dialog 插件
     const { open } = await import('@tauri-apps/plugin-dialog');
     const selected = await open({
       directory: true,
@@ -459,15 +416,3 @@ watch(() => props.isOpen, (isOpen) => {
   }
 });
 </script>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

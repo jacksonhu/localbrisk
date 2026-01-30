@@ -1,229 +1,204 @@
+<!--
+  SettingsDialog - 设置弹窗
+  使用 BaseDialog 和公共表单组件
+-->
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center">
-        <!-- 背景遮罩 -->
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="close"></div>
-        
-        <!-- 弹窗内容 -->
-        <div class="relative bg-card rounded-xl shadow-float-lg w-[500px] max-h-[80vh] overflow-hidden">
-          <!-- 标题栏 -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <h2 class="text-lg font-semibold text-foreground">{{ t('settings.title') }}</h2>
-            <button
-              @click="close"
-              class="p-1.5 rounded-lg hover:bg-muted transition-colors"
-            >
-              <X class="w-5 h-5 text-muted-foreground" />
-            </button>
+  <BaseDialog
+    :is-open="isOpen"
+    :title="t('settings.title')"
+    :icon="Settings2"
+    width="lg"
+    max-height="screen"
+    @close="close"
+  >
+    <div class="space-y-6">
+      <!-- 语言设置 -->
+      <FormField :label="t('settings.language')" :hint="t('settings.languageDescription')">
+        <template #label>
+          <div class="flex items-center gap-2">
+            <Globe class="w-4 h-4 text-muted-foreground" />
+            <span>{{ t('settings.language') }}</span>
           </div>
-          
-          <!-- 设置内容 -->
-          <div class="p-6 space-y-6 overflow-y-auto max-h-[60vh]">
-            <!-- 语言设置 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                <div class="flex items-center gap-2 mb-2">
-                  <Globe class="w-4 h-4 text-muted-foreground" />
-                  <span>{{ t('settings.language') }}</span>
-                </div>
-              </label>
+        </template>
+        <FormSelect
+          v-model="settings.language"
+          :options="localeOptions"
+        />
+      </FormField>
+
+      <div class="border-t border-border" />
+
+      <!-- 本地模型设置 -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Cpu class="w-4 h-4 text-muted-foreground" />
+            <label class="text-sm font-medium text-foreground">{{ t('settings.enableLocalModel') }}</label>
+          </div>
+          <button
+            @click="settings.enableLocalModel = !settings.enableLocalModel"
+            :class="[
+              'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+              settings.enableLocalModel ? 'bg-primary' : 'bg-muted'
+            ]"
+          >
+            <span
+              :class="[
+                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                settings.enableLocalModel ? 'translate-x-6' : 'translate-x-1'
+              ]"
+            />
+          </button>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          {{ t('settings.localModelDescription') }}
+        </p>
+
+        <!-- 本地模型选择 (仅在启用时显示) -->
+        <Transition name="slide">
+          <div v-if="settings.enableLocalModel" class="space-y-3 pl-6 border-l-2 border-primary/30">
+            <FormField :label="t('settings.selectModel')">
               <select
-                v-model="settings.language"
+                v-model="settings.localModel"
                 class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option v-for="locale in supportedLocales" :key="locale.code" :value="locale.code">
-                  {{ locale.nativeName }}
-                </option>
+                <option value="">{{ t('settings.selectModelPlaceholder') }}</option>
+                <optgroup :label="t('settings.ollamaModels')">
+                  <option v-for="model in ollamaModels" :key="model.name" :value="model.name">
+                    {{ model.name }} {{ model.size ? `(${model.size})` : '' }}
+                  </option>
+                </optgroup>
+                <optgroup :label="t('settings.otherModels')">
+                  <option value="custom">{{ t('settings.customModel') }}</option>
+                </optgroup>
               </select>
-              <p class="text-xs text-muted-foreground">{{ t('settings.languageDescription') }}</p>
+            </FormField>
+
+            <!-- 模型状态提示 -->
+            <div class="flex items-center gap-2 text-xs">
+              <div
+                :class="[
+                  'w-2 h-2 rounded-full',
+                  modelStatus === 'ready' ? 'bg-green-500' :
+                  modelStatus === 'loading' ? 'bg-yellow-500 animate-pulse' :
+                  'bg-red-500'
+                ]"
+              />
+              <span class="text-muted-foreground">{{ modelStatusText }}</span>
             </div>
 
-            <!-- 分隔线 -->
-            <div class="border-t border-border"></div>
-
-            <!-- 本地模型设置 -->
-            <div class="space-y-4">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <Cpu class="w-4 h-4 text-muted-foreground" />
-                  <label class="text-sm font-medium text-foreground">{{ t('settings.enableLocalModel') }}</label>
-                </div>
-                <button
-                  @click="settings.enableLocalModel = !settings.enableLocalModel"
-                  :class="[
-                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    settings.enableLocalModel ? 'bg-primary' : 'bg-muted'
-                  ]"
-                >
-                  <span
-                    :class="[
-                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      settings.enableLocalModel ? 'translate-x-6' : 'translate-x-1'
-                    ]"
-                  />
-                </button>
-              </div>
-              <p class="text-xs text-muted-foreground">
-                {{ t('settings.localModelDescription') }}
-              </p>
-
-              <!-- 本地模型选择 (仅在启用时显示) -->
-              <Transition name="slide">
-                <div v-if="settings.enableLocalModel" class="space-y-3 pl-6 border-l-2 border-primary/30">
-                  <div class="space-y-2">
-                    <label class="block text-sm font-medium text-foreground">
-                      {{ t('settings.selectModel') }}
-                    </label>
-                    <select
-                      v-model="settings.localModel"
-                      class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="">{{ t('settings.selectModelPlaceholder') }}</option>
-                      <optgroup :label="t('settings.ollamaModels')">
-                        <option v-for="model in ollamaModels" :key="model.name" :value="model.name">
-                          {{ model.name }} {{ model.size ? `(${model.size})` : '' }}
-                        </option>
-                      </optgroup>
-                      <optgroup :label="t('settings.otherModels')">
-                        <option value="custom">{{ t('settings.customModel') }}</option>
-                      </optgroup>
-                    </select>
-                  </div>
-
-                  <!-- 模型状态提示 -->
-                  <div class="flex items-center gap-2 text-xs">
-                    <div
-                      :class="[
-                        'w-2 h-2 rounded-full',
-                        modelStatus === 'ready' ? 'bg-green-500' :
-                        modelStatus === 'loading' ? 'bg-yellow-500 animate-pulse' :
-                        'bg-red-500'
-                      ]"
-                    ></div>
-                    <span class="text-muted-foreground">{{ modelStatusText }}</span>
-                  </div>
-
-                  <!-- 刷新模型列表按钮 -->
-                  <button
-                    @click="refreshModels"
-                    :disabled="isLoadingModels"
-                    class="flex items-center gap-2 px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw :class="['w-4 h-4', isLoadingModels && 'animate-spin']" />
-                    <span>{{ t('settings.refreshModels') }}</span>
-                  </button>
-                </div>
-              </Transition>
-            </div>
-
-            <!-- 分隔线 -->
-            <div class="border-t border-border"></div>
-
-            <!-- 后台服务设置 -->
-            <div class="space-y-4">
-              <div class="flex items-center gap-2 mb-2">
-                <Server class="w-4 h-4 text-muted-foreground" />
-                <span class="text-sm font-medium text-foreground">{{ t('settings.keepBackendRunning') }}</span>
-              </div>
-              
-              <!-- 选项说明 -->
-              <p class="text-xs text-muted-foreground">
-                {{ t('settings.keepBackendRunningDescription') }}
-              </p>
-              
-              <!-- 单选选项 -->
-              <div class="space-y-2 pl-2">
-                <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
-                  :class="settings.keepBackendRunning ? 'border-primary bg-primary/5' : 'border-input hover:bg-muted/50'"
-                >
-                  <input
-                    type="radio"
-                    :value="true"
-                    v-model="settings.keepBackendRunning"
-                    class="mt-0.5 w-4 h-4 text-primary"
-                  />
-                  <div class="flex-1">
-                    <span class="text-sm font-medium text-foreground">{{ t('common.yes') }}</span>
-                    <p class="text-xs text-muted-foreground mt-1">{{ t('settings.keepBackendRunningYes') }}</p>
-                  </div>
-                </label>
-                
-                <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
-                  :class="!settings.keepBackendRunning ? 'border-primary bg-primary/5' : 'border-input hover:bg-muted/50'"
-                >
-                  <input
-                    type="radio"
-                    :value="false"
-                    v-model="settings.keepBackendRunning"
-                    class="mt-0.5 w-4 h-4 text-primary"
-                  />
-                  <div class="flex-1">
-                    <span class="text-sm font-medium text-foreground">{{ t('common.no') }}</span>
-                    <p class="text-xs text-muted-foreground mt-1">{{ t('settings.keepBackendRunningNo') }}</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <!-- 分隔线 -->
-            <div class="border-t border-border"></div>
-
-            <!-- 高级设置 -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-2 mb-2">
-                <Settings2 class="w-4 h-4 text-muted-foreground" />
-                <span class="text-sm font-medium text-foreground">{{ t('settings.advanced') }}</span>
-              </div>
-              
-              <!-- 本地模型服务地址 -->
-              <div class="space-y-2">
-                <label class="block text-xs text-muted-foreground">
-                  {{ t('settings.localModelEndpoint') }}
-                </label>
-                <input
-                  v-model="settings.localModelEndpoint"
-                  type="text"
-                  placeholder="http://localhost:11434"
-                  class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            </div>
+            <!-- 刷新模型列表按钮 -->
+            <button
+              @click="refreshModels"
+              :disabled="isLoadingModels"
+              class="flex items-center gap-2 px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw :class="['w-4 h-4', isLoadingModels && 'animate-spin']" />
+              <span>{{ t('settings.refreshModels') }}</span>
+            </button>
           </div>
+        </Transition>
+      </div>
+
+      <div class="border-t border-border" />
+
+      <!-- 后台服务设置 -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 mb-2">
+          <Server class="w-4 h-4 text-muted-foreground" />
+          <span class="text-sm font-medium text-foreground">{{ t('settings.keepBackendRunning') }}</span>
+        </div>
+        
+        <p class="text-xs text-muted-foreground">
+          {{ t('settings.keepBackendRunningDescription') }}
+        </p>
+        
+        <!-- 单选选项 -->
+        <div class="space-y-2 pl-2">
+          <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
+            :class="settings.keepBackendRunning ? 'border-primary bg-primary/5' : 'border-input hover:bg-muted/50'"
+          >
+            <input
+              type="radio"
+              :value="true"
+              v-model="settings.keepBackendRunning"
+              class="mt-0.5 w-4 h-4 text-primary"
+            />
+            <div class="flex-1">
+              <span class="text-sm font-medium text-foreground">{{ t('common.yes') }}</span>
+              <p class="text-xs text-muted-foreground mt-1">{{ t('settings.keepBackendRunningYes') }}</p>
+            </div>
+          </label>
           
-          <!-- 底部按钮 -->
-          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/30">
-            <button
-              @click="resetSettings"
-              class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {{ t('settings.resetDefault') }}
-            </button>
-            <button
-              @click="close"
-              class="px-4 py-2 text-sm border border-input rounded-lg hover:bg-muted transition-colors"
-            >
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              @click="saveSettings"
-              class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              {{ t('common.save') }}
-            </button>
-          </div>
+          <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
+            :class="!settings.keepBackendRunning ? 'border-primary bg-primary/5' : 'border-input hover:bg-muted/50'"
+          >
+            <input
+              type="radio"
+              :value="false"
+              v-model="settings.keepBackendRunning"
+              class="mt-0.5 w-4 h-4 text-primary"
+            />
+            <div class="flex-1">
+              <span class="text-sm font-medium text-foreground">{{ t('common.no') }}</span>
+              <p class="text-xs text-muted-foreground mt-1">{{ t('settings.keepBackendRunningNo') }}</p>
+            </div>
+          </label>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+
+      <div class="border-t border-border" />
+
+      <!-- 高级设置 -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 mb-2">
+          <Settings2 class="w-4 h-4 text-muted-foreground" />
+          <span class="text-sm font-medium text-foreground">{{ t('settings.advanced') }}</span>
+        </div>
+        
+        <FormField :label="t('settings.localModelEndpoint')" label-size="xs">
+          <FormInput
+            v-model="settings.localModelEndpoint"
+            placeholder="http://localhost:11434"
+          />
+        </FormField>
+      </div>
+    </div>
+
+    <template #footer>
+      <button
+        @click="resetSettings"
+        class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {{ t('settings.resetDefault') }}
+      </button>
+      <button
+        @click="close"
+        class="px-4 py-2 text-sm border border-input rounded-lg hover:bg-muted transition-colors"
+      >
+        {{ t('common.cancel') }}
+      </button>
+      <button
+        @click="saveSettings"
+        class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+      >
+        {{ t('common.save') }}
+      </button>
+    </template>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { X, Globe, Cpu, RefreshCw, Settings2, Server } from 'lucide-vue-next';
+import { Globe, Cpu, RefreshCw, Settings2, Server } from 'lucide-vue-next';
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n';
 import tauriService, { defaultSettings } from '@/services/tauri';
+import { formatFileSize } from '@/utils/formatUtils';
+import BaseDialog from '@/components/common/BaseDialog.vue';
+import FormField from '@/components/common/FormField.vue';
+import FormInput from '@/components/common/FormInput.vue';
+import FormSelect from '@/components/common/FormSelect.vue';
 
 const { t } = useI18n();
 
@@ -238,10 +213,15 @@ const emit = defineEmits<{
   (e: 'save', settings: AppSettings): void;
 }>();
 
-// 支持的语言列表
-const supportedLocales = SUPPORTED_LOCALES;
+// 语言选项
+const localeOptions = computed(() => 
+  SUPPORTED_LOCALES.map(locale => ({
+    value: locale.code,
+    label: locale.nativeName
+  }))
+);
 
-// 设置类型定义（前端使用）
+// 设置类型定义
 interface AppSettings {
   language: SupportedLocale;
   enableLocalModel: boolean;
@@ -291,7 +271,6 @@ const modelStatusText = computed(() => {
 async function loadSettings() {
   isLoadingSettings.value = true;
   try {
-    // 优先从 Tauri 后端读取统一配置
     if (tauriService.isTauriEnv()) {
       try {
         const tauriSettings = await tauriService.getAppSettings();
@@ -307,7 +286,6 @@ async function loadSettings() {
       }
     }
     
-    // 回退：从 localStorage 读取（用于非 Tauri 环境或首次迁移）
     const stored = localStorage.getItem('localbrisk-settings');
     if (stored) {
       const parsed = JSON.parse(stored);
@@ -317,7 +295,6 @@ async function loadSettings() {
       settings.localModelEndpoint = parsed.localModelEndpoint || defaultSettings.localModelEndpoint;
       settings.keepBackendRunning = parsed.keepBackendRunning ?? defaultSettings.keepBackendRunning;
       
-      // 如果在 Tauri 环境中，将 localStorage 配置迁移到配置文件
       if (tauriService.isTauriEnv()) {
         try {
           await tauriService.saveAppSettings({
@@ -328,8 +305,6 @@ async function loadSettings() {
             keepBackendRunning: settings.keepBackendRunning,
           });
           console.log('[Settings] 已将 localStorage 配置迁移到配置文件');
-          // 迁移成功后可以选择清除 localStorage
-          // localStorage.removeItem('localbrisk-settings');
         } catch (e) {
           console.warn('[Settings] 迁移配置失败:', e);
         }
@@ -345,7 +320,6 @@ async function loadSettings() {
 // 保存设置
 async function saveSettings() {
   try {
-    // 优先保存到 Tauri 配置文件
     if (tauriService.isTauriEnv()) {
       try {
         await tauriService.saveAppSettings({
@@ -358,11 +332,9 @@ async function saveSettings() {
         console.log('[Settings] 设置已保存到配置文件');
       } catch (e) {
         console.error('[Settings] 保存到 Tauri 配置文件失败:', e);
-        // 回退到 localStorage
         localStorage.setItem('localbrisk-settings', JSON.stringify(settings));
       }
     } else {
-      // 非 Tauri 环境使用 localStorage
       localStorage.setItem('localbrisk-settings', JSON.stringify(settings));
     }
     
@@ -393,16 +365,15 @@ async function refreshModels() {
   modelStatus.value = 'loading';
   
   try {
-    // 尝试连接 Ollama 服务
     const response = await fetch(`${settings.localModelEndpoint}/api/tags`, {
       method: 'GET',
     });
     
     if (response.ok) {
       const data = await response.json();
-      ollamaModels.value = (data.models || []).map((m: any) => ({
+      ollamaModels.value = (data.models || []).map((m: { name: string; size?: number; modified_at?: string }) => ({
         name: m.name,
-        size: formatSize(m.size),
+        size: m.size ? formatFileSize(m.size) : undefined,
         modified: m.modified_at,
       }));
       modelStatus.value = settings.localModel ? 'ready' : 'none';
@@ -426,19 +397,6 @@ async function refreshModels() {
   } finally {
     isLoadingModels.value = false;
   }
-}
-
-// 格式化文件大小
-function formatSize(bytes?: number): string {
-  if (!bytes) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let unitIndex = 0;
-  let size = bytes;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex++;
-  }
-  return `${size.toFixed(1)} ${units[unitIndex]}`;
 }
 
 // 监听弹窗打开
@@ -473,16 +431,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
 .slide-enter-active,
 .slide-leave-active {
   transition: all 0.3s ease;

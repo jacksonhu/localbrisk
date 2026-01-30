@@ -370,6 +370,12 @@ export default {
     modelNameInvalid: '模型名称只能包含字母、数字、下划线和连字符，且以字母开头',
     createModelFailed: '创建模型失败',
     deleteModelFailed: '删除模型失败',
+    promptNameRequired: 'Prompt 名称不能为空',
+    promptNameInvalid: 'Prompt 名称只能包含字母、数字、下划线和连字符，且以字母开头',
+    createPromptFailed: '创建 Prompt 失败',
+    updatePromptFailed: '更新 Prompt 失败',
+    deletePromptFailed: '删除 Prompt 失败',
+    loadPromptFailed: '加载 Prompt 失败',
   },
 
   // 成功消息
@@ -386,6 +392,9 @@ export default {
     agentDeleted: 'Agent 删除成功',
     modelCreated: '模型创建成功',
     modelDeleted: '模型删除成功',
+    promptCreated: 'Prompt 创建成功',
+    promptUpdated: 'Prompt 更新成功',
+    promptDeleted: 'Prompt 删除成功',
   },
 
   // 确认对话框
@@ -404,6 +413,32 @@ export default {
     noPrompts: '暂无 Prompts',
     chatTitle: 'Agent 对话',
     chatPlaceholder: '与 Agent 进行对话交互功能即将上线，敬请期待...',
+    create: '创建',
+    createSkill: '创建 Skill',
+    createPrompt: '创建 Prompt',
+  },
+
+  // Prompt 相关
+  prompt: {
+    create: '创建 Prompt',
+    edit: '编辑 Prompt',
+    delete: '删除 Prompt',
+    name: 'Prompt 名称',
+    nameHint: '以字母开头，只能包含字母、数字、下划线和连字符',
+    content: '内容',
+    contentHint: '支持 Markdown 格式',
+    enabled: '启用状态',
+    enabledHint: '启用后此 Prompt 将被激活使用',
+    overview: '概要',
+    contentTab: '内容',
+    filePath: '文件路径',
+    info: 'Prompt 信息',
+    noContent: '暂无内容',
+    confirmDelete: '确定要删除 Prompt "{name}" 吗？',
+    confirmDeleteDesc: '此操作将永久删除该 Prompt，且不可恢复。',
+    saveSuccess: 'Prompt 保存成功',
+    createSuccess: 'Prompt 创建成功',
+    deleteSuccess: 'Prompt 删除成功',
   },
 
   // Model 详情

@@ -72,6 +72,9 @@ from app.models.catalog import (
     Model,
     ModelCreate,
     ModelUpdate,
+    Prompt,
+    PromptCreate,
+    PromptUpdate,
 )
 from app.models.metadata import SyncResult
 
@@ -968,8 +971,12 @@ class CatalogService:
         prompts_dir = agent_path / "prompts"
         if prompts_dir.exists():
             for item in prompts_dir.iterdir():
-                if item.is_file() and item.suffix.lower() in [".md", ".markdown"]:
+                if item.is_file() and item.suffix.lower() in [".md", ".markdown"] and not item.name.startswith("."):
                     prompts.append(item.name)
+        
+        # 获取已启用的 skills 和 prompts 列表
+        enabled_skills = agent_config.get("enabled_skills", [])
+        enabled_prompts = agent_config.get("enabled_prompts", [])
         
         return Agent(
             id=f"{catalog_id}_agent_{agent_path.name}",
@@ -981,6 +988,8 @@ class CatalogService:
             model_reference=agent_config.get("model_reference"),
             skills=skills,
             prompts=prompts,
+            enabled_skills=enabled_skills,
+            enabled_prompts=enabled_prompts,
             created_at=datetime.fromisoformat(agent_config["created_at"]) if agent_config.get("created_at") else datetime.fromtimestamp(agent_path.stat().st_ctime),
             updated_at=datetime.fromisoformat(agent_config["updated_at"]) if agent_config.get("updated_at") else None,
         )
@@ -1026,6 +1035,8 @@ class CatalogService:
             "description": agent_create.description,
             "system_prompt": agent_create.system_prompt,
             "model_reference": agent_create.model_reference,
+            "enabled_skills": [],
+            "enabled_prompts": [],
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
         }
@@ -1042,6 +1053,8 @@ class CatalogService:
             model_reference=agent_create.model_reference,
             skills=[],
             prompts=[],
+            enabled_skills=[],
+            enabled_prompts=[],
             created_at=now,
             updated_at=now,
         )
@@ -1069,6 +1082,10 @@ class CatalogService:
             agent_config["system_prompt"] = agent_update.system_prompt
         if agent_update.model_reference is not None:
             agent_config["model_reference"] = agent_update.model_reference
+        if agent_update.enabled_skills is not None:
+            agent_config["enabled_skills"] = agent_update.enabled_skills
+        if agent_update.enabled_prompts is not None:
+            agent_config["enabled_prompts"] = agent_update.enabled_prompts
         
         agent_config["updated_at"] = datetime.now().isoformat()
         
@@ -1090,8 +1107,267 @@ class CatalogService:
     
     # ==================== Agent Prompts 管理 ====================
     
+    def _get_prompt_meta_path(self, prompts_dir: Path, prompt_name: str) -> Path:
+        """获取 Prompt 元数据文件路径"""
+        base_name = prompt_name.replace(".md", "")
+        return prompts_dir / f".{base_name}.meta.yaml"
+    
+    def _load_prompt_meta(self, meta_path: Path) -> Dict[str, Any]:
+        """加载 Prompt 元数据（不再包含 enabled 字段）"""
+        if not meta_path.exists():
+            return {}
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except Exception:
+            return {}
+    
+    def _save_prompt_meta(self, meta_path: Path, meta: Dict[str, Any]):
+        """保存 Prompt 元数据"""
+        with open(meta_path, "w", encoding="utf-8") as f:
+            yaml.dump(meta, f, allow_unicode=True, sort_keys=False)
+    
+    def _get_agent_enabled_prompts(self, catalog_id: str, agent_name: str) -> List[str]:
+        """获取 Agent 已启用的 prompts 列表"""
+        catalog_path = self._get_catalog_path(catalog_id)
+        agent_path = self._get_agents_dir(catalog_path) / agent_name
+        config_path = agent_path / AGENT_CONFIG_FILE
+        
+        if not config_path.exists():
+            return []
+        
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                agent_config = yaml.safe_load(f) or {}
+            return agent_config.get("enabled_prompts", [])
+        except Exception:
+            return []
+    
+    def list_agent_prompts(self, catalog_id: str, agent_name: str) -> Optional[List[Prompt]]:
+        """获取 Agent 所有 Prompts 列表"""
+        catalog_path = self._get_catalog_path(catalog_id)
+        prompts_dir = self._get_agents_dir(catalog_path) / agent_name / "prompts"
+        
+        if not prompts_dir.exists():
+            return None
+        
+        # 获取已启用的 prompts 列表
+        enabled_prompts = self._get_agent_enabled_prompts(catalog_id, agent_name)
+        
+        prompts = []
+        for item in prompts_dir.iterdir():
+            if item.is_file() and item.suffix.lower() in [".md", ".markdown"] and not item.name.startswith("."):
+                meta_path = self._get_prompt_meta_path(prompts_dir, item.name)
+                meta = self._load_prompt_meta(meta_path)
+                
+                with open(item, "r", encoding="utf-8") as f:
+                    content = f.read()
+                
+                stat = item.stat()
+                # 从 agent.yaml 的 enabled_prompts 判断是否启用
+                is_enabled = item.name in enabled_prompts
+                
+                prompts.append(Prompt(
+                    name=item.name,
+                    content=content,
+                    enabled=is_enabled,
+                    path=str(item),
+                    created_at=datetime.fromisoformat(meta["created_at"]) if meta.get("created_at") else datetime.fromtimestamp(stat.st_ctime),
+                    updated_at=datetime.fromisoformat(meta["updated_at"]) if meta.get("updated_at") else datetime.fromtimestamp(stat.st_mtime),
+                ))
+        
+        return prompts
+    
+    def get_agent_prompt_detail(self, catalog_id: str, agent_name: str, prompt_name: str) -> Optional[Prompt]:
+        """获取 Agent Prompt 详情（包含元数据）"""
+        catalog_path = self._get_catalog_path(catalog_id)
+        prompts_dir = self._get_agents_dir(catalog_path) / agent_name / "prompts"
+        
+        # 尝试查找文件
+        prompt_path = None
+        for name in [prompt_name, f"{prompt_name}.md"]:
+            path = prompts_dir / name
+            if path.exists():
+                prompt_path = path
+                break
+        
+        if not prompt_path:
+            return None
+        
+        meta_path = self._get_prompt_meta_path(prompts_dir, prompt_path.name)
+        meta = self._load_prompt_meta(meta_path)
+        
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # 从 agent.yaml 的 enabled_prompts 判断是否启用
+        enabled_prompts = self._get_agent_enabled_prompts(catalog_id, agent_name)
+        is_enabled = prompt_path.name in enabled_prompts
+        
+        stat = prompt_path.stat()
+        return Prompt(
+            name=prompt_path.name,
+            content=content,
+            enabled=is_enabled,
+            path=str(prompt_path),
+            created_at=datetime.fromisoformat(meta["created_at"]) if meta.get("created_at") else datetime.fromtimestamp(stat.st_ctime),
+            updated_at=datetime.fromisoformat(meta["updated_at"]) if meta.get("updated_at") else datetime.fromtimestamp(stat.st_mtime),
+        )
+    
+    def create_agent_prompt(self, catalog_id: str, agent_name: str, prompt_create: PromptCreate) -> bool:
+        """创建 Agent Prompt"""
+        catalog_path = self._get_catalog_path(catalog_id)
+        prompts_dir = self._get_agents_dir(catalog_path) / agent_name / "prompts"
+        
+        if not prompts_dir.exists():
+            return False
+        
+        prompt_name = prompt_create.name
+        if not prompt_name.endswith(".md"):
+            prompt_name = f"{prompt_name}.md"
+        
+        prompt_path = prompts_dir / prompt_name
+        if prompt_path.exists():
+            raise ValueError(f"Prompt '{prompt_create.name}' 已存在")
+        
+        # 写入内容文件
+        with open(prompt_path, "w", encoding="utf-8") as f:
+            f.write(prompt_create.content)
+        
+        # 写入元数据文件（不再包含 enabled 字段）
+        now = datetime.now()
+        meta = {
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        meta_path = self._get_prompt_meta_path(prompts_dir, prompt_name)
+        self._save_prompt_meta(meta_path, meta)
+        
+        return True
+    
+    def update_agent_prompt(self, catalog_id: str, agent_name: str, prompt_name: str, prompt_update: PromptUpdate) -> bool:
+        """更新 Agent Prompt（只更新内容）"""
+        catalog_path = self._get_catalog_path(catalog_id)
+        prompts_dir = self._get_agents_dir(catalog_path) / agent_name / "prompts"
+        
+        # 查找文件
+        prompt_path = None
+        for name in [prompt_name, f"{prompt_name}.md"]:
+            path = prompts_dir / name
+            if path.exists():
+                prompt_path = path
+                break
+        
+        if not prompt_path:
+            return False
+        
+        # 更新内容
+        if prompt_update.content is not None:
+            with open(prompt_path, "w", encoding="utf-8") as f:
+                f.write(prompt_update.content)
+        
+        # 更新元数据时间
+        meta_path = self._get_prompt_meta_path(prompts_dir, prompt_path.name)
+        meta = self._load_prompt_meta(meta_path)
+        meta["updated_at"] = datetime.now().isoformat()
+        self._save_prompt_meta(meta_path, meta)
+        
+        return True
+    
+    def toggle_prompt_enabled(self, catalog_id: str, agent_name: str, prompt_name: str, enabled: bool) -> bool:
+        """切换 Prompt 启用状态（在 agent.yaml 的 enabled_prompts 中添加/移除）"""
+        catalog_path = self._get_catalog_path(catalog_id)
+        agent_path = self._get_agents_dir(catalog_path) / agent_name
+        config_path = agent_path / AGENT_CONFIG_FILE
+        
+        if not config_path.exists():
+            return False
+        
+        # 确保 prompt 文件存在
+        prompts_dir = agent_path / "prompts"
+        actual_prompt_name = None
+        for name in [prompt_name, f"{prompt_name}.md"]:
+            if (prompts_dir / name).exists():
+                actual_prompt_name = name
+                break
+        
+        if not actual_prompt_name:
+            return False
+        
+        # 读取 agent 配置
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                agent_config = yaml.safe_load(f) or {}
+        except Exception:
+            agent_config = {}
+        
+        # 获取/初始化 enabled_prompts 列表
+        enabled_prompts = agent_config.get("enabled_prompts", [])
+        
+        if enabled:
+            # 添加到列表
+            if actual_prompt_name not in enabled_prompts:
+                enabled_prompts.append(actual_prompt_name)
+        else:
+            # 从列表移除
+            if actual_prompt_name in enabled_prompts:
+                enabled_prompts.remove(actual_prompt_name)
+        
+        # 保存更新后的配置
+        agent_config["enabled_prompts"] = enabled_prompts
+        agent_config["updated_at"] = datetime.now().isoformat()
+        
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(agent_config, f, allow_unicode=True, sort_keys=False)
+        
+        return True
+    
+    def toggle_skill_enabled(self, catalog_id: str, agent_name: str, skill_name: str, enabled: bool) -> bool:
+        """切换 Skill 启用状态（在 agent.yaml 的 enabled_skills 中添加/移除）"""
+        catalog_path = self._get_catalog_path(catalog_id)
+        agent_path = self._get_agents_dir(catalog_path) / agent_name
+        config_path = agent_path / AGENT_CONFIG_FILE
+        
+        if not config_path.exists():
+            return False
+        
+        # 确保 skill 文件存在
+        skills_dir = agent_path / "skills"
+        if not (skills_dir / skill_name).exists():
+            return False
+        
+        # 读取 agent 配置
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                agent_config = yaml.safe_load(f) or {}
+        except Exception:
+            agent_config = {}
+        
+        # 获取/初始化 enabled_skills 列表
+        enabled_skills = agent_config.get("enabled_skills", [])
+        
+        if enabled:
+            # 添加到列表
+            if skill_name not in enabled_skills:
+                enabled_skills.append(skill_name)
+        else:
+            # 从列表移除
+            if skill_name in enabled_skills:
+                enabled_skills.remove(skill_name)
+        
+        # 保存更新后的配置
+        agent_config["enabled_skills"] = enabled_skills
+        agent_config["updated_at"] = datetime.now().isoformat()
+        
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(agent_config, f, allow_unicode=True, sort_keys=False)
+        
+        return True
+        
+        return True
+    
     def add_agent_prompt(self, catalog_id: str, agent_name: str, prompt_name: str, content: str) -> bool:
-        """添加 Agent Prompt"""
+        """添加 Agent Prompt（简化版，保持向后兼容）"""
         catalog_path = self._get_catalog_path(catalog_id)
         prompts_dir = self._get_agents_dir(catalog_path) / agent_name / "prompts"
         
@@ -1107,7 +1383,7 @@ class CatalogService:
         return True
     
     def get_agent_prompt(self, catalog_id: str, agent_name: str, prompt_name: str) -> Optional[str]:
-        """获取 Agent Prompt 内容"""
+        """获取 Agent Prompt 内容（简化版，保持向后兼容）"""
         catalog_path = self._get_catalog_path(catalog_id)
         prompts_dir = self._get_agents_dir(catalog_path) / agent_name / "prompts"
         
@@ -1124,13 +1400,19 @@ class CatalogService:
         catalog_path = self._get_catalog_path(catalog_id)
         prompts_dir = self._get_agents_dir(catalog_path) / agent_name / "prompts"
         
+        deleted = False
         for name in [prompt_name, f"{prompt_name}.md"]:
             prompt_path = prompts_dir / name
             if prompt_path.exists():
                 prompt_path.unlink()
-                return True
+                deleted = True
+                # 删除元数据文件
+                meta_path = self._get_prompt_meta_path(prompts_dir, name)
+                if meta_path.exists():
+                    meta_path.unlink()
+                break
         
-        return False
+        return deleted
     
     # ==================== Agent Skills 管理 ====================
     

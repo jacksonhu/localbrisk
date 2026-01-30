@@ -218,6 +218,8 @@ export interface Agent {
   model_reference?: string;  // 引用的模型，格式：schema_name.model_name
   skills: string[];  // skills 文件列表
   prompts: string[];  // prompts (markdown) 文件列表
+  enabled_skills: string[];  // 已启用的 skills 列表
+  enabled_prompts: string[];  // 已启用的 prompts 列表
   created_at: string;
   updated_at?: string;
 }
@@ -235,6 +237,8 @@ export interface AgentUpdate {
   description?: string;
   system_prompt?: string;
   model_reference?: string;  // 引用的模型
+  enabled_skills?: string[];  // 已启用的 skills 列表
+  enabled_prompts?: string[];  // 已启用的 prompts 列表
 }
 
 /** Note 信息 */
@@ -338,4 +342,27 @@ export interface DeleteResponse {
 /** 错误响应 */
 export interface ErrorResponse {
   detail: string;
+}
+
+// ============ Prompt 相关 ============
+
+/** Prompt 信息 - Agent 下的子资源 */
+export interface Prompt {
+  name: string;
+  content: string;
+  enabled: boolean;  // 是否在 agent.yaml 的 enabled_prompts 中
+  path: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** 创建 Prompt 请求 */
+export interface PromptCreate {
+  name: string;
+  content: string;
+}
+
+/** 更新 Prompt 请求 */
+export interface PromptUpdate {
+  content?: string;
 }

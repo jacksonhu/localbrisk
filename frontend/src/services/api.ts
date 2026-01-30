@@ -18,6 +18,9 @@ import type {
   AgentCreate,
   AgentUpdate,
   DeleteResponse,
+  Prompt,
+  PromptCreate,
+  PromptUpdate,
 } from "@/types/catalog";
 
 const API_BASE_URL = "http://127.0.0.1:8765";
@@ -279,16 +282,31 @@ export const agentApi = {
   /**
    * 获取 Agent Prompt 内容
    */
-  getPrompt: (catalogId: string, agentName: string, promptName: string): Promise<{ name: string; content: string }> =>
-    request<{ name: string; content: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`),
+  getPrompt: (catalogId: string, agentName: string, promptName: string): Promise<Prompt> =>
+    request<Prompt>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`),
 
   /**
-   * 创建/更新 Agent Prompt
+   * 获取 Agent 所有 Prompts
    */
-  createPrompt: (catalogId: string, agentName: string, promptName: string, content: string): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`, {
+  listPrompts: (catalogId: string, agentName: string): Promise<Prompt[]> =>
+    request<Prompt[]>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts`),
+
+  /**
+   * 创建 Agent Prompt
+   */
+  createPrompt: (catalogId: string, agentName: string, data: PromptCreate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * 更新 Agent Prompt
+   */
+  updatePrompt: (catalogId: string, agentName: string, promptName: string, data: PromptUpdate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
     }),
 
   /**
@@ -320,6 +338,22 @@ export const agentApi = {
   deleteSkill: (catalogId: string, agentName: string, skillName: string): Promise<{ message: string }> =>
     request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}`, {
       method: "DELETE",
+    }),
+
+  /**
+   * 切换 Prompt 启用状态
+   */
+  togglePromptEnabled: (catalogId: string, agentName: string, promptName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}/toggle?enabled=${enabled}`, {
+      method: "POST",
+    }),
+
+  /**
+   * 切换 Skill 启用状态
+   */
+  toggleSkillEnabled: (catalogId: string, agentName: string, skillName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}/toggle?enabled=${enabled}`, {
+      method: "POST",
     }),
 };
 

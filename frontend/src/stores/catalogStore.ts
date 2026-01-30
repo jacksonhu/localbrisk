@@ -51,6 +51,9 @@ const selectedAgent = ref<Agent | null>(null);
 /** 当前选中的 Model */
 const selectedModel = ref<Model | null>(null);
 
+/** 当前选中的 Prompt 名称（用于显示 Prompt 详情页） */
+const selectedPromptName = ref<string>('');
+
 /** 当前 Schema 下的 Asset 列表 */
 const currentAssets = ref<Asset[]>([]);
 
@@ -70,6 +73,56 @@ const error = ref<string | null>(null);
 /** 当前选中的 Catalog 的 Schema 列表 */
 const currentSchemas = computed<Schema[]>(() => {
   return selectedCatalog.value?.schemas || [];
+});
+
+/**
+ * 计算当前选中节点在树中的 ID
+ * 
+ * 节点 ID 格式（与后端保持一致）：
+ * - Catalog: catalogId (如 "market_analysis")
+ * - Schema: schemaId (如 "market_analysis_default")
+ * - Agent: agentId (如 "market_analysis_agent_dd")
+ * - Prompt: {agentId}_prompt_{promptName} (如 "market_analysis_agent_dd_prompt_ddd.md")
+ * - Skill: {agentId}_skill_{skillName} (如 "market_analysis_agent_dd_skill_xxx.py")
+ * - Asset: assetId
+ * - Model: modelId
+ * 
+ * 优先级（从高到低）：Prompt/Skill > Model > Asset > Schema > Agent > Catalog
+ */
+const selectedNodeId = computed<string | undefined>(() => {
+  // 1. Prompt/Skill 选中时（必须同时有 Agent 和 PromptName）
+  if (selectedPromptName.value && selectedAgent.value) {
+    // Prompt 节点 ID 格式: {agent.id}_prompt_{promptName}
+    // 注意：promptName 包含文件扩展名（如 ddd.md）
+    return `${selectedAgent.value.id}_prompt_${selectedPromptName.value}`;
+  }
+  
+  // 2. Model 选中时
+  if (selectedModel.value) {
+    return selectedModel.value.id;
+  }
+  
+  // 3. Asset 选中时
+  if (selectedAsset.value) {
+    return selectedAsset.value.id;
+  }
+  
+  // 4. Schema 选中时（但没有选中其子节点）
+  if (selectedSchema.value) {
+    return selectedSchema.value.id;
+  }
+  
+  // 5. Agent 选中时（但没有选中其子节点）
+  if (selectedAgent.value) {
+    return selectedAgent.value.id;
+  }
+  
+  // 6. Catalog 选中时
+  if (selectedCatalog.value) {
+    return selectedCatalog.value.id;
+  }
+  
+  return undefined;
 });
 
 // ============ 辅助函数 ============
@@ -101,7 +154,11 @@ function convertTreeToItems(nodes: CatalogTreeNode[], _parentType?: string): Cat
     if (node.node_type === 'schema' && node.children && node.children.length > 0) {
       children = groupAssetsByType(node.children, node.id || '');
     } else if (node.children && node.children.length > 0) {
+      // 递归转换子节点
       children = convertTreeToItems(node.children, node.node_type);
+    } else if (node.node_type === 'folder' && node.children) {
+      // folder 类型即使没有子节点也保持 children 为空数组（用于正确显示展开状态）
+      children = [];
     }
     
     const item: CatalogItem = {
@@ -203,7 +260,9 @@ function groupAssetsByType(assets: CatalogTreeNode[], schemaId: string): Catalog
  * 更新树形数据
  */
 function updateCatalogItems(): void {
-  catalogItems.value = convertTreeToItems(catalogTree.value);
+  // 重新转换树形数据，使用新数组触发响应式更新
+  const newItems = convertTreeToItems(catalogTree.value);
+  catalogItems.value = newItems;
 }
 
 /**
@@ -222,7 +281,7 @@ function toggleNodeExpanded(nodeId: string, expanded?: boolean): void {
   } else {
     expandedNodes.value.delete(nodeId);
   }
-  // 更新树形数据
+  // 更新树形数据 - 使用 nextTick 确保 Vue 响应式系统能检测到变化
   updateCatalogItems();
 }
 
@@ -239,6 +298,72 @@ function getIconForType(type: string): string {
     note: "file-text",
   };
   return iconMap[type] || "file";
+}
+
+// ============ 统一的选择状态管理 ============
+
+/**
+ * 选择类型枚举
+ * 定义了所有可选择的节点类型，用于统一的状态清除逻辑
+ */
+type SelectionType = 'catalog' | 'schema' | 'asset' | 'model' | 'agent' | 'prompt';
+
+/**
+ * 准备选择某个类型的节点
+ * 清除与该类型不兼容的选择状态
+ * 
+ * 树形结构说明：
+ * Catalog (根)
+ * ├── Schema 分支
+ * │   ├── Schema
+ * │   ├── Asset (table/volume)
+ * │   └── Model
+ * └── Agent 分支
+ *     ├── Agent
+ *     └── Prompt/Skill
+ * 
+ * 规则：
+ * - Schema 分支和 Agent 分支互斥，选择一个分支时清除另一个分支
+ * - 同分支内，Asset 和 Model 互斥（都属于 Schema 的子级）
+ * - 选择父级节点时，清除子级节点的选择
+ */
+function prepareForSelection(targetType: SelectionType): void {
+  // Schema 分支类型
+  const schemaBranch: SelectionType[] = ['schema', 'asset', 'model'];
+  // Agent 分支类型
+  const agentBranch: SelectionType[] = ['agent', 'prompt'];
+  
+  if (schemaBranch.includes(targetType)) {
+    // 选择 Schema 分支，清除 Agent 分支
+    selectedAgent.value = null;
+    selectedPromptName.value = '';
+    
+    // 如果选择 Schema，清除 Asset 和 Model（选择父级清除子级）
+    if (targetType === 'schema') {
+      selectedAsset.value = null;
+      selectedModel.value = null;
+      currentAssets.value = [];
+    }
+    // 如果选择 Asset，清除 Model（同级互斥）
+    if (targetType === 'asset') {
+      selectedModel.value = null;
+    }
+    // 如果选择 Model，清除 Asset（同级互斥）
+    if (targetType === 'model') {
+      selectedAsset.value = null;
+    }
+  } else if (agentBranch.includes(targetType)) {
+    // 选择 Agent 分支，清除 Schema 分支
+    selectedSchema.value = null;
+    selectedAsset.value = null;
+    selectedModel.value = null;
+    currentAssets.value = [];
+    
+    // 如果选择 Agent，清除 Prompt（选择父级清除子级）
+    if (targetType === 'agent') {
+      selectedPromptName.value = '';
+    }
+  }
 }
 
 // ============ Actions ============
@@ -375,14 +500,26 @@ async function updateCatalog(catalogId: string, data: CatalogUpdate): Promise<Ca
 
 /**
  * 选择 Catalog
+ * 只展开节点并获取详情，不清除其他状态（由调用方决定是否清除）
  */
 async function selectCatalog(catalogId: string): Promise<void> {
   // 先展开该节点
   toggleNodeExpanded(catalogId, true);
   // 获取详情
   await fetchCatalog(catalogId);
-  selectedSchema.value = null;
-  currentAssets.value = [];
+}
+
+/**
+ * 确保 Catalog 已加载
+ * 如果当前选中的 Catalog 不是目标，则加载目标 Catalog
+ * @returns 是否发生了 Catalog 切换
+ */
+async function ensureCatalogLoaded(catalogId: string): Promise<boolean> {
+  if (!selectedCatalog.value || selectedCatalog.value.id !== catalogId) {
+    await selectCatalog(catalogId);
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -487,13 +624,11 @@ async function updateSchema(catalogId: string, schemaName: string, data: SchemaU
  * @param schemaName Schema 名称
  */
 async function selectSchemaByName(catalogId: string, schemaName: string): Promise<void> {
-  // 清除 Asset 选中状态（重要：必须在显示 Schema 详情前清除）
-  selectedAsset.value = null;
+  // 准备选择 Schema（清除不兼容的选择状态）
+  prepareForSelection('schema');
   
-  // 先确保 Catalog 已加载
-  if (!selectedCatalog.value || selectedCatalog.value.id !== catalogId) {
-    await fetchCatalog(catalogId);
-  }
+  // 确保 Catalog 已加载
+  await ensureCatalogLoaded(catalogId);
   
   // 从已加载的 Catalog 中查找 Schema
   const schema = selectedCatalog.value?.schemas.find(s => s.name === schemaName);
@@ -510,8 +645,9 @@ async function selectSchemaByName(catalogId: string, schemaName: string): Promis
  * 选择 Schema
  */
 async function selectSchema(catalogId: string, schema: Schema): Promise<void> {
-  // 清除 Asset 选中状态
-  selectedAsset.value = null;
+  // 准备选择 Schema
+  prepareForSelection('schema');
+  
   selectedSchema.value = schema;
   await fetchAssets(catalogId, schema.name);
 }
@@ -597,6 +733,9 @@ function clearSelectedSchema(): void {
  * 选择 Asset
  */
 function selectAsset(asset: Asset): void {
+  // 准备选择 Asset
+  prepareForSelection('asset');
+  
   selectedAsset.value = asset;
 }
 
@@ -604,10 +743,11 @@ function selectAsset(asset: Asset): void {
  * 通过名称选择 Asset（从树形导航点击）
  */
 async function selectAssetByName(catalogId: string, schemaName: string, assetName: string): Promise<void> {
-  // 先确保 Catalog 已加载
-  if (!selectedCatalog.value || selectedCatalog.value.id !== catalogId) {
-    await fetchCatalog(catalogId);
-  }
+  // 准备选择 Asset
+  prepareForSelection('asset');
+  
+  // 确保 Catalog 已加载
+  await ensureCatalogLoaded(catalogId);
   
   // 确保 Schema 已选中
   const schema = selectedCatalog.value?.schemas.find(s => s.name === schemaName);
@@ -683,13 +823,16 @@ async function deleteAgent(catalogId: string, agentName: string): Promise<boolea
  * 选择 Agent
  */
 async function selectAgent(catalogId: string, agentName: string): Promise<void> {
+  // 准备选择 Agent（清除 Schema 分支的选择状态）
+  prepareForSelection('agent');
+  
   try {
+    // 确保 Catalog 已加载
+    await ensureCatalogLoaded(catalogId);
+    
     const agent = await agentApi.get(catalogId, agentName);
     selectedAgent.value = agent;
-    // 清除其他选中状态
-    selectedSchema.value = null;
-    selectedAsset.value = null;
-    currentAssets.value = [];
+    
     // 展开 Agent 节点（需要根据 agent.id 来展开）
     if (agent.id) {
       toggleNodeExpanded(agent.id, true);
@@ -705,6 +848,55 @@ async function selectAgent(catalogId: string, agentName: string): Promise<void> 
  */
 function clearSelectedAgent(): void {
   selectedAgent.value = null;
+  selectedPromptName.value = '';
+}
+
+/**
+ * 刷新当前选中的 Agent 数据
+ * 不改变选中状态，只更新 Agent 数据（如 enabled_prompts 列表）
+ */
+async function refreshSelectedAgent(): Promise<void> {
+  if (!selectedAgent.value || !selectedCatalog.value) return;
+  
+  try {
+    const agent = await agentApi.get(selectedCatalog.value.id, selectedAgent.value.name);
+    selectedAgent.value = agent;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "刷新 Agent 数据失败";
+    console.error("refreshSelectedAgent error:", e);
+  }
+}
+
+// ============ Prompt 操作 ============
+
+/**
+ * 选择 Prompt
+ * @param catalogId Catalog ID
+ * @param agentName Agent 名称
+ * @param promptName Prompt 名称
+ */
+async function selectPrompt(catalogId: string, agentName: string, promptName: string): Promise<void> {
+  // 准备选择 Prompt
+  prepareForSelection('prompt');
+  
+  // 确保 Agent 已选中（selectAgent 会处理 Catalog 加载和状态清除）
+  const needLoadAgent = !selectedAgent.value || 
+                        selectedAgent.value.name !== agentName || 
+                        selectedCatalog.value?.id !== catalogId;
+  
+  if (needLoadAgent) {
+    await selectAgent(catalogId, agentName);
+  }
+  
+  // 设置选中的 Prompt 名称
+  selectedPromptName.value = promptName;
+}
+
+/**
+ * 清除 Prompt 选中状态
+ */
+function clearSelectedPrompt(): void {
+  selectedPromptName.value = '';
 }
 
 // ============ Model 操作（Schema 级别） ============
@@ -759,12 +951,21 @@ async function deleteModel(catalogId: string, schemaName: string, modelName: str
  * 选择 Model
  */
 async function selectModel(catalogId: string, schemaName: string, modelName: string): Promise<void> {
+  // 准备选择 Model
+  prepareForSelection('model');
+  
   try {
+    // 确保 Catalog 已加载
+    await ensureCatalogLoaded(catalogId);
+    
+    // 确保 Schema 已选中
+    const schema = selectedCatalog.value?.schemas.find(s => s.name === schemaName);
+    if (schema) {
+      selectedSchema.value = schema;
+    }
+    
     const model = await modelApi.get(catalogId, schemaName, modelName);
     selectedModel.value = model;
-    // 清除其他选中状态（保留 schema 选中状态）
-    selectedAsset.value = null;
-    selectedAgent.value = null;
   } catch (e) {
     error.value = e instanceof Error ? e.message : "获取模型详情失败";
     console.error("selectModel error:", e);
@@ -815,6 +1016,8 @@ export function useCatalogStore() {
     selectedAsset,
     selectedAgent,
     selectedModel,
+    selectedPromptName,
+    selectedNodeId,  // 统一的选中节点 ID 计算
     currentSchemas,
     currentAssets,
     loading,
@@ -845,7 +1048,10 @@ export function useCatalogStore() {
     createAgent,
     deleteAgent,
     selectAgent,
+    refreshSelectedAgent,  // 刷新 Agent 数据但不改变选中状态
     clearSelectedAgent,
+    selectPrompt,
+    clearSelectedPrompt,
     createModel,
     deleteModel,
     selectModel,

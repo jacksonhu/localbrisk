@@ -370,6 +370,12 @@ export default {
     modelNameInvalid: 'Model name can only contain letters, numbers, underscores and hyphens, starting with a letter',
     createModelFailed: 'Failed to create Model',
     deleteModelFailed: 'Failed to delete Model',
+    promptNameRequired: 'Prompt name is required',
+    promptNameInvalid: 'Prompt name can only contain letters, numbers, underscores and hyphens, starting with a letter',
+    createPromptFailed: 'Failed to create Prompt',
+    updatePromptFailed: 'Failed to update Prompt',
+    deletePromptFailed: 'Failed to delete Prompt',
+    loadPromptFailed: 'Failed to load Prompt',
   },
 
   // Success messages
@@ -386,6 +392,9 @@ export default {
     agentDeleted: 'Agent deleted successfully',
     modelCreated: 'Model created successfully',
     modelDeleted: 'Model deleted successfully',
+    promptCreated: 'Prompt created successfully',
+    promptUpdated: 'Prompt updated successfully',
+    promptDeleted: 'Prompt deleted successfully',
   },
 
   // Confirm dialog
@@ -404,6 +413,32 @@ export default {
     noPrompts: 'No Prompts',
     chatTitle: 'Agent Chat',
     chatPlaceholder: 'Interactive chat with Agent is coming soon...',
+    create: 'Create',
+    createSkill: 'Create Skill',
+    createPrompt: 'Create Prompt',
+  },
+
+  // Prompt related
+  prompt: {
+    create: 'Create Prompt',
+    edit: 'Edit Prompt',
+    delete: 'Delete Prompt',
+    name: 'Prompt Name',
+    nameHint: 'Start with letter, only letters, numbers, underscores and hyphens allowed',
+    content: 'Content',
+    contentHint: 'Supports Markdown format',
+    enabled: 'Enabled Status',
+    enabledHint: 'When enabled, this prompt will be activated',
+    overview: 'Overview',
+    contentTab: 'Content',
+    filePath: 'File Path',
+    info: 'Prompt Info',
+    noContent: 'No content',
+    confirmDelete: 'Are you sure you want to delete Prompt "{name}"?',
+    confirmDeleteDesc: 'This will permanently delete this prompt. This action cannot be undone.',
+    saveSuccess: 'Prompt saved successfully',
+    createSuccess: 'Prompt created successfully',
+    deleteSuccess: 'Prompt deleted successfully',
   },
 
   // Model detail

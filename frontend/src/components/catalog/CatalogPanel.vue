@@ -190,31 +190,9 @@ const errorMsg = computed(() => store.error.value);  // ref 需要通过计算�
 // 创建计算属性来正确访问 ref 的值
 const catalogItems = computed(() => store.catalogItems.value);
 
-// 计算当前选中的节点 ID
-const selectedNodeId = computed(() => {
-  // 优先级：Model > Asset > Schema > Agent > Catalog
-  // Model 选中时
-  if (store.selectedModel.value) {
-    return store.selectedModel.value.id;
-  }
-  // Asset 选中时
-  if (store.selectedAsset.value) {
-    return store.selectedAsset.value.id;
-  }
-  // Schema 选中时
-  if (store.selectedSchema.value) {
-    return store.selectedSchema.value.id;
-  }
-  // Agent 选中时
-  if (store.selectedAgent.value) {
-    return store.selectedAgent.value.id;
-  }
-  // Catalog 选中时
-  if (store.selectedCatalog.value) {
-    return store.selectedCatalog.value.id;
-  }
-  return undefined;
-});
+// 使用 store 中统一的选中节点 ID 计算
+// 所有节点类型的 ID 生成逻辑都在 store 中集中管理
+const selectedNodeId = computed(() => store.selectedNodeId.value);
 
 // 弹窗状态
 const showCreateCatalogDialog = ref(false);
@@ -249,58 +227,86 @@ async function handleRefresh() {
 
 // 选择项目
 function handleSelect(item: CatalogItem) {
-  console.log("Selected:", item);
-  if (item.type === 'catalog') {
-    // 点击 Catalog，打开 Catalog 详情页
-    store.clearSelectedSchema();
-    store.clearSelectedAgent();
-    store.selectCatalog(item.id);
-  } else if (item.type === 'schema') {
-    // 点击 Schema，展开并打开 Schema 详情页
-    store.clearSelectedAgent();
-    store.clearSelectedAsset();  // 清除 Asset 选中状态
-    // 优先从 metadata 获取 catalog_id，避免名称中包含下划线导致解析错误
-    const catalogId = item.metadata?.catalog_id as string | undefined;
-    if (catalogId) {
-      store.selectSchemaByName(catalogId, item.name);
-    } else {
-      // 兼容旧数据：从 item.id 中提取 catalog_id（格式为 catalogId_schemaName）
-      const fallbackCatalogId = item.id.substring(0, item.id.lastIndexOf('_' + item.name));
-      store.selectSchemaByName(fallbackCatalogId, item.name);
+  console.log("CatalogPanel.handleSelect:", item.type, item.name, item.metadata);
+  
+  // 根据节点类型调用对应的 store 方法
+  // 所有状态清除逻辑都在 store 的 selectXxx 方法中处理
+  switch (item.type) {
+    case 'catalog':
+      // 选择 Catalog：清除所有子级选择
+      store.clearSelectedSchema();
+      store.clearSelectedAgent();
+      store.selectCatalog(item.id);
+      break;
+      
+    case 'schema': {
+      // 选择 Schema：需要 catalog_id
+      const catalogId = item.metadata?.catalog_id as string | undefined;
+      if (catalogId) {
+        store.selectSchemaByName(catalogId, item.name);
+      } else {
+        // 兼容旧数据：从 item.id 中提取 catalog_id
+        const fallbackCatalogId = item.id.substring(0, item.id.lastIndexOf('_' + item.name));
+        store.selectSchemaByName(fallbackCatalogId, item.name);
+      }
+      break;
     }
-  } else if (item.type === 'agent') {
-    // 点击 Agent，打开 Agent 详情页
-    store.clearSelectedSchema();
-    const catalogId = item.metadata?.catalog_id as string | undefined;
-    if (catalogId) {
-      store.selectAgent(catalogId, item.name);
-    }
-  } else if (item.type === 'model') {
-    // 点击 Model，打开 Model 详情页
-    store.clearSelectedAgent();
-    store.clearSelectedAsset();
-    // 优先从 metadata 获取 catalog_id 和 schema_name
-    const catalogId = item.metadata?.catalog_id as string | undefined;
-    const schemaName = item.metadata?.schema_name as string | undefined;
     
-    if (catalogId && schemaName) {
-      store.selectModel(catalogId, schemaName, item.name);
-    } else {
-      console.warn('Model metadata missing catalog_id or schema_name');
+    case 'agent': {
+      // 选择 Agent：需要 catalog_id
+      const catalogId = item.metadata?.catalog_id as string | undefined;
+      if (catalogId) {
+        store.selectAgent(catalogId, item.name);
+      }
+      break;
     }
-  } else if (item.type === 'table' || item.type === 'volume') {
-    // 点击 Table 或 Volume，打开资产详情页
-    store.clearSelectedAgent();
-    // 优先从 metadata 获取 catalog_id 和 schema_name
-    const catalogId = item.metadata?.catalog_id as string | undefined;
-    const schemaName = item.metadata?.schema_name as string | undefined;
     
-    if (catalogId && schemaName) {
-      store.selectAssetByName(catalogId, schemaName, item.name);
-    } else {
-      // 兼容旧数据：尝试从 ID 解析（可能因名称含下划线而失败）
-      console.warn('Asset metadata missing catalog_id or schema_name, falling back to ID parsing');
+    case 'prompt':
+    case 'skill': {
+      // 选择 Prompt/Skill：需要 catalog_id 和 agent_name
+      const catalogId = item.metadata?.catalog_id as string | undefined;
+      const agentName = item.metadata?.agent_name as string | undefined;
+      if (catalogId && agentName) {
+        // 从节点 ID 中提取原始文件名
+        // 节点 ID 格式: {agentId}_prompt_{filename} 或 {agentId}_skill_{filename}
+        // 例如: market_analysis_agent_dd_prompt_ddd.md
+        const prefix = item.type === 'prompt' ? '_prompt_' : '_skill_';
+        const prefixIndex = item.id.lastIndexOf(prefix);
+        const originalFileName = prefixIndex >= 0 
+          ? item.id.substring(prefixIndex + prefix.length) 
+          : item.name;
+        store.selectPrompt(catalogId, agentName, originalFileName);
+      }
+      break;
     }
+    
+    case 'model': {
+      // 选择 Model：需要 catalog_id 和 schema_name
+      const catalogId = item.metadata?.catalog_id as string | undefined;
+      const schemaName = item.metadata?.schema_name as string | undefined;
+      if (catalogId && schemaName) {
+        store.selectModel(catalogId, schemaName, item.name);
+      } else {
+        console.warn('Model metadata missing catalog_id or schema_name');
+      }
+      break;
+    }
+    
+    case 'table':
+    case 'volume': {
+      // 选择 Table/Volume（Asset）：需要 catalog_id 和 schema_name
+      const catalogId = item.metadata?.catalog_id as string | undefined;
+      const schemaName = item.metadata?.schema_name as string | undefined;
+      if (catalogId && schemaName) {
+        store.selectAssetByName(catalogId, schemaName, item.name);
+      } else {
+        console.warn('Asset metadata missing catalog_id or schema_name');
+      }
+      break;
+    }
+    
+    default:
+      console.warn('Unknown item type:', item.type);
   }
 }
 

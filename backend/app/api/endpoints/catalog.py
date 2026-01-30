@@ -35,6 +35,9 @@ from app.models.catalog import (
     Model,
     ModelCreate,
     ModelUpdate,
+    Prompt,
+    PromptCreate,
+    PromptUpdate,
 )
 from app.models.metadata import SyncResult
 from app.services.catalog_service import catalog_service
@@ -280,22 +283,46 @@ async def delete_agent(catalog_id: str, agent_name: str):
 
 # ==================== Agent Prompts 端点 ====================
 
-@router.get("/{catalog_id}/agents/{agent_name}/prompts/{prompt_name}")
-async def get_agent_prompt(catalog_id: str, agent_name: str, prompt_name: str):
-    """获取 Agent Prompt 内容（Markdown 文件）"""
-    content = catalog_service.get_agent_prompt(catalog_id, agent_name, prompt_name)
-    if content is None:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    return {"name": prompt_name, "content": content}
-
-
-@router.post("/{catalog_id}/agents/{agent_name}/prompts/{prompt_name}")
-async def create_agent_prompt(catalog_id: str, agent_name: str, prompt_name: str, content: str = ""):
-    """创建或更新 Agent Prompt（Markdown 文件）"""
-    success = catalog_service.add_agent_prompt(catalog_id, agent_name, prompt_name, content)
-    if not success:
+@router.get("/{catalog_id}/agents/{agent_name}/prompts", response_model=List[Prompt])
+async def list_agent_prompts(catalog_id: str, agent_name: str):
+    """获取 Agent 所有 Prompts 列表"""
+    prompts = catalog_service.list_agent_prompts(catalog_id, agent_name)
+    if prompts is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return {"message": "Prompt created successfully"}
+    return prompts
+
+
+@router.get("/{catalog_id}/agents/{agent_name}/prompts/{prompt_name}", response_model=Prompt)
+async def get_agent_prompt(catalog_id: str, agent_name: str, prompt_name: str):
+    """获取 Agent Prompt 详情（包含内容和元数据）"""
+    prompt = catalog_service.get_agent_prompt_detail(catalog_id, agent_name, prompt_name)
+    if prompt is None:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return prompt
+
+
+@router.post("/{catalog_id}/agents/{agent_name}/prompts")
+async def create_agent_prompt(catalog_id: str, agent_name: str, prompt_create: PromptCreate):
+    """创建 Agent Prompt（接受 JSON body）"""
+    try:
+        success = catalog_service.create_agent_prompt(catalog_id, agent_name, prompt_create)
+        if not success:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return {"message": "Prompt created successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{catalog_id}/agents/{agent_name}/prompts/{prompt_name}")
+async def update_agent_prompt(catalog_id: str, agent_name: str, prompt_name: str, prompt_update: PromptUpdate):
+    """更新 Agent Prompt"""
+    try:
+        success = catalog_service.update_agent_prompt(catalog_id, agent_name, prompt_name, prompt_update)
+        if not success:
+            raise HTTPException(status_code=404, detail="Prompt not found")
+        return {"message": "Prompt updated successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{catalog_id}/agents/{agent_name}/prompts/{prompt_name}")
@@ -305,6 +332,15 @@ async def delete_agent_prompt(catalog_id: str, agent_name: str, prompt_name: str
     if not success:
         raise HTTPException(status_code=404, detail="Prompt not found")
     return {"message": "Prompt deleted successfully"}
+
+
+@router.post("/{catalog_id}/agents/{agent_name}/prompts/{prompt_name}/toggle")
+async def toggle_agent_prompt_enabled(catalog_id: str, agent_name: str, prompt_name: str, enabled: bool):
+    """切换 Agent Prompt 启用状态（在 agent.yaml 的 enabled_prompts 中添加/移除）"""
+    success = catalog_service.toggle_prompt_enabled(catalog_id, agent_name, prompt_name, enabled)
+    if not success:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return {"message": "Prompt enabled status updated successfully", "enabled": enabled}
 
 
 # ==================== Agent Skills 端点 ====================
@@ -334,6 +370,15 @@ async def delete_agent_skill(catalog_id: str, agent_name: str, skill_name: str):
     if not success:
         raise HTTPException(status_code=404, detail="Skill not found")
     return {"message": "Skill deleted successfully"}
+
+
+@router.post("/{catalog_id}/agents/{agent_name}/skills/{skill_name}/toggle")
+async def toggle_agent_skill_enabled(catalog_id: str, agent_name: str, skill_name: str, enabled: bool):
+    """切换 Agent Skill 启用状态（在 agent.yaml 的 enabled_skills 中添加/移除）"""
+    success = catalog_service.toggle_skill_enabled(catalog_id, agent_name, skill_name, enabled)
+    if not success:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"message": "Skill enabled status updated successfully", "enabled": enabled}
 
 
 # ==================== Model 端点（Schema 级别） ====================

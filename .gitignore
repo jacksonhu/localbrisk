@@ -60,7 +60,6 @@ Cargo.lock
 # ------------------------------------
 backend/build/
 backend/dist/
-*.spec
 *.manifest
 *.pyz
 

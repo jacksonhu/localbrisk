@@ -282,6 +282,8 @@ class AgentUpdate(BaseModel):
     description: Optional[str] = None
     system_prompt: Optional[str] = None
     model_reference: Optional[str] = None  # 引用的模型
+    enabled_skills: Optional[List[str]] = None  # 已启用的 skills 列表
+    enabled_prompts: Optional[List[str]] = None  # 已启用的 prompts 列表
 
 
 class Agent(BaseModel):
@@ -295,6 +297,8 @@ class Agent(BaseModel):
     model_reference: Optional[str] = None  # 引用的模型，格式：schema_name.model_name
     skills: List[str] = Field(default_factory=list)  # skills 文件列表
     prompts: List[str] = Field(default_factory=list)  # prompts (markdown) 文件列表
+    enabled_skills: List[str] = Field(default_factory=list)  # 已启用的 skills 列表
+    enabled_prompts: List[str] = Field(default_factory=list)  # 已启用的 prompts 列表
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -308,6 +312,29 @@ class Note(BaseModel):
     file_path: str
     created_at: datetime
     updated_at: datetime
+
+
+# ==================== Prompt 相关模型 ====================
+
+class PromptCreate(BaseModel):
+    """创建 Prompt 的请求模型"""
+    name: str = Field(..., min_length=1, max_length=100)
+    content: str = ""
+
+
+class PromptUpdate(BaseModel):
+    """更新 Prompt 的请求模型"""
+    content: Optional[str] = None
+
+
+class Prompt(BaseModel):
+    """Prompt 数据模型 - Agent 下的子资源"""
+    name: str
+    content: str
+    enabled: bool = False  # 是否在 agent.yaml 的 enabled_prompts 中
+    path: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 # ==================== Model 相关模型 ====================

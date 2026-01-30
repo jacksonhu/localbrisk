@@ -131,21 +131,48 @@ const handleToggleExpand = (item: CatalogItem) => {
 };
 
 const handleClick = (item: CatalogItem) => {
+  // 占位符节点不响应点击
   if (item.type === "placeholder") {
-    // 占位符节点不响应点击
     return;
   }
   
-  if (item.type === "asset_type" || item.type === "folder") {
-    // 资产类型节点和文件夹节点点击时只切换展开状态
-    emit("toggle-expand", item);
-  } else if (item.type === "agent") {
-    // Agent 节点点击时：展开节点 + 打开详情页
-    emit("toggle-expand", item);
-    emit("select", item);
-  } else {
-    // 其他节点（catalog, schema, table, volume 等）正常选择
-    emit("select", item);
+  // 记录点击日志，便于调试
+  console.log("CatalogTree.handleClick:", item.type, item.name);
+  
+  // 根据节点类型决定行为
+  // 1. 容器类节点（只展开，不选择）：asset_type, folder
+  // 2. 可展开+可选择的节点：catalog, schema, agent
+  // 3. 只选择的叶子节点：prompt, skill, table, volume, model
+  
+  switch (item.type) {
+    // 纯容器节点：只切换展开状态
+    case "asset_type":
+    case "folder":
+      emit("toggle-expand", item);
+      break;
+    
+    // 可展开的父节点：展开 + 选择
+    case "catalog":
+    case "schema":
+    case "agent":
+      emit("toggle-expand", item);
+      emit("select", item);
+      break;
+    
+    // 叶子节点：只选择
+    case "prompt":
+    case "skill":
+    case "table":
+    case "volume":
+    case "model":
+    case "note":
+    case "function":
+      emit("select", item);
+      break;
+    
+    // 其他未知类型：默认选择行为
+    default:
+      emit("select", item);
   }
 };
 

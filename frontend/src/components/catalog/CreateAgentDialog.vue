@@ -1,170 +1,129 @@
+<!--
+  CreateAgentDialog - 创建 Agent 弹窗
+  使用 BaseDialog 和公共表单组件
+-->
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center">
-        <!-- 背景遮罩 -->
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="close"></div>
-        
-        <!-- 弹窗内容 -->
-        <div class="relative bg-card rounded-xl shadow-float-lg w-[520px] max-h-[85vh] overflow-hidden">
-          <!-- 标题栏 -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="flex items-center gap-2">
-              <Bot class="w-5 h-5 text-primary" />
-              <h2 class="text-lg font-semibold text-foreground">
-                {{ t('catalog.createAgent') }}
-              </h2>
-            </div>
-            <button
-              @click="close"
-              class="p-1.5 rounded-lg hover:bg-muted transition-colors"
-            >
-              <X class="w-5 h-5 text-muted-foreground" />
-            </button>
+  <BaseDialog
+    :is-open="isOpen"
+    :title="t('catalog.createAgent')"
+    :icon="Bot"
+    width="lg"
+    max-height="screen"
+    @close="close"
+  >
+    <form @submit.prevent="handleSubmit" class="space-y-5">
+      <!-- Agent 名称 -->
+      <FormField
+        :label="t('catalog.agentName')"
+        :error="errors.name"
+        :hint="t('catalog.agentNameHint')"
+        required
+      >
+        <FormInput
+          v-model="form.name"
+          :placeholder="t('catalog.agentNameHint')"
+          :error="!!errors.name"
+          @input="validateName"
+        />
+      </FormField>
+
+      <!-- 描述 -->
+      <FormField
+        :label="t('common.description')"
+        optional
+      >
+        <FormTextarea
+          v-model="form.description"
+          :placeholder="t('catalog.agentDescHint')"
+          :rows="2"
+        />
+      </FormField>
+
+      <!-- 模型引用 -->
+      <div class="space-y-4">
+        <FormField
+          :label="t('catalog.modelReference')"
+          :hint="models.length === 0 && selectedSchemaName && !loadingModels 
+            ? t('catalog.noModelsInSchema') 
+            : t('catalog.modelReferenceDesc')"
+          :hint-type="models.length === 0 && selectedSchemaName && !loadingModels ? 'warning' : 'default'"
+          optional
+        >
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Schema 下拉框 -->
+            <FormSelect
+              v-model="selectedSchemaName"
+              :options="schemaOptions"
+              :placeholder="t('catalog.selectSchema')"
+              @update:model-value="onSchemaChange"
+            />
+            
+            <!-- Model 下拉框 -->
+            <FormSelect
+              v-model="form.model_reference"
+              :options="modelOptions"
+              :placeholder="loadingModels ? t('common.loading') : t('catalog.selectModel')"
+              :disabled="!selectedSchemaName || loadingModels"
+              :loading="loadingModels"
+            />
           </div>
-          
-          <!-- 表单内容 -->
-          <form @submit.prevent="handleSubmit" class="p-6 space-y-5 overflow-y-auto max-h-[65vh]">
-            <!-- Agent 名称 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('catalog.agentName') }}
-                <span class="text-red-500">*</span>
-              </label>
-              <input
-                v-model="form.name"
-                type="text"
-                :placeholder="t('catalog.agentNameHint')"
-                class="w-full px-3 py-2 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                :class="errors.name ? 'border-red-500' : 'border-input'"
-                @input="validateName"
-              />
-              <p v-if="errors.name" class="text-xs text-red-500">{{ errors.name }}</p>
-              <p v-else class="text-xs text-muted-foreground">{{ t('catalog.agentNameHint') }}</p>
-            </div>
+        </FormField>
+      </div>
 
-            <!-- 描述 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('common.description') }}
-                <span class="text-muted-foreground text-xs ml-1">({{ t('common.optional') }})</span>
-              </label>
-              <textarea
-                v-model="form.description"
-                rows="2"
-                :placeholder="t('catalog.agentDescHint')"
-                class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-              ></textarea>
-            </div>
+      <!-- 系统提示词 -->
+      <FormField
+        :label="t('catalog.systemPrompt')"
+        :hint="t('catalog.systemPromptDesc')"
+        optional
+      >
+        <FormTextarea
+          v-model="form.system_prompt"
+          :placeholder="t('catalog.systemPromptHint')"
+          :rows="4"
+          class="font-mono"
+        />
+      </FormField>
 
-            <!-- 模型引用 -->
-            <div class="space-y-4">
-              <!-- Schema 选择 -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('catalog.modelReference') }}
-                  <span class="text-muted-foreground text-xs ml-1">({{ t('common.optional') }})</span>
-                </label>
-                <div class="grid grid-cols-2 gap-3">
-                  <!-- Schema 下拉框 -->
-                  <div class="relative">
-                    <select
-                      v-model="selectedSchemaName"
-                      @change="onSchemaChange(selectedSchemaName)"
-                      class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring appearance-none pr-8"
-                    >
-                      <option value="">{{ t('catalog.selectSchema') }}</option>
-                      <option v-for="schema in schemas" :key="schema.id" :value="schema.name">
-                        {{ schema.name }}
-                      </option>
-                    </select>
-                    <ChevronDown class="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                  </div>
-                  
-                  <!-- Model 下拉框 -->
-                  <div class="relative">
-                    <select
-                      v-model="form.model_reference"
-                      :disabled="!selectedSchemaName || loadingModels"
-                      class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed appearance-none pr-8"
-                    >
-                      <option value="">{{ loadingModels ? t('common.loading') : t('catalog.selectModel') }}</option>
-                      <option v-for="model in models" :key="model.id" :value="`${selectedSchemaName}.${model.name}`">
-                        {{ model.name }}
-                      </option>
-                    </select>
-                    <Loader2 v-if="loadingModels" class="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
-                    <ChevronDown v-else class="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-                <p v-if="models.length === 0 && selectedSchemaName && !loadingModels" class="text-xs text-amber-600">
-                  {{ t('catalog.noModelsInSchema') }}
-                </p>
-                <p v-else class="text-xs text-muted-foreground">{{ t('catalog.modelReferenceDesc') }}</p>
-              </div>
-            </div>
-
-            <!-- 系统提示词 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('catalog.systemPrompt') }}
-                <span class="text-muted-foreground text-xs ml-1">({{ t('common.optional') }})</span>
-              </label>
-              <textarea
-                v-model="form.system_prompt"
-                rows="4"
-                :placeholder="t('catalog.systemPromptHint')"
-                class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none font-mono"
-              ></textarea>
-              <p class="text-xs text-muted-foreground">{{ t('catalog.systemPromptDesc') }}</p>
-            </div>
-
-            <!-- 提示信息 -->
-            <div class="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
-              <div class="flex gap-2">
-                <Info class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                <div class="text-xs text-blue-700 dark:text-blue-300">
-                  <p class="font-medium mb-1">{{ t('catalog.agentStructure') }}</p>
-                  <ul class="list-disc list-inside space-y-0.5 text-blue-600 dark:text-blue-400">
-                    <li><code class="text-xs">skills/</code> - {{ t('catalog.skillsDesc') }}</li>
-                    <li><code class="text-xs">prompts/</code> - {{ t('catalog.promptsDesc') }}</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </form>
-          
-          <!-- 底部按钮 -->
-          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/30">
-            <button
-              type="button"
-              @click="close"
-              class="px-4 py-2 text-sm border border-input rounded-lg hover:bg-muted transition-colors"
-            >
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              @click="handleSubmit"
-              :disabled="isSubmitting || !isValid"
-              class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
-              {{ t('common.create') }}
-            </button>
+      <!-- 提示信息 -->
+      <div class="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
+        <div class="flex gap-2">
+          <Info class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div class="text-xs text-blue-700 dark:text-blue-300">
+            <p class="font-medium mb-1">{{ t('catalog.agentStructure') }}</p>
+            <ul class="list-disc list-inside space-y-0.5 text-blue-600 dark:text-blue-400">
+              <li><code class="text-xs">skills/</code> - {{ t('catalog.skillsDesc') }}</li>
+              <li><code class="text-xs">prompts/</code> - {{ t('catalog.promptsDesc') }}</li>
+            </ul>
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+    </form>
+
+    <template #footer>
+      <DialogFooter
+        :submitting="isSubmitting"
+        :disabled="!isValid"
+        @cancel="close"
+        @submit="handleSubmit"
+      />
+    </template>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { X, Loader2, Bot, Info, ChevronDown } from 'lucide-vue-next';
+import { Bot, Info } from 'lucide-vue-next';
 import type { AgentCreate, Schema, Model } from '@/types/catalog';
 import { useCatalogStore } from '@/stores/catalogStore';
 import { modelApi } from '@/services/api';
+import { NAME_REGEX } from '@/utils/validationUtils';
+import BaseDialog from '@/components/common/BaseDialog.vue';
+import DialogFooter from '@/components/common/DialogFooter.vue';
+import FormField from '@/components/common/FormField.vue';
+import FormInput from '@/components/common/FormInput.vue';
+import FormTextarea from '@/components/common/FormTextarea.vue';
+import FormSelect from '@/components/common/FormSelect.vue';
 
 const { t } = useI18n();
 const store = useCatalogStore();
@@ -203,8 +162,18 @@ const models = ref<Model[]>([]);
 const selectedSchemaName = ref('');
 const loadingModels = ref(false);
 
-// 名称验证正则（字母开头，允许字母、数字、下划线、连字符）
-const nameRegex = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+// Schema 选项
+const schemaOptions = computed(() => 
+  schemas.value.map(s => ({ value: s.name, label: s.name }))
+);
+
+// Model 选项
+const modelOptions = computed(() => 
+  models.value.map(m => ({ 
+    value: `${selectedSchemaName.value}.${m.name}`, 
+    label: m.name 
+  }))
+);
 
 // 验证名称
 function validateName() {
@@ -212,7 +181,7 @@ function validateName() {
     errors.name = t('errors.agentNameRequired');
     return false;
   }
-  if (!nameRegex.test(form.name)) {
+  if (!NAME_REGEX.test(form.name)) {
     errors.name = t('errors.agentNameInvalid');
     return false;
   }
@@ -222,7 +191,7 @@ function validateName() {
 
 // 表单是否有效
 const isValid = computed(() => {
-  return form.name && nameRegex.test(form.name);
+  return form.name && NAME_REGEX.test(form.name);
 });
 
 // 加载 Schemas
@@ -230,12 +199,10 @@ async function loadSchemas() {
   if (!props.catalogId) return;
   
   try {
-    // 从 store 的 selectedCatalog 中获取 schemas
     const catalog = store.selectedCatalog.value;
     if (catalog && catalog.id === props.catalogId) {
       schemas.value = catalog.schemas || [];
     } else {
-      // 如果没有，则调用 API 获取
       const schemaList = await store.fetchSchemas(props.catalogId);
       schemas.value = schemaList;
     }
@@ -264,10 +231,10 @@ async function loadModels(schemaName: string) {
 }
 
 // 选择 Schema 时加载 Models
-function onSchemaChange(schemaName: string) {
-  selectedSchemaName.value = schemaName;
+function onSchemaChange(schemaName: string | number) {
+  selectedSchemaName.value = schemaName as string;
   form.model_reference = '';
-  loadModels(schemaName);
+  loadModels(schemaName as string);
 }
 
 // 关闭弹窗
@@ -320,20 +287,7 @@ function resetForm() {
 watch(() => props.isOpen, async (isOpen) => {
   if (isOpen) {
     resetForm();
-    // 加载 Schema 列表
     await loadSchemas();
   }
 });
 </script>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

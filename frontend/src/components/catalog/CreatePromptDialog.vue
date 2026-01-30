@@ -1,42 +1,54 @@
 <!-- 
-  CreateSchemaDialog - 创建 Schema 弹窗
-  使用公共组件重构
+  CreatePromptDialog - 创建 Prompt 弹窗
+  使用公共组件重构，减少重复代码
 -->
 <template>
   <BaseDialog
     :is-open="isOpen"
-    :title="t('catalog.createSchema')"
-    :icon="Database"
-    width="sm"
+    :title="t('prompt.create')"
+    :icon="FileText"
+    width="md"
     @close="close"
   >
     <!-- 表单内容 -->
     <form @submit.prevent="handleSubmit" class="space-y-5">
-      <!-- Schema 名称 -->
+      <!-- Prompt 名称 -->
       <FormField
-        :label="t('catalog.schemaName')"
+        :label="t('prompt.name')"
         :error="errors.name"
-        :hint="t('catalog.schemaNameHint')"
+        :hint="t('prompt.nameHint')"
         required
       >
         <FormInput
           v-model="form.name"
-          :placeholder="t('catalog.schemaNameHint')"
+          :placeholder="t('prompt.nameHint')"
           @input="validateName"
         />
       </FormField>
 
-      <!-- 描述 -->
+      <!-- 初始内容 -->
       <FormField
-        :label="t('common.description')"
+        :label="t('prompt.content')"
+        :hint="t('prompt.contentHint')"
         optional
       >
         <FormTextarea
-          v-model="form.description"
-          :rows="3"
-          :placeholder="t('detail.addDescription')"
+          v-model="form.content"
+          :rows="6"
+          :placeholder="t('prompt.contentHint')"
+          class="font-mono"
         />
       </FormField>
+
+      <!-- 提示信息 -->
+      <div class="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
+        <div class="flex gap-2">
+          <Info class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div class="text-xs text-blue-700 dark:text-blue-300">
+            <p>Prompt 文件将保存为 Markdown 格式（.md），支持标题、列表、代码块等 Markdown 语法。</p>
+          </div>
+        </div>
+      </div>
     </form>
     
     <!-- 底部按钮 -->
@@ -55,10 +67,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Database } from 'lucide-vue-next';
+import { FileText, Info } from 'lucide-vue-next';
 import { BaseDialog, DialogFooter, FormField, FormInput, FormTextarea } from '@/components/common';
 import { NAME_REGEX } from '@/utils/validationUtils';
-import type { SchemaCreate } from '@/types/catalog';
+import type { PromptCreate } from '@/types/catalog';
 
 const { t } = useI18n();
 
@@ -66,19 +78,19 @@ const { t } = useI18n();
 const props = defineProps<{
   isOpen: boolean;
   catalogId: string;
+  agentName: string;
 }>();
 
 // Emits
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'submit', catalogId: string, data: SchemaCreate): void;
+  (e: 'submit', catalogId: string, agentName: string, data: PromptCreate): void;
 }>();
 
 // 表单状态
-const form = reactive<SchemaCreate>({
+const form = reactive<PromptCreate>({
   name: '',
-  owner: '',
-  description: '',
+  content: '',
 });
 
 // 错误状态
@@ -92,11 +104,11 @@ const isSubmitting = ref(false);
 // 验证名称
 function validateName() {
   if (!form.name) {
-    errors.name = t('errors.schemaNameRequired');
+    errors.name = t('errors.promptNameRequired');
     return false;
   }
   if (!NAME_REGEX.test(form.name)) {
-    errors.name = t('errors.schemaNameInvalid');
+    errors.name = t('errors.promptNameInvalid');
     return false;
   }
   errors.name = '';
@@ -122,18 +134,12 @@ async function handleSubmit() {
   isSubmitting.value = true;
   
   try {
-    const data: SchemaCreate = {
+    const data: PromptCreate = {
       name: form.name,
+      content: form.content || '',
     };
     
-    if (form.owner) {
-      data.owner = form.owner;
-    }
-    if (form.description) {
-      data.description = form.description;
-    }
-    
-    emit('submit', props.catalogId, data);
+    emit('submit', props.catalogId, props.agentName, data);
   } finally {
     isSubmitting.value = false;
   }
@@ -142,8 +148,7 @@ async function handleSubmit() {
 // 重置表单
 function resetForm() {
   form.name = '';
-  form.owner = '';
-  form.description = '';
+  form.content = '';
   errors.name = '';
 }
 
