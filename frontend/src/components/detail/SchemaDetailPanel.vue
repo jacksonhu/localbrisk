@@ -20,29 +20,41 @@
       <div class="flex items-center gap-3">
         <Database class="w-6 h-6 text-purple-500" />
         <h1 class="text-2xl font-semibold">{{ selectedSchema.name }}</h1>
-        <!-- 只读标识 -->
+        <!-- 类型标识 -->
         <span 
-          v-if="selectedSchema.readonly" 
-          class="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded flex items-center gap-1"
+          :class="selectedSchema.schema_type === 'local' 
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'"
+          class="px-2 py-0.5 text-xs rounded flex items-center gap-1"
         >
-          <Lock class="w-3 h-3" />
-          {{ t('catalog.readonly') }}
+          <HardDrive v-if="selectedSchema.schema_type === 'local'" class="w-3 h-3" />
+          <PlugZap v-else class="w-3 h-3" />
+          {{ selectedSchema.schema_type === 'local' ? t('catalog.local') : t('catalog.external') }}
         </span>
-        <!-- 来源标识 -->
+        <!-- 连接类型标识 -->
         <span 
-          :class="selectedSchema.source === 'local' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'"
-          class="px-2 py-0.5 text-xs rounded"
+          v-if="selectedSchema.connection"
+          class="px-2 py-0.5 text-xs bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 rounded flex items-center gap-1"
         >
-          {{ selectedSchema.source === 'local' ? t('catalog.local') : t('catalog.connection') }}
+          {{ selectedSchema.connection.type.toUpperCase() }}
         </span>
         <!-- 操作图标 -->
-        <div v-if="!selectedSchema.readonly" class="flex items-center gap-1 ml-2">
+        <div class="flex items-center gap-1 ml-2">
           <button
             @click="showEditSchemaDialog = true"
             class="p-1.5 rounded-lg hover:bg-muted transition-colors"
             :title="t('catalog.editSchema')"
           >
             <Pencil class="w-4 h-4 text-muted-foreground hover:text-foreground" />
+          </button>
+          <button
+            v-if="selectedSchema.schema_type === 'external'"
+            @click="handleSyncMetadata"
+            :disabled="syncing"
+            class="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+            :title="t('detail.syncMetadata')"
+          >
+            <RefreshCw class="w-4 h-4 text-muted-foreground hover:text-blue-600" :class="{ 'animate-spin': syncing }" />
           </button>
           <button
             @click="confirmDeleteSchema"
@@ -53,9 +65,8 @@
           </button>
         </div>
       </div>
-
       <!-- 创建按钮 -->
-      <div v-if="!selectedSchema.readonly" class="relative">
+      <div v-if="selectedSchema.schema_type=='local'" class="relative">
         <button
           @click="showCreateMenu = !showCreateMenu"
           class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
@@ -124,7 +135,6 @@
           <div class="flex items-center justify-between mb-2">
             <h3 class="font-medium">{{ t('common.description') }}</h3>
             <button 
-              v-if="!selectedSchema.readonly" 
               @click="showEditSchemaDialog = true"
               class="w-6 h-6 rounded hover:bg-muted flex items-center justify-center"
             >
@@ -145,25 +155,81 @@
               <p class="font-medium">{{ selectedSchema.name }}</p>
             </div>
             <div>
-              <label class="text-muted-foreground">{{ t('detail.source') }}</label>
+              <label class="text-muted-foreground">{{ t('catalog.schemaType') }}</label>
               <p class="font-medium">
-                {{ selectedSchema.source === 'local' ? t('catalog.local') : t('catalog.connection') }}
+                {{ selectedSchema.schema_type === 'local' ? t('catalog.schemaTypeLocal') : t('catalog.schemaTypeExternal') }}
               </p>
             </div>
             <div>
               <label class="text-muted-foreground">{{ t('common.createdAt') }}</label>
               <p class="font-medium">{{ formatDate(selectedSchema.created_at) }}</p>
             </div>
-            <div v-if="selectedSchema.connection_name" class="col-span-2">
-              <label class="text-muted-foreground">{{ t('detail.connectionName') }}</label>
-              <p class="font-medium font-mono text-xs bg-muted px-2 py-1 rounded mt-1">
-                {{ selectedSchema.connection_name }}
-              </p>
+            <div v-if="selectedSchema.synced_at">
+              <label class="text-muted-foreground">{{ t('detail.lastSyncedAt') }}</label>
+              <p class="font-medium">{{ formatDate(selectedSchema.synced_at) }}</p>
             </div>
             <div v-if="selectedSchema.path" class="col-span-2">
               <label class="text-muted-foreground">{{ t('common.path') }}</label>
               <p class="font-medium font-mono text-xs bg-muted px-2 py-1 rounded mt-1 break-all">
                 {{ selectedSchema.path }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 数据库连接配置 (仅 External 类型显示) -->
+        <div v-if="selectedSchema.schema_type === 'external' && selectedSchema.connection" class="card-float p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-medium flex items-center gap-2">
+              <PlugZap class="w-4 h-4 text-cyan-500" />
+              {{ t('detail.connectionConfig') }}
+            </h3>
+            <button
+              @click="handleSyncMetadata"
+              :disabled="syncing"
+              class="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': syncing }" />
+              {{ syncing ? t('detail.syncing') : t('detail.syncNow') }}
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <label class="text-muted-foreground">{{ t('connection.type') }}</label>
+              <p class="font-medium">{{ selectedSchema.connection.type.toUpperCase() }}</p>
+            </div>
+            <div>
+              <label class="text-muted-foreground">{{ t('connection.database') }}</label>
+              <p class="font-medium">{{ selectedSchema.connection.db_name }}</p>
+            </div>
+            <div v-if="selectedSchema.connection.host">
+              <label class="text-muted-foreground">{{ t('connection.host') }}</label>
+              <p class="font-medium">{{ selectedSchema.connection.host }}</p>
+            </div>
+            <div v-if="selectedSchema.connection.port">
+              <label class="text-muted-foreground">{{ t('connection.port') }}</label>
+              <p class="font-medium">{{ selectedSchema.connection.port }}</p>
+            </div>
+            <div v-if="selectedSchema.connection.username">
+              <label class="text-muted-foreground">{{ t('connection.username') }}</label>
+              <p class="font-medium">{{ selectedSchema.connection.username }}</p>
+            </div>
+          </div>
+          
+          <!-- 同步结果提示 -->
+          <div v-if="syncResult" class="mt-4 p-3 rounded-lg" :class="syncResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'">
+            <div class="flex items-center gap-2 mb-2">
+              <CheckCircle v-if="syncResult.success" class="w-4 h-4 text-green-500" />
+              <XCircle v-else class="w-4 h-4 text-red-500" />
+              <span class="font-medium" :class="syncResult.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'">
+                {{ syncResult.success ? t('detail.syncSuccess') : t('detail.syncFailed') }}
+              </span>
+            </div>
+            <div class="text-sm text-muted-foreground space-y-1">
+              <p>{{ t('detail.tablesSynced', { count: syncResult.tables_synced }) }}</p>
+              <p>{{ t('detail.columnsSynced', { count: syncResult.columns_synced }) }}</p>
+              <p v-if="syncResult.errors.length > 0" class="text-red-600 dark:text-red-400">
+                {{ t('detail.syncErrors', { count: syncResult.errors.length }) }}: {{ syncResult.errors.join(', ') }}
               </p>
             </div>
           </div>
@@ -249,7 +315,6 @@
             </h3>
             <div class="flex items-center gap-2">
               <button
-                v-if="!selectedSchema.readonly"
                 @click="saveConfig"
                 :disabled="!configModified || savingConfig"
                 class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -269,9 +334,7 @@
           <div class="flex-1 p-4 overflow-hidden">
             <textarea
               v-model="configContent"
-              :readonly="selectedSchema.readonly"
               class="w-full h-full font-mono text-sm bg-muted/50 border border-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-              :class="selectedSchema.readonly ? 'cursor-not-allowed opacity-75' : ''"
               spellcheck="false"
             ></textarea>
           </div>
@@ -289,12 +352,12 @@
     />
 
     <!-- 编辑 Schema 弹窗 -->
-    <EditSchemaDialog
+    <SchemaDialog
       :is-open="showEditSchemaDialog"
       :catalog-id="selectedCatalog?.id || ''"
       :schema="selectedSchema"
       @close="showEditSchemaDialog = false"
-      @submit="handleUpdateSchema"
+      @update="handleUpdateSchema"
     />
 
     <!-- 创建 Volume 弹窗 -->
@@ -322,15 +385,16 @@ import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, ChevronDown, Database, Pencil, Search, 
-  Lock, Trash2, Table, FolderOpen, Bot, FileText, Plus, Code, Cpu,
-  FileCode, Save, Copy
+  HardDrive, Trash2, Table, FolderOpen, Bot, FileText, Plus, Code, Cpu,
+  FileCode, Save, Copy, PlugZap, RefreshCw, CheckCircle, XCircle
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
-import EditSchemaDialog from "@/components/catalog/EditSchemaDialog.vue";
+import SchemaDialog from "@/components/catalog/SchemaDialog.vue";
 import CreateVolumeDialog from "@/components/catalog/CreateVolumeDialog.vue";
 import CreateModelDialog from "@/components/catalog/CreateModelDialog.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
-import type { SchemaUpdate, AssetCreate, Asset, ModelCreate } from "@/types/catalog";
+import { schemaApi } from "@/services/api";
+import type { SchemaUpdate, AssetCreate, Asset, ModelCreate, SyncResult } from "@/types/catalog";
 
 const { t } = useI18n();
 const store = useCatalogStore();
@@ -354,6 +418,10 @@ const originalConfig = ref('');
 const savingConfig = ref(false);
 
 const configModified = computed(() => configContent.value !== originalConfig.value);
+
+// 同步状态
+const syncing = ref(false);
+const syncResult = ref<SyncResult | null>(null);
 
 // 弹窗状态
 const showDeleteDialog = ref(false);
@@ -405,46 +473,23 @@ const filteredAssets = computed(() => {
   );
 });
 
-// 生成 YAML 配置内容
-function generateConfigYaml(): string {
-  if (!selectedSchema.value) return '';
-  
-  const config: Record<string, any> = {
-    name: selectedSchema.value.name,
-    source: selectedSchema.value.source,
-    readonly: selectedSchema.value.readonly,
-  };
-  
-  if (selectedSchema.value.description) {
-    config.description = selectedSchema.value.description;
+// 加载配置 - 从后端获取 schema.yaml 文件原始内容
+async function loadConfig() {
+  if (!selectedCatalog.value || !selectedSchema.value) {
+    configContent.value = '';
+    originalConfig.value = '';
+    return;
   }
   
-  if (selectedSchema.value.connection_name) {
-    config.connection_name = selectedSchema.value.connection_name;
+  try {
+    const response = await schemaApi.getConfig(selectedCatalog.value.id, selectedSchema.value.name);
+    configContent.value = response.content;
+    originalConfig.value = response.content;
+  } catch (e) {
+    console.error('Failed to load schema config:', e);
+    configContent.value = '';
+    originalConfig.value = '';
   }
-  
-  if (selectedSchema.value.path) {
-    config.path = selectedSchema.value.path;
-  }
-  
-  config.created_at = selectedSchema.value.created_at;
-  
-  // 简单的 YAML 格式化
-  return Object.entries(config)
-    .map(([key, value]) => {
-      if (typeof value === 'string' && (value.includes(':') || value.includes('#') || value.includes('\n'))) {
-        return `${key}: "${value}"`;
-      }
-      return `${key}: ${value}`;
-    })
-    .join('\n');
-}
-
-// 加载配置
-function loadConfig() {
-  const yaml = generateConfigYaml();
-  configContent.value = yaml;
-  originalConfig.value = yaml;
 }
 
 // 保存配置
@@ -617,6 +662,39 @@ async function handleCreateModel(catalogId: string, schemaName: string, data: Mo
   }
 }
 
+// 同步元数据
+async function handleSyncMetadata() {
+  if (!selectedCatalog.value || !selectedSchema.value || selectedSchema.value.schema_type !== 'external') return;
+  
+  syncing.value = true;
+  syncResult.value = null;
+  
+  try {
+    const result = await schemaApi.sync(selectedCatalog.value.id, selectedSchema.value.name);
+    syncResult.value = result;
+    
+    // 同步成功后刷新 Schema 数据
+    if (result.success) {
+      // 重新加载 catalog 以获取更新后的 schema
+      await store.fetchCatalog(selectedCatalog.value.id);
+      // 重新加载 assets
+      await store.fetchAssets(selectedCatalog.value.id, selectedSchema.value.name);
+    }
+  } catch (error) {
+    console.error('Sync metadata failed:', error);
+    syncResult.value = {
+      success: false,
+      schemas_synced: 0,
+      tables_synced: 0,
+      columns_synced: 0,
+      errors: [error instanceof Error ? error.message : 'Unknown error'],
+      warnings: [],
+    };
+  } finally {
+    syncing.value = false;
+  }
+}
+
 // 点击 Asset 行打开详情
 function handleAssetClick(asset: Asset) {
   store.selectAsset(asset);
@@ -635,6 +713,7 @@ function confirmDeleteAsset(asset: Asset) {
 // 监听 Schema 变化，重新加载配置
 watch(selectedSchema, () => {
   activeTab.value = 'overview';
+  syncResult.value = null;
   loadConfig();
 }, { immediate: true });
 </script>

@@ -7,7 +7,7 @@ App_Data/Catalogs/{catalog_name}/
 ├── config.yaml                    # Catalog 配置
 ├── agents/                        # Agent 目录
 │   └── {agent_name}/
-│       ├── agent.yaml             # Agent 配置
+│       ├── agent_spec.yaml             # Agent 配置
 │       ├── prompts/               # Prompts 子目录
 │       └── skills/                # Skills 子目录
 └── schemas/                       # Schema 目录

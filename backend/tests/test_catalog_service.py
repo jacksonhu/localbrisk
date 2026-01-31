@@ -7,7 +7,7 @@ App_Data/Catalogs/{catalog_name}/
 ├── config.yaml                    # Catalog 配置
 ├── agents/                        # Agent 目录
 │   └── {agent_name}/
-│       ├── agent.yaml             # Agent 配置
+│       ├── agent_spec.yaml             # Agent 配置
 │       ├── prompts/               # Prompts 子目录
 │       └── skills/                # Skills 子目录
 └── schemas/                       # Schema 目录
@@ -26,7 +26,7 @@ from datetime import datetime
 from app.models.catalog import (
     CatalogCreate,
     SchemaCreate,
-    SchemaSource,
+    SchemaType,
     AssetType,
     ConnectionConfig,
     ConnectionType,
@@ -227,7 +227,7 @@ class TestSchemaOperations:
         
         assert len(schemas) >= 3
         
-        local_schemas = [s for s in schemas if s.source == SchemaSource.LOCAL]
+        local_schemas = [s for s in schemas if s.schema_type == SchemaType.LOCAL]
         schema_names = [s.name for s in local_schemas]
         assert "data" in schema_names
         assert "agents" in schema_names
@@ -245,8 +245,7 @@ class TestSchemaOperations:
         
         assert schema.name == "new_schema"
         assert schema.owner == "test_user"
-        assert schema.source == SchemaSource.LOCAL
-        assert schema.readonly is False
+        assert schema.schema_type == SchemaType.LOCAL
         
         schema_path = temp_catalogs_dir / sample_catalog["name"] / "schemas" / "new_schema"
         assert schema_path.exists()
@@ -381,16 +380,16 @@ class TestCatalogTree:
         assert "sales" in asset_names
         assert "users" in asset_names
     
-    def test_tree_marks_connection_schemas_readonly(self, catalog_service_with_temp_dir, sample_catalog):
-        """测试导航树中连接 Schema 被标记为只读"""
+    def test_tree_marks_external_schemas(self, catalog_service_with_temp_dir, sample_catalog):
+        """测试导航树中 External Schema 被正确标记"""
         tree = catalog_service_with_temp_dir.get_catalog_tree()
         catalog_node = tree[0]
         
         schema_nodes = [child for child in catalog_node.children if child.node_type == "schema"]
-        connection_schemas = [child for child in schema_nodes if child.source == "connection"]
+        external_schemas = [child for child in schema_nodes if child.schema_type == "external"]
         
-        assert len(connection_schemas) == 1
-        assert connection_schemas[0].readonly is True
+        assert len(external_schemas) == 1
+        assert external_schemas[0].schema_type == "external"
     
     def test_empty_tree(self, catalog_service_with_temp_dir):
         """测试空目录返回空导航树"""

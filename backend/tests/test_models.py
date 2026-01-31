@@ -15,7 +15,7 @@ from app.models.catalog import (
     Catalog,
     Schema,
     SchemaCreate,
-    SchemaSource,
+    SchemaType,
     Asset,
     AssetType,
     CatalogTreeNode,
@@ -237,32 +237,35 @@ class TestSchema:
             name="local_schema",
             catalog_id="test_catalog",
             owner="admin",
-            source=SchemaSource.LOCAL,
+            schema_type=SchemaType.LOCAL,
             path="/test/path",
             created_at=now
         )
         
-        assert schema.source == SchemaSource.LOCAL
-        assert schema.readonly is False
-        assert schema.connection_name is None
+        assert schema.schema_type == SchemaType.LOCAL
+        assert schema.connection is None
     
     def test_connection_schema(self):
         """测试连接 Schema"""
         now = datetime.now()
+        connection = ConnectionConfig(
+            type=ConnectionType.MYSQL,
+            db_name="test_db",
+            host="localhost",
+            port=3306
+        )
         schema = Schema(
             id="conn_schema",
             name="remote_schema",
             catalog_id="test_catalog",
             owner="admin",
-            source=SchemaSource.CONNECTION,
-            connection_name="mysql://localhost:3306/db",
-            readonly=True,
+            schema_type=SchemaType.EXTERNAL,
+            connection=connection,
             created_at=now
         )
         
-        assert schema.source == SchemaSource.CONNECTION
-        assert schema.readonly is True
-        assert schema.connection_name is not None
+        assert schema.schema_type == SchemaType.EXTERNAL
+        assert schema.connection is not None
 
 
 class TestSchemaCreate:
@@ -339,7 +342,7 @@ class TestCatalogTreeNode:
         
         assert node.id == "test"
         assert node.children == []
-        assert node.readonly is False
+        assert node.schema_type is None
     
     def test_node_with_children(self):
         """测试带子节点的节点"""
@@ -404,7 +407,7 @@ class TestSpecificModels:
         
         assert table.format == "parquet"
         assert table.columns == []
-        assert table.readonly is False
+        assert table.source == "local"
     
     def test_table_invalid_format(self):
         """测试 Table 模型 - 无效格式"""
@@ -470,10 +473,10 @@ class TestEnums:
         assert ConnectionType.SQLITE.value == "sqlite"
         assert ConnectionType.DUCKDB.value == "duckdb"
     
-    def test_schema_source_values(self):
-        """测试 Schema 来源枚举值"""
-        assert SchemaSource.LOCAL.value == "local"
-        assert SchemaSource.CONNECTION.value == "connection"
+    def test_schema_type_values(self):
+        """测试 Schema 类型枚举值"""
+        assert SchemaType.LOCAL.value == "local"
+        assert SchemaType.EXTERNAL.value == "external"
     
     def test_asset_type_values(self):
         """测试资产类型枚举值"""

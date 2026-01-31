@@ -487,80 +487,27 @@ function formatCellValue(value: any): string {
   return str.length > 100 ? str.substring(0, 100) + '...' : str;
 }
 
-// 生成 YAML 配置内容
-function generateConfigYaml(): string {
-  if (!selectedAsset.value) return '';
-  
-  const config: Record<string, any> = {
-    name: selectedAsset.value.name,
-    asset_type: selectedAsset.value.asset_type,
-    schema_id: selectedAsset.value.schema_id,
-  };
-  
-  if (selectedAsset.value.path) {
-    config.path = selectedAsset.value.path;
+// 加载配置 - 从后端获取配置文件原始内容
+async function loadConfig() {
+  if (!selectedCatalog.value || !selectedSchema.value || !selectedAsset.value) {
+    configContent.value = '';
+    originalConfig.value = '';
+    return;
   }
   
-  // 添加元数据
-  if (selectedAsset.value.metadata) {
-    const meta = selectedAsset.value.metadata;
-    if (meta.description) config.description = meta.description;
-    if (meta.format) config.format = meta.format;
-    if (meta.columns && meta.columns.length > 0) {
-      config.columns = meta.columns.map((col: Column) => ({
-        name: col.name,
-        type: col.type,
-        nullable: col.nullable,
-        ...(col.description ? { description: col.description } : {})
-      }));
-    }
+  try {
+    const response = await assetApi.getConfig(
+      selectedCatalog.value.id, 
+      selectedSchema.value.name, 
+      selectedAsset.value.name
+    );
+    configContent.value = response.content;
+    originalConfig.value = response.content;
+  } catch (e) {
+    console.error('Failed to load asset config:', e);
+    configContent.value = '';
+    originalConfig.value = '';
   }
-  
-  config.created_at = selectedAsset.value.created_at;
-  if (selectedAsset.value.updated_at) {
-    config.updated_at = selectedAsset.value.updated_at;
-  }
-  
-  // 简单的 YAML 格式化
-  return formatAsYaml(config, 0);
-}
-
-function formatAsYaml(obj: any, indent: number): string {
-  const spaces = '  '.repeat(indent);
-  const lines: string[] = [];
-  
-  for (const [key, value] of Object.entries(obj)) {
-    if (value === null || value === undefined) continue;
-    
-    if (Array.isArray(value)) {
-      lines.push(`${spaces}${key}:`);
-      for (const item of value) {
-        if (typeof item === 'object') {
-          lines.push(`${spaces}- `);
-          const itemYaml = formatAsYaml(item, indent + 2);
-          lines[lines.length - 1] += itemYaml.trim().replace(/^\s+/, '');
-        } else {
-          lines.push(`${spaces}- ${item}`);
-        }
-      }
-    } else if (typeof value === 'object') {
-      lines.push(`${spaces}${key}:`);
-      lines.push(formatAsYaml(value, indent + 1));
-    } else if (typeof value === 'string' && (value.includes(':') || value.includes('#') || value.includes('\n'))) {
-      lines.push(`${spaces}${key}: "${value}"`);
-    } else {
-      lines.push(`${spaces}${key}: ${value}`);
-    }
-  }
-  
-  return lines.join('\n');
-}
-
-// 加载配置
-function loadConfig() {
-  const yaml = generateConfigYaml();
-  configContent.value = yaml;
-  originalConfig.value = yaml;
 }
 
 // 保存配置

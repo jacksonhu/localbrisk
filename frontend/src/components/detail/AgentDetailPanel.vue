@@ -10,6 +10,16 @@
       @deleted="handlePromptDeleted"
     />
     
+    <!-- 当查看 Skill 详情时显示 SkillDetailPanel -->
+    <SkillDetailPanel
+      v-else-if="selectedSkillName"
+      :catalog-id="selectedCatalog?.id || ''"
+      :agent-name="selectedAgent?.name || ''"
+      :skill-name="selectedSkillName"
+      @back="store.clearSelectedSkill()"
+      @deleted="handleSkillDeleted"
+    />
+    
     <!-- Agent 详情主面板 -->
     <div v-else class="h-full flex flex-col p-6">
       <!-- 面包屑导航 -->
@@ -29,13 +39,6 @@
           <h1 class="text-2xl font-semibold">{{ selectedAgent?.name }}</h1>
           <!-- 操作图标 -->
           <div class="flex items-center gap-1 ml-2">
-            <button
-              @click="showEditAgentDialog = true"
-              class="p-1.5 rounded-lg hover:bg-muted transition-colors"
-              :title="t('common.edit')"
-            >
-              <Pencil class="w-4 h-4 text-muted-foreground hover:text-foreground" />
-            </button>
             <button
               @click="confirmDeleteAgent"
               class="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
@@ -113,12 +116,6 @@
           <div class="card-float p-4">
             <div class="flex items-center justify-between mb-2">
               <h3 class="font-medium">{{ t('common.description') }}</h3>
-              <button 
-                @click="showEditAgentDialog = true"
-                class="w-6 h-6 rounded hover:bg-muted flex items-center justify-center"
-              >
-                <Pencil class="w-4 h-4 text-muted-foreground" />
-              </button>
             </div>
             <p class="text-muted-foreground text-sm">
               {{ selectedAgent?.description || t('detail.noDescription') }}
@@ -163,88 +160,34 @@
           </div>
 
           <!-- Skills 列表 -->
-          <div class="card-float overflow-hidden">
-            <div class="p-4 border-b border-border flex items-center justify-between">
-              <h3 class="font-medium flex items-center gap-2">
-                <Code class="w-4 h-4" />
-                Skills
-              </h3>
-              <span class="text-sm text-primary bg-primary/10 px-2 py-1 rounded">
-                {{ selectedAgent?.skills?.length || 0 }} {{ t('agent.items') }}
-              </span>
-            </div>
-            
-            <div v-if="selectedAgent?.skills && selectedAgent.skills.length > 0" class="divide-y divide-border">
-              <div
-                v-for="skill in selectedAgent.skills"
-                :key="skill"
-                class="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-              >
-                <FileCode class="w-4 h-4 text-purple-500" />
-                <span class="text-sm font-medium flex-1">{{ skill }}</span>
-                <!-- 启用开关 -->
-                <label class="relative inline-flex items-center cursor-pointer" @click.stop>
-                  <input
-                    type="checkbox"
-                    :checked="isSkillEnabled(skill)"
-                    @change="toggleSkillEnabled(skill)"
-                    class="sr-only peer"
-                  />
-                  <div class="w-9 h-5 bg-muted rounded-full peer-checked:bg-primary transition-colors"></div>
-                  <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow peer-checked:translate-x-4 transition-transform"></div>
-                </label>
-              </div>
-            </div>
-            
-            <!-- 空状态 -->
-            <div v-else class="flex flex-col items-center justify-center py-8 text-center">
-              <Code class="w-8 h-8 text-muted-foreground mb-2" />
-              <p class="text-muted-foreground text-sm">{{ t('agent.noSkills') }}</p>
-            </div>
-          </div>
+          <ItemListCard
+            title="Skills"
+            :icon="Code"
+            :item-icon="FileCode"
+            item-icon-color="text-purple-500"
+            :items="selectedAgent?.skills || []"
+            :items-label="t('agent.items')"
+            :empty-text="t('agent.noSkills')"
+            :show-toggle="true"
+            :is-enabled="isSkillEnabled"
+            @item-click="openSkillDetail"
+            @toggle="handleSkillToggle"
+          />
 
           <!-- Prompts 列表 -->
-          <div class="card-float overflow-hidden">
-            <div class="p-4 border-b border-border flex items-center justify-between">
-              <h3 class="font-medium flex items-center gap-2">
-                <FileText class="w-4 h-4" />
-                Prompts
-              </h3>
-              <span class="text-sm text-primary bg-primary/10 px-2 py-1 rounded">
-                {{ selectedAgent?.prompts?.length || 0 }} {{ t('agent.items') }}
-              </span>
-            </div>
-            
-            <div v-if="selectedAgent?.prompts && selectedAgent.prompts.length > 0" class="divide-y divide-border">
-              <div
-                v-for="prompt in selectedAgent.prompts"
-                :key="prompt"
-                @click="openPromptDetail(prompt)"
-                class="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer"
-              >
-                <FileText class="w-4 h-4 text-blue-500" />
-                <span class="text-sm font-medium flex-1">{{ prompt }}</span>
-                <!-- 启用开关 -->
-                <label class="relative inline-flex items-center cursor-pointer" @click.stop>
-                  <input
-                    type="checkbox"
-                    :checked="isPromptEnabled(prompt)"
-                    @change="togglePromptEnabled(prompt)"
-                    class="sr-only peer"
-                  />
-                  <div class="w-9 h-5 bg-muted rounded-full peer-checked:bg-primary transition-colors"></div>
-                  <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow peer-checked:translate-x-4 transition-transform"></div>
-                </label>
-                <ChevronRight class="w-4 h-4 text-muted-foreground" />
-              </div>
-            </div>
-            
-            <!-- 空状态 -->
-            <div v-else class="flex flex-col items-center justify-center py-8 text-center">
-              <FileText class="w-8 h-8 text-muted-foreground mb-2" />
-              <p class="text-muted-foreground text-sm">{{ t('agent.noPrompts') }}</p>
-            </div>
-          </div>
+          <ItemListCard
+            title="Prompts"
+            :icon="FileText"
+            :item-icon="FileText"
+            item-icon-color="text-blue-500"
+            :items="selectedAgent?.prompts || []"
+            :items-label="t('agent.items')"
+            :empty-text="t('agent.noPrompts')"
+            :show-toggle="true"
+            :is-enabled="isPromptEnabled"
+            @item-click="openPromptDetail"
+            @toggle="handlePromptToggle"
+          />
         </div>
 
         <!-- 配置 Tab -->
@@ -253,7 +196,7 @@
             <div class="p-4 border-b border-border flex items-center justify-between">
               <h3 class="font-medium flex items-center gap-2">
                 <FileCode class="w-4 h-4" />
-                {{ t('detail.configFile') }} (agent.yaml)
+                {{ t('detail.configFile') }} (agent_spec.yaml)
               </h3>
               <div class="flex items-center gap-2">
                 <button
@@ -312,6 +255,15 @@
         @close="showCreatePromptDialog = false"
         @submit="handleSubmitPrompt"
       />
+
+      <!-- 创建 Skill 弹窗 -->
+      <CreateSkillDialog
+        :is-open="showCreateSkillDialog"
+        :catalog-id="selectedCatalog?.id || ''"
+        :agent-name="selectedAgent?.name || ''"
+        :on-submit="handleSubmitSkill"
+        @close="showCreateSkillDialog = false"
+      />
     </div>
   </div>
 </template>
@@ -320,13 +272,16 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
-  ArrowLeft, ChevronRight, ChevronDown, Bot, Pencil, Trash2, Plus,
+  ArrowLeft, ChevronRight, ChevronDown, Bot, Trash2, Plus,
   FileText, FileCode, Save, Copy, Code, MessageSquare
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import Breadcrumb from "@/components/common/Breadcrumb.vue";
 import CreatePromptDialog from "@/components/catalog/CreatePromptDialog.vue";
+import CreateSkillDialog from "@/components/catalog/CreateSkillDialog.vue";
 import PromptDetailPanel from "@/components/detail/PromptDetailPanel.vue";
+import SkillDetailPanel from "@/components/detail/SkillDetailPanel.vue";
+import ItemListCard from "@/components/common/ItemListCard.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
 import { agentApi } from "@/services/api";
 import { formatDate } from "@/utils/formatUtils";
@@ -341,6 +296,10 @@ const selectedAgent = computed(() => store.selectedAgent.value);
 const selectedPromptName = computed({
   get: () => store.selectedPromptName.value,
   set: (val) => { store.selectedPromptName.value = val; }
+});
+const selectedSkillName = computed({
+  get: () => store.selectedSkillName.value,
+  set: (val) => { store.selectedSkillName.value = val; }
 });
 
 // Tab 状态
@@ -361,8 +320,8 @@ const configModified = computed(() => configContent.value !== originalConfig.val
 
 // 弹窗状态
 const showDeleteDialog = ref(false);
-const showEditAgentDialog = ref(false);
 const showCreatePromptDialog = ref(false);
+const showCreateSkillDialog = ref(false);
 const deleteMessage = ref('');
 const deleteDescription = ref('');
 
@@ -377,11 +336,23 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 
-// 创建 Skill（预留）
+// 创建 Skill
 function handleCreateSkill() {
   showCreateDropdown.value = false;
-  // TODO: 实现创建 Skill 功能
-  console.log('Create skill');
+  showCreateSkillDialog.value = true;
+}
+
+// 提交创建 Skill（从本地 zip 路径导入）
+async function handleSubmitSkill(catalogId: string, agentName: string, zipFilePath: string) {
+  // 调用 API 导入 Skill，如果失败会抛出异常由 CreateSkillDialog 捕获并显示
+  await agentApi.importSkillFromZip(catalogId, agentName, zipFilePath);
+  
+  // 导入成功后，刷新 Agent 详情以更新 skills 列表
+  if (selectedCatalog.value && selectedAgent.value) {
+    await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+  }
+  // 刷新目录树
+  await store.fetchTree();
 }
 
 // 创建 Prompt
@@ -405,31 +376,42 @@ async function handleSubmitPrompt(catalogId: string, agentName: string, data: Pr
 }
 
 // 打开 Prompt 详情
-function openPromptDetail(promptName: string) {
-  store.selectedPromptName.value = promptName;
+function openPromptDetail(promptName: string | Record<string, unknown>) {
+  const name = typeof promptName === 'string' ? promptName : String(promptName.name || '');
+  store.selectedPromptName.value = name;
 }
 
-// 检查 Skill 是否启用
-function isSkillEnabled(skillName: string): boolean {
-  return selectedAgent.value?.enabled_skills?.includes(skillName) || false;
+// 打开 Skill 详情
+function openSkillDetail(skillName: string | Record<string, unknown>) {
+  const name = typeof skillName === 'string' ? skillName : String(skillName.name || '');
+  store.selectedSkillName.value = name;
 }
 
-// 检查 Prompt 是否启用
-function isPromptEnabled(promptName: string): boolean {
-  return selectedAgent.value?.enabled_prompts?.includes(promptName) || false;
+// 检查 Skill 是否启用（从 capabilities.native_skills）
+function isSkillEnabled(item: string | Record<string, unknown>): boolean {
+  const skillName = typeof item === 'string' ? item : String(item.name || '');
+  const nativeSkills = selectedAgent.value?.capabilities?.native_skills || [];
+  return nativeSkills.some(s => s.name === skillName);
 }
 
-// 切换 Skill 启用状态
-async function toggleSkillEnabled(skillName: string) {
+// 检查 Prompt 是否启用（从 instruction.user_prompt_templates）
+function isPromptEnabled(item: string | Record<string, unknown>): boolean {
+  const promptName = typeof item === 'string' ? item : String(item.name || '');
+  const promptTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
+  return promptTemplates.some(p => p.name === promptName);
+}
+
+// 处理 Skill 开关切换
+async function handleSkillToggle(item: string | Record<string, unknown>, enabled: boolean) {
   if (!selectedCatalog.value || !selectedAgent.value) return;
   
-  const newEnabled = !isSkillEnabled(skillName);
+  const skillName = typeof item === 'string' ? item : String(item.name || '');
   try {
     await agentApi.toggleSkillEnabled(
       selectedCatalog.value.id,
       selectedAgent.value.name,
       skillName,
-      newEnabled
+      enabled
     );
     // 刷新 Agent 详情以更新状态
     await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
@@ -438,17 +420,17 @@ async function toggleSkillEnabled(skillName: string) {
   }
 }
 
-// 切换 Prompt 启用状态
-async function togglePromptEnabled(promptName: string) {
+// 处理 Prompt 开关切换
+async function handlePromptToggle(item: string | Record<string, unknown>, enabled: boolean) {
   if (!selectedCatalog.value || !selectedAgent.value) return;
   
-  const newEnabled = !isPromptEnabled(promptName);
+  const promptName = typeof item === 'string' ? item : String(item.name || '');
   try {
     await agentApi.togglePromptEnabled(
       selectedCatalog.value.id,
       selectedAgent.value.name,
       promptName,
-      newEnabled
+      enabled
     );
     // 刷新 Agent 详情以更新状态
     await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
@@ -468,58 +450,34 @@ async function handlePromptDeleted() {
   await store.fetchTree();
 }
 
-// 生成 YAML 配置内容
-function generateConfigYaml(): string {
-  if (!selectedAgent.value) return '';
-  
-  const agent = selectedAgent.value;
-  const lines: string[] = [];
-  
-  lines.push(`name: ${agent.name}`);
-  
-  if (agent.description) {
-    lines.push(`description: "${agent.description}"`);
+// Skill 被删除后的处理
+async function handleSkillDeleted() {
+  store.clearSelectedSkill();
+  // 刷新 Agent 详情以更新 skills 列表
+  if (selectedCatalog.value && selectedAgent.value) {
+    await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
   }
-  
-  if (agent.model_reference) {
-    lines.push(`model_reference: ${agent.model_reference}`);
-  }
-  
-  if (agent.system_prompt) {
-    // 多行字符串使用 YAML 的 | 格式
-    lines.push('system_prompt: |');
-    agent.system_prompt.split('\n').forEach(line => {
-      lines.push(`  ${line}`);
-    });
-  }
-  
-  if (agent.skills && agent.skills.length > 0) {
-    lines.push('skills:');
-    agent.skills.forEach(skill => {
-      lines.push(`  - ${skill}`);
-    });
-  }
-  
-  if (agent.prompts && agent.prompts.length > 0) {
-    lines.push('prompts:');
-    agent.prompts.forEach(prompt => {
-      lines.push(`  - ${prompt}`);
-    });
-  }
-  
-  lines.push(`created_at: ${agent.created_at}`);
-  if (agent.updated_at) {
-    lines.push(`updated_at: ${agent.updated_at}`);
-  }
-  
-  return lines.join('\n');
+  // 刷新目录树
+  await store.fetchTree();
 }
 
-// 加载配置
-function loadConfig() {
-  const yaml = generateConfigYaml();
-  configContent.value = yaml;
-  originalConfig.value = yaml;
+// 加载配置 - 从后端获取 agent_spec.yaml 文件原始内容
+async function loadConfig() {
+  if (!selectedCatalog.value || !selectedAgent.value) {
+    configContent.value = '';
+    originalConfig.value = '';
+    return;
+  }
+  
+  try {
+    const response = await agentApi.getConfig(selectedCatalog.value.id, selectedAgent.value.name);
+    configContent.value = response.content;
+    originalConfig.value = response.content;
+  } catch (e) {
+    console.error('Failed to load agent config:', e);
+    configContent.value = '';
+    originalConfig.value = '';
+  }
 }
 
 // 保存配置

@@ -5,7 +5,6 @@
         class="tree-item flex items-center gap-2 text-sm px-2 py-1.5 rounded cursor-pointer text-foreground"
         :class="[
           item.type === 'placeholder' ? 'text-muted-foreground cursor-default' : 'hover:bg-muted',
-          item.readonly ? 'opacity-75' : '',
           isSelected(item) ? 'bg-primary/10 text-primary font-medium' : ''
         ]"
         @click="handleClick(item)"
@@ -30,8 +29,8 @@
         <!-- 名称 -->
         <span class="truncate flex-1" :class="isSelected(item) ? 'text-primary' : 'text-foreground'">{{ item.name || '(无名称)' }}</span>
 
-        <!-- 只读标识 -->
-        <Lock v-if="item.readonly" class="w-3 h-3 text-muted-foreground flex-shrink-0" />
+        <!-- External 类型标识 -->
+        <PlugZap v-if="item.type === 'schema' && item.schema_type === 'external'" class="w-3 h-3 text-cyan-500 flex-shrink-0" />
 
       </div>
 
@@ -43,6 +42,7 @@
           :selected-id="selectedId"
           @select="(child) => emit('select', child)"
           @toggle-expand="(child) => emit('toggle-expand', child)"
+          @ensure-expand="(child) => emit('ensure-expand', child)"
           @context-menu="(e, child, pId) => emit('context-menu', e, child, pId || item.id)"
         />
       </div>
@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronRight, Folder, Database, Table, FolderOpen, Bot, FileText, Lock, Code, Cpu, Layers } from "lucide-vue-next";
+import { ChevronRight, Folder, Database, Table, FolderOpen, Bot, FileText, PlugZap, Code, Cpu, Layers } from "lucide-vue-next";
 import type { CatalogItem } from "@/types/catalog";
 
 const props = defineProps<{
@@ -63,6 +63,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [item: CatalogItem];
   'toggle-expand': [item: CatalogItem];
+  'ensure-expand': [item: CatalogItem];  // 确保展开（点击节点内容时）
   'context-menu': [event: MouseEvent, item: CatalogItem, parentId?: string];
 }>();
 
@@ -151,11 +152,13 @@ const handleClick = (item: CatalogItem) => {
       emit("toggle-expand", item);
       break;
     
-    // 可展开的父节点：展开 + 选择
+    // 可展开的父节点：确保展开 + 选择
+    // 点击节点内容时应该确保展开，而不是切换展开
+    // 切换展开状态应该通过点击展开箭头来实现
     case "catalog":
     case "schema":
     case "agent":
-      emit("toggle-expand", item);
+      emit("ensure-expand", item);
       emit("select", item);
       break;
     

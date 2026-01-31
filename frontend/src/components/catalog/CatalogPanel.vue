@@ -67,6 +67,7 @@
         :selected-id="selectedNodeId"
         @select="handleSelect"
         @toggle-expand="handleToggleExpand"
+        @ensure-expand="handleEnsureExpand"
         @context-menu="handleContextMenu"
       />
     </div>
@@ -79,11 +80,11 @@
     />
 
     <!-- 创建 Schema 弹窗 -->
-    <CreateSchemaDialog
+    <SchemaDialog
       :is-open="showCreateSchemaDialog"
       :catalog-id="selectedCatalogId"
       @close="showCreateSchemaDialog = false"
-      @submit="handleCreateSchema"
+      @create="handleCreateSchema"
     />
 
     <!-- 创建 Agent 弹窗 -->
@@ -152,16 +153,12 @@
         <!-- Schema 右键菜单 -->
         <template v-else-if="contextMenu.type === 'schema'">
           <button
-            v-if="!contextMenu.item?.readonly"
             class="w-full px-3 py-2 text-sm text-left hover:bg-muted text-red-600 flex items-center gap-2"
             @click="handleDeleteSchema"
           >
             <Trash2 class="w-4 h-4" />
             {{ t('catalog.deleteSchema') }}
           </button>
-          <div v-if="contextMenu.item?.readonly" class="px-3 py-2 text-sm text-muted-foreground">
-            {{ t('catalog.readonly') }}
-          </div>
         </template>
       </div>
     </Teleport>
@@ -174,7 +171,7 @@ import { useI18n } from "vue-i18n";
 import { Plus, RefreshCw, Loader2, AlertCircle, Folder, Trash2, Bot } from "lucide-vue-next";
 import CatalogTree from "./CatalogTree.vue";
 import CreateCatalogDialog from "./CreateCatalogDialog.vue";
-import CreateSchemaDialog from "./CreateSchemaDialog.vue";
+import SchemaDialog from "./SchemaDialog.vue";
 import CreateAgentDialog from "./CreateAgentDialog.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
@@ -261,21 +258,38 @@ function handleSelect(item: CatalogItem) {
       break;
     }
     
-    case 'prompt':
-    case 'skill': {
-      // 选择 Prompt/Skill：需要 catalog_id 和 agent_name
+    case 'prompt': {
+      // 选择 Prompt：需要 catalog_id 和 agent_name
       const catalogId = item.metadata?.catalog_id as string | undefined;
       const agentName = item.metadata?.agent_name as string | undefined;
       if (catalogId && agentName) {
         // 从节点 ID 中提取原始文件名
-        // 节点 ID 格式: {agentId}_prompt_{filename} 或 {agentId}_skill_{filename}
+        // 节点 ID 格式: {agentId}_prompt_{filename}
         // 例如: market_analysis_agent_dd_prompt_ddd.md
-        const prefix = item.type === 'prompt' ? '_prompt_' : '_skill_';
+        const prefix = '_prompt_';
         const prefixIndex = item.id.lastIndexOf(prefix);
         const originalFileName = prefixIndex >= 0 
           ? item.id.substring(prefixIndex + prefix.length) 
           : item.name;
         store.selectPrompt(catalogId, agentName, originalFileName);
+      }
+      break;
+    }
+    
+    case 'skill': {
+      // 选择 Skill：需要 catalog_id 和 agent_name
+      const catalogId = item.metadata?.catalog_id as string | undefined;
+      const agentName = item.metadata?.agent_name as string | undefined;
+      if (catalogId && agentName) {
+        // 从节点 ID 中提取 skill 名称
+        // 节点 ID 格式: {agentId}_skill_{skillName}
+        // 例如: market_analysis_agent_dd_skill_my-skill
+        const prefix = '_skill_';
+        const prefixIndex = item.id.lastIndexOf(prefix);
+        const skillName = prefixIndex >= 0 
+          ? item.id.substring(prefixIndex + prefix.length) 
+          : item.name;
+        store.selectSkill(catalogId, agentName, skillName);
       }
       break;
     }
@@ -310,9 +324,14 @@ function handleSelect(item: CatalogItem) {
   }
 }
 
-// 切换展开/折叠
+// 切换展开/折叠（点击展开箭头时）
 function handleToggleExpand(item: CatalogItem) {
   store.toggleNodeExpanded(item.id);
+}
+
+// 确保展开（点击节点内容时）
+function handleEnsureExpand(item: CatalogItem) {
+  store.toggleNodeExpanded(item.id, true);
 }
 
 // 右键菜单

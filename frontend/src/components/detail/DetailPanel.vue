@@ -76,7 +76,6 @@
         <!-- 操作按钮 -->
         <div class="flex items-center gap-2 relative">
           <button
-            v-if="selectedCatalog.allow_custom_schema"
             @click="showCreateMenu = !showCreateMenu"
             class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
           >
@@ -170,8 +169,8 @@
                   <p class="font-medium">{{ formatDate(selectedCatalog.updated_at) }}</p>
                 </div>
                 <div>
-                  <label class="text-muted-foreground">{{ t('info.hasConnections') }}</label>
-                  <p class="font-medium">{{ selectedCatalog.has_connections ? t('common.yes') : t('common.no') }}</p>
+                  <label class="text-muted-foreground">{{ t('info.schemasCount') }}</label>
+                  <p class="font-medium">{{ selectedCatalog.schemas?.length || 0 }}</p>
                 </div>
               </div>
             </div>
@@ -239,17 +238,17 @@
                   <div class="flex items-center gap-2">
                     <Database class="w-4 h-4 text-purple-500" />
                     <span class="font-medium">{{ schema.name }}</span>
-                    <Lock v-if="schema.readonly" class="w-3 h-3 text-muted-foreground" />
+                    <HardDrive v-if="schema.schema_type === 'local'" class="w-3 h-3 text-green-500" />
+                    <PlugZap v-else class="w-3 h-3 text-cyan-500" :title="schema.connection?.type" />
                   </div>
                   <div class="flex items-center gap-1">
-                    <span :class="schema.source === 'local' ? 'text-green-600' : 'text-blue-600'">
-                      {{ schema.source === 'local' ? t('catalog.local') : t('catalog.connection') }}
+                    <span :class="schema.schema_type === 'local' ? 'text-green-600' : 'text-blue-600'">
+                      {{ schema.schema_type === 'local' ? t('catalog.local') : t('catalog.external') }}
                     </span>
                   </div>
                   <span class="text-muted-foreground">{{ formatDate(schema.created_at) }}</span>
                   <div class="flex items-center gap-2">
                     <button
-                      v-if="!schema.readonly"
                       @click.stop="confirmDeleteSchema(schema)"
                       class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors"
                       :title="t('catalog.deleteSchema')"
@@ -267,7 +266,6 @@
                 </div>
                 <p class="text-muted-foreground mb-4">{{ t('detail.noSchemas') }}</p>
                 <button
-                  v-if="selectedCatalog.allow_custom_schema"
                   @click="showCreateSchemaDialog = true"
                   class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
@@ -317,11 +315,11 @@
     </div>
 
     <!-- 创建 Schema 弹窗 -->
-    <CreateSchemaDialog
+    <SchemaDialog
       :is-open="showCreateSchemaDialog"
       :catalog-id="selectedCatalog?.id || ''"
       @close="showCreateSchemaDialog = false"
-      @submit="handleCreateSchema"
+      @create="handleCreateSchema"
     />
 
     <!-- 创建 Agent 弹窗 -->
@@ -356,9 +354,9 @@ import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, ChevronDown, Folder, Pencil, Search, Plus, 
-  Database, Lock, Trash2, FileText, FileCode, Save, Copy, Bot
+  Database, HardDrive, Trash2, FileText, FileCode, Save, Copy, Bot, PlugZap
 } from "lucide-vue-next";
-import CreateSchemaDialog from "@/components/catalog/CreateSchemaDialog.vue";
+import SchemaDialog from "@/components/catalog/SchemaDialog.vue";
 import CreateAgentDialog from "@/components/catalog/CreateAgentDialog.vue";
 import CreateCatalogDialog from "@/components/catalog/CreateCatalogDialog.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
@@ -547,8 +545,6 @@ function generateCatalogConfigYaml(): string {
   if (catalog.description) {
     lines.push(`description: "${catalog.description}"`);
   }
-  lines.push(`allow_custom_schema: ${catalog.allow_custom_schema}`);
-  lines.push(`has_connections: ${catalog.has_connections}`);
   
   if (catalog.tags && catalog.tags.length > 0) {
     lines.push('tags:');
@@ -561,9 +557,9 @@ function generateCatalogConfigYaml(): string {
     lines.push('schemas:');
     catalog.schemas.forEach(schema => {
       lines.push(`  - name: ${schema.name}`);
-      lines.push(`    source: ${schema.source}`);
-      if (schema.readonly) {
-        lines.push(`    readonly: ${schema.readonly}`);
+      lines.push(`    schema_type: ${schema.schema_type}`);
+      if (schema.connection) {
+        lines.push(`    has_connection: true`);
       }
     });
   }

@@ -185,9 +185,10 @@ const selectedPrompt = ref<Prompt | null>(null);
 const promptContent = ref('');
 const isLoading = ref(false);
 
-// 启用状态从 agent 的 enabled_prompts 中计算得出
+// 启用状态从 agent 的 instruction.user_prompt_templates 中计算得出
 const isEnabled = computed(() => {
-  return selectedAgent.value?.enabled_prompts?.includes(props.promptName) || false;
+  const promptTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
+  return promptTemplates.some(p => p.name === props.promptName);
 });
 
 // Editor 引用
@@ -215,7 +216,7 @@ async function loadPrompt() {
     const prompt = await agentApi.getPrompt(props.catalogId, props.agentName, props.promptName);
     selectedPrompt.value = prompt;
     promptContent.value = prompt.content || '';
-    // 启用状态通过 computed 从 agent.enabled_prompts 中获取，无需手动设置
+    // 启用状态通过 computed 从 agent.instruction.user_prompt_templates 中获取，无需手动设置
   } catch (e) {
     console.error('Failed to load prompt:', e);
     handleError(t('errors.loadPromptFailed'));
@@ -231,7 +232,7 @@ async function toggleEnabled() {
   const newEnabled = !isEnabled.value;
   try {
     await agentApi.togglePromptEnabled(props.catalogId, props.agentName, props.promptName, newEnabled);
-    // 刷新 Agent 数据以更新 enabled_prompts 列表，但不改变选中状态
+    // 刷新 Agent 数据以更新 instruction.user_prompt_templates 列表，但不改变选中状态
     // 使用 refreshSelectedAgent 而不是 selectAgent，避免清除 Prompt 选中状态
     await store.refreshSelectedAgent();
   } catch (e) {

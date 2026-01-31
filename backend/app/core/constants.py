@@ -7,7 +7,7 @@
 ├── Catalog (Namespace)
 │   ├── config.yaml                     # Catalog 配置文件
 │   ├── agents/{agent_name}/            # Agent 智能体目录
-│   │   └── agent.yaml                  # Agent 配置文件
+│   │   └── agent_spec.yaml                  # Agent 配置文件
 │   └── schemas/{schema_name}/          # Schema 逻辑库目录
 │       ├── schema.yaml                 # Schema 配置文件
 │       ├── models/                     # 模型定义目录
@@ -24,7 +24,7 @@
 CATALOG_CONFIG_FILE = "config.yaml"
 
 # Agent 层配置文件
-AGENT_CONFIG_FILE = "agent.yaml"
+AGENT_CONFIG_FILE = "agent_spec.yaml"
 
 # Schema 层配置文件
 SCHEMA_CONFIG_FILE = "schema.yaml"

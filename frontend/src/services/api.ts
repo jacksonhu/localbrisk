@@ -12,6 +12,7 @@ import type {
   Schema,
   SchemaCreate,
   SchemaUpdate,
+  SyncResult,
   Asset,
   AssetCreate,
   Agent,
@@ -144,6 +145,8 @@ export const catalogApi = {
 
 // ============ Schema API ============
 
+// ============ Schema API ============
+
 export const schemaApi = {
   /**
    * 获取 Catalog 下的所有 Schema
@@ -153,13 +156,15 @@ export const schemaApi = {
 
   /**
    * 获取单个 Schema 详情
-   * 注意：后端暂无此接口，从 Catalog 详情中提取
    */
-  get: async (catalogId: string, schemaName: string): Promise<Schema | null> => {
-    const catalog = await catalogApi.get(catalogId);
-    const schema = catalog.schemas.find(s => s.name === schemaName);
-    return schema || null;
-  },
+  get: (catalogId: string, schemaName: string): Promise<Schema> =>
+    request<Schema>(`/api/catalogs/${catalogId}/schemas/${schemaName}`),
+
+  /**
+   * 获取 Schema 配置文件 (schema.yaml) 原始内容
+   */
+  getConfig: (catalogId: string, schemaName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/config`),
 
   /**
    * 创建 Schema
@@ -185,6 +190,14 @@ export const schemaApi = {
   delete: (catalogId: string, schemaName: string): Promise<DeleteResponse> =>
     request<DeleteResponse>(`/api/catalogs/${catalogId}/schemas/${schemaName}`, {
       method: "DELETE",
+    }),
+
+  /**
+   * 同步 Schema 元数据（手动触发）
+   */
+  sync: (catalogId: string, schemaName: string): Promise<SyncResult> =>
+    request<SyncResult>(`/api/catalogs/${catalogId}/schemas/${schemaName}/sync`, {
+      method: "POST",
     }),
 };
 
@@ -224,6 +237,12 @@ export const assetApi = {
     }),
 
   /**
+   * 获取 Asset 配置文件原始内容
+   */
+  getConfig: (catalogId: string, schemaName: string, assetName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/assets/${assetName}/config`),
+
+  /**
    * 预览表数据
    */
   previewTableData: (
@@ -252,6 +271,12 @@ export const agentApi = {
    */
   get: (catalogId: string, agentName: string): Promise<Agent> =>
     request<Agent>(`/api/catalogs/${catalogId}/agents/${agentName}`),
+
+  /**
+   * 获取 Agent 配置文件 (agent_spec.yaml) 原始内容
+   */
+  getConfig: (catalogId: string, agentName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/config`),
 
   /**
    * 创建 Agent
@@ -355,6 +380,16 @@ export const agentApi = {
     request<{ message: string; enabled: boolean }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}/toggle?enabled=${enabled}`, {
       method: "POST",
     }),
+
+  /**
+   * 从本地 zip 文件路径导入 Skill
+   * 本地桌面应用场景，直接传递本地文件路径
+   */
+  importSkillFromZip: (catalogId: string, agentName: string, zipFilePath: string): Promise<{ success: boolean; skill_name?: string; message: string; path?: string }> =>
+    request<{ success: boolean; skill_name?: string; message: string; path?: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/import`, {
+      method: "POST",
+      body: JSON.stringify({ zip_file_path: zipFilePath }),
+    }),
 };
 
 // ============ Model API（Schema 级别） ============
@@ -373,6 +408,12 @@ export const modelApi = {
    */
   get: (catalogId: string, schemaName: string, modelName: string): Promise<Model> =>
     request<Model>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}`),
+
+  /**
+   * 获取 Model 配置文件原始内容
+   */
+  getConfig: (catalogId: string, schemaName: string, modelName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}/config`),
 
   /**
    * 创建 Model

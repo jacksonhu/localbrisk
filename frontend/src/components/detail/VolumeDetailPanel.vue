@@ -452,15 +452,25 @@ import {
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import UniversalViewer from "@/components/viewer/UniversalViewer.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
+import { assetApi } from "@/services/api";
 import { 
   createLocalVolumeService, 
   createS3VolumeService,
-  readLocalTextFile,
-  readLocalBinaryFile,
   type FileInfo,
   type VolumeFileService,
   type S3Config
 } from "@/services/fileService";
+import { 
+  PREVIEWABLE_EXTENSIONS, 
+  BINARY_EXTENSIONS, 
+  FILE_ICON_COLORS,
+  isFilePreviewable,
+  isBinaryFile,
+  getFileIconColor,
+  formatFileSize,
+  formatDate,
+  readLocalFileContent,
+} from "@/composables/useFileBrowser";
 
 const { t } = useI18n();
 const store = useCatalogStore();
@@ -597,51 +607,27 @@ function initFileService() {
   }
 }
 
-// 生成 YAML 配置内容
-function generateConfigYaml(): string {
-  if (!selectedAsset.value) return '';
-  
-  const config: Record<string, unknown> = {
-    name: selectedAsset.value.name,
-    asset_type: selectedAsset.value.asset_type,
-    schema_id: selectedAsset.value.schema_id,
-  };
-  
-  if (selectedAsset.value.path) {
-    config.path = selectedAsset.value.path;
+// 加载配置 - 从后端获取配置文件原始内容
+async function loadConfig() {
+  if (!selectedCatalog.value || !selectedSchema.value || !selectedAsset.value) {
+    configContent.value = '';
+    originalConfig.value = '';
+    return;
   }
   
-  // 添加元数据
-  if (selectedAsset.value.metadata) {
-    const meta = selectedAsset.value.metadata;
-    if (meta.description) config.description = meta.description;
-    if (meta.volume_type) config.volume_type = meta.volume_type;
-    if (meta.storage_location) config.storage_location = meta.storage_location;
-    if (meta.s3_endpoint) config.s3_endpoint = meta.s3_endpoint;
-    if (meta.s3_bucket) config.s3_bucket = meta.s3_bucket;
+  try {
+    const response = await assetApi.getConfig(
+      selectedCatalog.value.id, 
+      selectedSchema.value.name, 
+      selectedAsset.value.name
+    );
+    configContent.value = response.content;
+    originalConfig.value = response.content;
+  } catch (e) {
+    console.error('Failed to load asset config:', e);
+    configContent.value = '';
+    originalConfig.value = '';
   }
-  
-  config.created_at = selectedAsset.value.created_at;
-  if (selectedAsset.value.updated_at) {
-    config.updated_at = selectedAsset.value.updated_at;
-  }
-  
-  // 简单的 YAML 格式化
-  return Object.entries(config)
-    .map(([key, value]) => {
-      if (typeof value === 'string' && (value.includes(':') || value.includes('#') || value.includes('\n'))) {
-        return `${key}: "${value}"`;
-      }
-      return `${key}: ${value}`;
-    })
-    .join('\n');
-}
-
-// 加载配置
-function loadConfig() {
-  const yaml = generateConfigYaml();
-  configContent.value = yaml;
-  originalConfig.value = yaml;
 }
 
 // 保存配置
@@ -664,55 +650,6 @@ async function copyConfig() {
   } catch (e) {
     console.error('Failed to copy:', e);
   }
-}
-
-// 格式化日期
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '-';
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return dateStr;
-  }
-}
-
-// 格式化文件大小
-function formatFileSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '-';
-  if (bytes === 0) return '0 B';
-  
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const k = 1024;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + units[i];
-}
-
-// 获取文件图标颜色
-function getFileIconColor(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const colorMap: Record<string, string> = {
-    pdf: 'text-red-500',
-    doc: 'text-blue-500',
-    docx: 'text-blue-500',
-    xls: 'text-green-500',
-    xlsx: 'text-green-500',
-    ppt: 'text-orange-500',
-    pptx: 'text-orange-500',
-    jpg: 'text-purple-500',
-    jpeg: 'text-purple-500',
-    png: 'text-purple-500',
-    gif: 'text-purple-500',
-    mp4: 'text-pink-500',
-    mp3: 'text-cyan-500',
-    zip: 'text-yellow-600',
-    rar: 'text-yellow-600',
-    json: 'text-yellow-500',
-    csv: 'text-green-600',
-    parquet: 'text-blue-600',
-  };
-  return colorMap[ext || ''] || 'text-gray-500';
 }
 
 // 导航函数
@@ -767,43 +704,18 @@ function navigateToFolder(file: FileInfo) {
   refreshFiles();
 }
 
-// 支持预览的文件类型
-const PREVIEWABLE_EXTENSIONS = new Set([
-  // 图片
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico',
-  // PDF
-  'pdf',
-  // 文本/代码
-  'txt', 'log', 'md', 'markdown',
-  'js', 'ts', 'jsx', 'tsx', 'vue', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h',
-  'cs', 'rb', 'php', 'swift', 'kt', 'scala', 'sql', 'sh', 'bash', 'zsh', 'ps1',
-  'html', 'css', 'scss', 'less', 'json', 'yaml', 'yml', 'xml', 'toml', 'ini', 'conf', 'env',
-  // 表格
-  'csv', 'xlsx', 'xls',
-  // Office 文档
-  'doc', 'docx', 'ppt', 'pptx',
-]);
-
-// 二进制文件类型
-const BINARY_EXTENSIONS = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico',
-  'pdf', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt',
-]);
-
 // 检查文件是否可预览
 function isPreviewable(fileName: string): boolean {
-  const ext = fileName.split('.').pop()?.toLowerCase() || '';
-  return PREVIEWABLE_EXTENSIONS.has(ext);
+  return isFilePreviewable(fileName);
 }
 
 // 打开文件查看器
 async function openFileViewer(file: FileInfo) {
   if (file.is_directory) return;
   
-  const ext = file.name.split('.').pop()?.toLowerCase() || '';
-  
   if (!isPreviewable(file.name)) {
     // 不支持预览，可以考虑提示用户
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
     console.log('File type not supported for preview:', ext);
     return;
   }
@@ -821,14 +733,8 @@ async function openFileViewer(file: FileInfo) {
       : `${storageLocation.value}/${file.name}`;
     
     if (volumeType.value === 'local') {
-      // 本地文件
-      if (BINARY_EXTENSIONS.has(ext)) {
-        // 二进制文件
-        viewerFileContent.value = await readLocalBinaryFile(fullPath);
-      } else {
-        // 文本文件
-        viewerFileContent.value = await readLocalTextFile(fullPath);
-      }
+      // 本地文件 - 使用公共函数读取
+      viewerFileContent.value = await readLocalFileContent(fullPath);
     } else if (volumeType.value === 's3' && fileService.value) {
       // S3 文件 - 需要通过 fileService 读取
       // TODO: 实现 S3 文件内容读取

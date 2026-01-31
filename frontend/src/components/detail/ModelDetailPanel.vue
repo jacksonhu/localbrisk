@@ -277,6 +277,7 @@ import {
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
+import { modelApi } from "@/services/api";
 
 const { t } = useI18n();
 const store = useCatalogStore();
@@ -342,69 +343,27 @@ function maskApiKey(apiKey?: string): string {
   return apiKey.slice(0, 4) + '****' + apiKey.slice(-4);
 }
 
-// 生成 YAML 配置内容
-function generateConfigYaml(): string {
-  if (!selectedModel.value) return '';
-  
-  const model = selectedModel.value;
-  const lines: string[] = [];
-  
-  lines.push(`name: ${model.name}`);
-  
-  if (model.description) {
-    lines.push(`description: "${model.description}"`);
+// 加载配置 - 从后端获取 model.yaml 文件原始内容
+async function loadConfig() {
+  if (!selectedCatalog.value || !selectedSchema.value || !selectedModel.value) {
+    configContent.value = '';
+    originalConfig.value = '';
+    return;
   }
   
-  lines.push(`model_type: ${model.model_type}`);
-  
-  // 本地模型配置
-  if (model.model_type === 'local') {
-    if (model.local_provider) {
-      lines.push(`local_provider: ${model.local_provider}`);
-    }
-    if (model.local_source) {
-      lines.push(`local_source: ${model.local_source}`);
-    }
-    if (model.volume_reference) {
-      lines.push(`volume_reference: ${model.volume_reference}`);
-    }
-    if (model.huggingface_repo) {
-      lines.push(`huggingface_repo: ${model.huggingface_repo}`);
-    }
-    if (model.huggingface_filename) {
-      lines.push(`huggingface_filename: ${model.huggingface_filename}`);
-    }
+  try {
+    const response = await modelApi.getConfig(
+      selectedCatalog.value.id, 
+      selectedSchema.value.name, 
+      selectedModel.value.name
+    );
+    configContent.value = response.content;
+    originalConfig.value = response.content;
+  } catch (e) {
+    console.error('Failed to load model config:', e);
+    configContent.value = '';
+    originalConfig.value = '';
   }
-  
-  // API 端点配置
-  if (model.model_type === 'endpoint') {
-    if (model.endpoint_provider) {
-      lines.push(`endpoint_provider: ${model.endpoint_provider}`);
-    }
-    if (model.api_base_url) {
-      lines.push(`api_base_url: ${model.api_base_url}`);
-    }
-    if (model.api_key) {
-      lines.push(`api_key: ${maskApiKey(model.api_key)}`);
-    }
-    if (model.model_id) {
-      lines.push(`model_id: ${model.model_id}`);
-    }
-  }
-  
-  lines.push(`created_at: ${model.created_at}`);
-  if (model.updated_at) {
-    lines.push(`updated_at: ${model.updated_at}`);
-  }
-  
-  return lines.join('\n');
-}
-
-// 加载配置
-function loadConfig() {
-  const yaml = generateConfigYaml();
-  configContent.value = yaml;
-  originalConfig.value = yaml;
 }
 
 // 保存配置
