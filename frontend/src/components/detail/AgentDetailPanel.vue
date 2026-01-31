@@ -162,68 +162,44 @@
           <!-- Skills 列表 -->
           <ItemListCard
             title="Skills"
-            :icon="Code"
-            :item-icon="FileCode"
-            item-icon-color="text-purple-500"
+            :title-icon="Code"
             :items="selectedAgent?.skills || []"
-            :items-label="t('agent.items')"
+            :columns="skillColumns"
+            key-field="name"
+            show-count
+            :count-label="t('agent.items')"
             :empty-text="t('agent.noSkills')"
-            :show-toggle="true"
-            :is-enabled="isSkillEnabled"
-            @item-click="openSkillDetail"
-            @toggle="handleSkillToggle"
+            row-clickable
+            @row-click="handleSkillRowClick"
+            @toggle="handleSkillToggleEvent"
           />
 
           <!-- Prompts 列表 -->
           <ItemListCard
             title="Prompts"
-            :icon="FileText"
-            :item-icon="FileText"
-            item-icon-color="text-blue-500"
+            :title-icon="FileText"
             :items="selectedAgent?.prompts || []"
-            :items-label="t('agent.items')"
+            :columns="promptColumns"
+            key-field="name"
+            show-count
+            :count-label="t('agent.items')"
             :empty-text="t('agent.noPrompts')"
-            :show-toggle="true"
-            :is-enabled="isPromptEnabled"
-            @item-click="openPromptDetail"
-            @toggle="handlePromptToggle"
+            row-clickable
+            @row-click="handlePromptRowClick"
+            @toggle="handlePromptToggleEvent"
           />
         </div>
 
         <!-- 配置 Tab -->
         <div v-if="activeTab === 'config'" class="h-full">
-          <div class="card-float h-full flex flex-col">
-            <div class="p-4 border-b border-border flex items-center justify-between">
-              <h3 class="font-medium flex items-center gap-2">
-                <FileCode class="w-4 h-4" />
-                {{ t('detail.configFile') }} (agent_spec.yaml)
-              </h3>
-              <div class="flex items-center gap-2">
-                <button
-                  @click="saveConfig"
-                  :disabled="!configModified || savingConfig"
-                  class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <Save class="w-4 h-4" />
-                  {{ t('common.save') }}
-                </button>
-                <button
-                  @click="copyConfig"
-                  class="px-3 py-1.5 text-sm border border-input rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-                >
-                  <Copy class="w-4 h-4" />
-                  {{ t('common.copy') }}
-                </button>
-              </div>
-            </div>
-            <div class="flex-1 p-4 overflow-hidden">
-              <textarea
-                v-model="configContent"
-                class="w-full h-full font-mono text-sm bg-muted/50 border border-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                spellcheck="false"
-              ></textarea>
-            </div>
-          </div>
+          <ConfigEditor
+            v-model="configContent"
+            :title="`${t('detail.configFile')} (agent_spec.yaml)`"
+            :modified="configModified"
+            :saving="savingConfig"
+            @save="saveConfig"
+            @copy="copyConfig"
+          />
         </div>
 
         <!-- Chat Tab (预留) -->
@@ -273,7 +249,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, ChevronDown, Bot, Trash2, Plus,
-  FileText, FileCode, Save, Copy, Code, MessageSquare
+  FileText, FileCode, Code, MessageSquare
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import Breadcrumb from "@/components/common/Breadcrumb.vue";
@@ -282,7 +258,10 @@ import CreateSkillDialog from "@/components/catalog/CreateSkillDialog.vue";
 import PromptDetailPanel from "@/components/detail/PromptDetailPanel.vue";
 import SkillDetailPanel from "@/components/detail/SkillDetailPanel.vue";
 import ItemListCard from "@/components/common/ItemListCard.vue";
+import ConfigEditor from "@/components/common/ConfigEditor.vue";
+import type { ColumnConfig } from "@/components/common/ItemListCard.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
+import { useConfigManager } from "@/composables/useConfigManager";
 import { agentApi } from "@/services/api";
 import { formatDate } from "@/utils/formatUtils";
 import type { PromptCreate } from "@/types/catalog";
@@ -311,12 +290,40 @@ const tabs = computed(() => [
   { id: 'chat' as const, label: 'Chat', icon: MessageSquare },
 ]);
 
-// 配置内容
-const configContent = ref('');
-const originalConfig = ref('');
-const savingConfig = ref(false);
+// 使用配置管理器处理 Agent 配置
+const agentConfigManager = useConfigManager({
+  type: 'agent',
+  getConfigPath: () => {
+    if (!selectedAgent.value?.path) return undefined;
+    return `${selectedAgent.value.path}/agent_spec.yaml`;
+  },
+  loadConfig: async () => {
+    if (!selectedCatalog.value || !selectedAgent.value) return '';
+    try {
+      const response = await agentApi.getConfig(selectedCatalog.value.id, selectedAgent.value.name);
+      return response.content;
+    } catch (e) {
+      console.error('Failed to load agent config:', e);
+      return '';
+    }
+  },
+  onSaved: async () => {
+    // 刷新 agent 数据
+    if (selectedCatalog.value && selectedAgent.value) {
+      await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+    }
+  },
+});
 
-const configModified = computed(() => configContent.value !== originalConfig.value);
+// 解构配置管理器的状态和方法
+const {
+  configContent,
+  configModified,
+  savingConfig,
+  saveConfig,
+  copyConfig,
+  loadConfigContent: loadConfig,
+} = agentConfigManager;
 
 // 弹窗状态
 const showDeleteDialog = ref(false);
@@ -328,6 +335,23 @@ const deleteDescription = ref('');
 // 创建下拉菜单状态
 const showCreateDropdown = ref(false);
 const createDropdownRef = ref<HTMLElement | null>(null);
+
+// ItemListCard 列配置类型
+type ItemType = string | number | Record<string, unknown>;
+
+// Skills 列配置
+const skillColumns: ColumnConfig[] = [
+  { key: 'icon', type: 'icon', icon: FileCode, class: 'text-purple-500' },
+  { key: 'name', type: 'text', field: 'name', flex: true, class: 'font-medium' },
+  { key: 'enabled', type: 'toggle', isEnabled: isSkillEnabled },
+];
+
+// Prompts 列配置
+const promptColumns: ColumnConfig[] = [
+  { key: 'icon', type: 'icon', icon: FileText, class: 'text-blue-500' },
+  { key: 'name', type: 'text', field: 'name', flex: true, class: 'font-medium' },
+  { key: 'enabled', type: 'toggle', isEnabled: isPromptEnabled },
+];
 
 // 点击外部关闭下拉菜单
 function handleClickOutside(event: MouseEvent) {
@@ -387,31 +411,41 @@ function openSkillDetail(skillName: string | Record<string, unknown>) {
   store.selectedSkillName.value = name;
 }
 
+// 处理 Skill 行点击
+function handleSkillRowClick(payload: { item: ItemType; index: number }) {
+  openSkillDetail(payload.item as string | Record<string, unknown>);
+}
+
+// 处理 Prompt 行点击
+function handlePromptRowClick(payload: { item: ItemType; index: number }) {
+  openPromptDetail(payload.item as string | Record<string, unknown>);
+}
+
 // 检查 Skill 是否启用（从 capabilities.native_skills）
-function isSkillEnabled(item: string | Record<string, unknown>): boolean {
-  const skillName = typeof item === 'string' ? item : String(item.name || '');
+function isSkillEnabled(item: ItemType): boolean {
+  const skillName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
   const nativeSkills = selectedAgent.value?.capabilities?.native_skills || [];
   return nativeSkills.some(s => s.name === skillName);
 }
 
 // 检查 Prompt 是否启用（从 instruction.user_prompt_templates）
-function isPromptEnabled(item: string | Record<string, unknown>): boolean {
-  const promptName = typeof item === 'string' ? item : String(item.name || '');
+function isPromptEnabled(item: ItemType): boolean {
+  const promptName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
   const promptTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
   return promptTemplates.some(p => p.name === promptName);
 }
 
-// 处理 Skill 开关切换
-async function handleSkillToggle(item: string | Record<string, unknown>, enabled: boolean) {
+// 处理 Skill 开关切换事件
+async function handleSkillToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
   if (!selectedCatalog.value || !selectedAgent.value) return;
   
-  const skillName = typeof item === 'string' ? item : String(item.name || '');
+  const skillName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
   try {
     await agentApi.toggleSkillEnabled(
       selectedCatalog.value.id,
       selectedAgent.value.name,
       skillName,
-      enabled
+      payload.enabled
     );
     // 刷新 Agent 详情以更新状态
     await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
@@ -420,17 +454,17 @@ async function handleSkillToggle(item: string | Record<string, unknown>, enabled
   }
 }
 
-// 处理 Prompt 开关切换
-async function handlePromptToggle(item: string | Record<string, unknown>, enabled: boolean) {
+// 处理 Prompt 开关切换事件
+async function handlePromptToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
   if (!selectedCatalog.value || !selectedAgent.value) return;
   
-  const promptName = typeof item === 'string' ? item : String(item.name || '');
+  const promptName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
   try {
     await agentApi.togglePromptEnabled(
       selectedCatalog.value.id,
       selectedAgent.value.name,
       promptName,
-      enabled
+      payload.enabled
     );
     // 刷新 Agent 详情以更新状态
     await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
@@ -459,47 +493,6 @@ async function handleSkillDeleted() {
   }
   // 刷新目录树
   await store.fetchTree();
-}
-
-// 加载配置 - 从后端获取 agent_spec.yaml 文件原始内容
-async function loadConfig() {
-  if (!selectedCatalog.value || !selectedAgent.value) {
-    configContent.value = '';
-    originalConfig.value = '';
-    return;
-  }
-  
-  try {
-    const response = await agentApi.getConfig(selectedCatalog.value.id, selectedAgent.value.name);
-    configContent.value = response.content;
-    originalConfig.value = response.content;
-  } catch (e) {
-    console.error('Failed to load agent config:', e);
-    configContent.value = '';
-    originalConfig.value = '';
-  }
-}
-
-// 保存配置
-async function saveConfig() {
-  savingConfig.value = true;
-  try {
-    // TODO: 调用后端 API 保存配置
-    console.log('Save agent config:', configContent.value);
-    originalConfig.value = configContent.value;
-  } finally {
-    savingConfig.value = false;
-  }
-}
-
-// 复制配置
-async function copyConfig() {
-  try {
-    await navigator.clipboard.writeText(configContent.value);
-    // TODO: 显示复制成功提示
-  } catch (e) {
-    console.error('Failed to copy:', e);
-  }
 }
 
 // 返回到 Catalog 列表

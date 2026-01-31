@@ -544,6 +544,21 @@ export default {
     confirmDeleteModelDesc: '此操作将永久删除该模型配置，且不可恢复。',
   },
 
+  // 配置管理
+  config: {
+    saved: '配置已保存',
+    saveFailed: '保存配置失败',
+    copied: '配置已复制到剪贴板',
+    copyFailed: '复制失败',
+    invalidYamlFormat: 'YAML 格式不正确',
+    invalidPath: '配置文件路径无效',
+    notInTauriEnv: '非桌面应用环境，无法保存文件',
+    format: '格式化',
+    formatted: 'YAML 已格式化',
+    formatFailed: '格式化失败',
+    yamlError: 'YAML 语法错误',
+  },
+
   // 文件查看器
   viewer: {
     unsupportedFormat: '不支持预览此文件格式',

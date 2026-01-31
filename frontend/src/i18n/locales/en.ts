@@ -544,6 +544,21 @@ export default {
     confirmDeleteModelDesc: 'This will permanently delete this model configuration. This action cannot be undone.',
   },
 
+  // Config management
+  config: {
+    saved: 'Configuration saved',
+    saveFailed: 'Failed to save configuration',
+    copied: 'Configuration copied to clipboard',
+    copyFailed: 'Copy failed',
+    invalidYamlFormat: 'Invalid YAML format',
+    invalidPath: 'Invalid configuration file path',
+    notInTauriEnv: 'Not in desktop app environment, cannot save file',
+    format: 'Format',
+    formatted: 'YAML formatted',
+    formatFailed: 'Format failed',
+    yamlError: 'YAML syntax error',
+  },
+
   // File viewer
   viewer: {
     unsupportedFormat: 'This file format is not supported for preview',

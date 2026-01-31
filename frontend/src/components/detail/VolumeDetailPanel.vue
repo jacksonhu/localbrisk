@@ -344,38 +344,13 @@
 
       <!-- 配置 Tab -->
       <div v-if="activeTab === 'config'" class="flex-1">
-        <div class="card-float h-full flex flex-col">
-          <div class="p-4 border-b border-border flex items-center justify-between">
-            <h3 class="font-medium flex items-center gap-2">
-              <FileCode class="w-4 h-4" />
-              {{ t('detail.configFile') }}
-            </h3>
-            <div class="flex items-center gap-2">
-              <button
-                @click="saveConfig"
-                :disabled="!configModified || savingConfig"
-                class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Save class="w-4 h-4" />
-                {{ t('common.save') }}
-              </button>
-              <button
-                @click="copyConfig"
-                class="px-3 py-1.5 text-sm border border-input rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-              >
-                <Copy class="w-4 h-4" />
-                {{ t('common.copy') }}
-              </button>
-            </div>
-          </div>
-          <div class="flex-1 p-4 overflow-hidden">
-            <textarea
-              v-model="configContent"
-              class="w-full h-full font-mono text-sm bg-muted/50 border border-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-              spellcheck="false"
-            ></textarea>
-          </div>
-        </div>
+        <ConfigEditor
+          v-model="configContent"
+          :modified="configModified"
+          :saving="savingConfig"
+          @save="saveConfig"
+          @copy="copyConfig"
+        />
       </div>
     </div>
 
@@ -447,11 +422,13 @@ import {
   ArrowLeft, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight,
   FolderOpen, Folder, Pencil, Search, Trash2, RefreshCw, Download,
   FolderPlus, File as FileIcon, Loader2, HardDrive, Cloud,
-  FileText, FileCode, Save, Copy, Eye
+  FileText, FileCode, Eye
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import ConfigEditor from "@/components/common/ConfigEditor.vue";
 import UniversalViewer from "@/components/viewer/UniversalViewer.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
+import { useConfigManager } from "@/composables/useConfigManager";
 import { assetApi } from "@/services/api";
 import { 
   createLocalVolumeService, 
@@ -519,12 +496,44 @@ const s3Config = computed<S3Config | null>(() => {
 // 文件服务实例
 const fileService = ref<VolumeFileService | null>(null);
 
-// 配置内容
-const configContent = ref('');
-const originalConfig = ref('');
-const savingConfig = ref(false);
+// 使用配置管理器处理 Volume 配置
+const volumeConfigManager = useConfigManager({
+  type: 'asset',
+  getConfigPath: () => {
+    if (!selectedAsset.value?.path) return undefined;
+    return selectedAsset.value.path;
+  },
+  loadConfig: async () => {
+    if (!selectedCatalog.value || !selectedSchema.value || !selectedAsset.value) return '';
+    try {
+      const response = await assetApi.getConfig(
+        selectedCatalog.value.id,
+        selectedSchema.value.name,
+        selectedAsset.value.name
+      );
+      return response.content;
+    } catch (e) {
+      console.error('Failed to load asset config:', e);
+      return '';
+    }
+  },
+  onSaved: async () => {
+    // 刷新 asset 数据
+    if (selectedCatalog.value && selectedSchema.value) {
+      await store.fetchAssets(selectedCatalog.value.id, selectedSchema.value.name);
+    }
+  },
+});
 
-const configModified = computed(() => configContent.value !== originalConfig.value);
+// 解构配置管理器的状态和方法
+const {
+  configContent,
+  configModified,
+  savingConfig,
+  saveConfig,
+  copyConfig,
+  loadConfigContent: loadConfig,
+} = volumeConfigManager;
 
 // 文件列表状态
 const files = ref<FileInfo[]>([]);
@@ -604,51 +613,6 @@ function initFileService() {
     }
   } else {
     fileService.value = null;
-  }
-}
-
-// 加载配置 - 从后端获取配置文件原始内容
-async function loadConfig() {
-  if (!selectedCatalog.value || !selectedSchema.value || !selectedAsset.value) {
-    configContent.value = '';
-    originalConfig.value = '';
-    return;
-  }
-  
-  try {
-    const response = await assetApi.getConfig(
-      selectedCatalog.value.id, 
-      selectedSchema.value.name, 
-      selectedAsset.value.name
-    );
-    configContent.value = response.content;
-    originalConfig.value = response.content;
-  } catch (e) {
-    console.error('Failed to load asset config:', e);
-    configContent.value = '';
-    originalConfig.value = '';
-  }
-}
-
-// 保存配置
-async function saveConfig() {
-  savingConfig.value = true;
-  try {
-    // TODO: 调用后端 API 保存配置
-    console.log('Save config:', configContent.value);
-    originalConfig.value = configContent.value;
-  } finally {
-    savingConfig.value = false;
-  }
-}
-
-// 复制配置
-async function copyConfig() {
-  try {
-    await navigator.clipboard.writeText(configContent.value);
-    // TODO: 显示复制成功提示
-  } catch (e) {
-    console.error('Failed to copy:', e);
   }
 }
 

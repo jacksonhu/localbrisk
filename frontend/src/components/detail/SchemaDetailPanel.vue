@@ -236,109 +236,33 @@
         </div>
 
         <!-- Asset 列表 -->
-        <div class="card-float overflow-hidden">
-          <div class="p-4 border-b border-border flex items-center justify-between">
-            <h3 class="font-medium">{{ t('detail.assets') }}</h3>
-            <span class="text-sm text-primary bg-primary/10 px-2 py-1 rounded">
-              {{ t('detail.assetsCount', { count: filteredAssets.length }) }}
-            </span>
-          </div>
-          
-          <!-- 搜索 -->
-          <div class="p-4 border-b border-border">
-            <div class="relative">
-              <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                v-model="assetFilter"
-                type="text"
-                :placeholder="t('detail.filterAssets')"
-                class="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
-              />
-            </div>
-          </div>
-
-          <!-- 表头 -->
-          <div class="grid grid-cols-4 gap-4 text-sm font-medium text-muted-foreground border-b border-border px-4 py-3 bg-muted/30">
-            <span>{{ t('common.name') }}</span>
-            <span>{{ t('common.type') }}</span>
-            <span>{{ t('common.createdAt') }}</span>
-            <span>{{ t('common.actions') }}</span>
-          </div>
-
-          <!-- Asset 行 -->
-          <div v-if="filteredAssets.length > 0">
-            <div
-              v-for="asset in filteredAssets"
-              :key="asset.id"
-              class="grid grid-cols-4 gap-4 text-sm px-4 py-3 border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-              @click="handleAssetClick(asset)"
-            >
-              <div class="flex items-center gap-2">
-                <component :is="getAssetIcon(asset.asset_type)" class="w-4 h-4" :class="getAssetIconColor(asset.asset_type)" />
-                <span class="font-medium truncate">{{ asset.name }}</span>
-              </div>
-              <div class="flex items-center">
-                <span class="px-2 py-0.5 text-xs rounded" :class="getAssetTypeClass(asset.asset_type)">
-                  {{ getAssetTypeLabel(asset.asset_type) }}
-                </span>
-              </div>
-              <span class="text-muted-foreground">{{ formatDate(asset.created_at) }}</span>
-              <div class="flex items-center gap-2">
-                <button
-                  @click.stop="confirmDeleteAsset(asset)"
-                  class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors"
-                  :title="t('common.delete')"
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 空状态 -->
-          <div v-else class="flex flex-col items-center justify-center py-12 text-center">
-            <div class="w-16 h-16 bg-muted rounded-lg flex items-center justify-center mb-4">
-              <FolderOpen class="w-8 h-8 text-muted-foreground" />
-            </div>
-            <p class="text-muted-foreground">{{ t('detail.noAssets') }}</p>
-          </div>
-        </div>
+        <ItemListCard
+          :title="t('detail.assets')"
+          :items="allItems"
+          :columns="assetColumns"
+          key-field="id"
+          show-count
+          :count-label="t('agent.items')"
+          :empty-text="t('detail.noAssets')"
+          :empty-icon="FolderOpen"
+          searchable
+          :search-placeholder="t('detail.filterAssets')"
+          :search-fields="['name']"
+          row-clickable
+          @row-click="handleAssetRowClick"
+          @action="handleAssetAction"
+        />
       </div>
 
       <!-- 配置 Tab -->
       <div v-if="activeTab === 'config'" class="h-full">
-        <div class="card-float h-full flex flex-col">
-          <div class="p-4 border-b border-border flex items-center justify-between">
-            <h3 class="font-medium flex items-center gap-2">
-              <FileCode class="w-4 h-4" />
-              {{ t('detail.configFile') }}
-            </h3>
-            <div class="flex items-center gap-2">
-              <button
-                @click="saveConfig"
-                :disabled="!configModified || savingConfig"
-                class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Save class="w-4 h-4" />
-                {{ t('common.save') }}
-              </button>
-              <button
-                @click="copyConfig"
-                class="px-3 py-1.5 text-sm border border-input rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-              >
-                <Copy class="w-4 h-4" />
-                {{ t('common.copy') }}
-              </button>
-            </div>
-          </div>
-          <div class="flex-1 p-4 overflow-hidden">
-            <textarea
-              v-model="configContent"
-              class="w-full h-full font-mono text-sm bg-muted/50 border border-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-              spellcheck="false"
-            ></textarea>
-          </div>
-        </div>
+        <ConfigEditor
+          v-model="configContent"
+          :modified="configModified"
+          :saving="savingConfig"
+          @save="saveConfig"
+          @copy="copyConfig"
+        />
       </div>
     </div>
 
@@ -384,17 +308,21 @@
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
-  ArrowLeft, ChevronRight, ChevronDown, Database, Pencil, Search, 
+  ArrowLeft, ChevronRight, ChevronDown, Database, Pencil, 
   HardDrive, Trash2, Table, FolderOpen, Bot, FileText, Plus, Code, Cpu,
-  FileCode, Save, Copy, PlugZap, RefreshCw, CheckCircle, XCircle
+  FileCode, PlugZap, RefreshCw, CheckCircle, XCircle
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import SchemaDialog from "@/components/catalog/SchemaDialog.vue";
 import CreateVolumeDialog from "@/components/catalog/CreateVolumeDialog.vue";
 import CreateModelDialog from "@/components/catalog/CreateModelDialog.vue";
+import ItemListCard from "@/components/common/ItemListCard.vue";
+import ConfigEditor from "@/components/common/ConfigEditor.vue";
+import type { ColumnConfig } from "@/components/common/ItemListCard.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
-import { schemaApi } from "@/services/api";
-import type { SchemaUpdate, AssetCreate, Asset, ModelCreate, SyncResult } from "@/types/catalog";
+import { useConfigManager } from "@/composables/useConfigManager";
+import { schemaApi, modelApi } from "@/services/api";
+import type { SchemaUpdate, AssetCreate, Asset, Model, ModelCreate, SyncResult } from "@/types/catalog";
 
 const { t } = useI18n();
 const store = useCatalogStore();
@@ -404,6 +332,50 @@ const selectedCatalog = computed(() => store.selectedCatalog.value);
 const selectedSchema = computed(() => store.selectedSchema.value);
 const currentAssets = computed(() => store.currentAssets.value);
 
+// Models 列表
+const currentModels = ref<Model[]>([]);
+
+// 合并 Assets 和 Models 的统一列表项类型
+interface UnifiedAssetItem {
+  id: string;
+  name: string;
+  asset_type: string;
+  created_at?: string;
+  _isModel?: boolean;  // 标记是否为 Model
+  _originalData: Asset | Model;  // 原始数据
+}
+
+// 合并 Assets 和 Models 为统一列表
+const allItems = computed<UnifiedAssetItem[]>(() => {
+  const items: UnifiedAssetItem[] = [];
+  
+  // 添加 Assets
+  for (const asset of currentAssets.value || []) {
+    items.push({
+      id: asset.id,
+      name: asset.name,
+      asset_type: asset.asset_type,
+      created_at: asset.created_at,
+      _isModel: false,
+      _originalData: asset,
+    });
+  }
+  
+  // 添加 Models
+  for (const model of currentModels.value || []) {
+    items.push({
+      id: model.id,
+      name: model.name,
+      asset_type: 'model',
+      created_at: model.created_at,
+      _isModel: true,
+      _originalData: model,
+    });
+  }
+  
+  return items;
+});
+
 // Tab 状态
 const activeTab = ref<'overview' | 'config'>('overview');
 
@@ -412,12 +384,40 @@ const tabs = computed(() => [
   { id: 'config' as const, label: t('detail.config'), icon: FileCode },
 ]);
 
-// 配置内容
-const configContent = ref('');
-const originalConfig = ref('');
-const savingConfig = ref(false);
+// 使用配置管理器处理 Schema 配置
+const schemaConfigManager = useConfigManager({
+  type: 'schema',
+  getConfigPath: () => {
+    if (!selectedSchema.value?.path) return undefined;
+    return `${selectedSchema.value.path}/schema.yaml`;
+  },
+  loadConfig: async () => {
+    if (!selectedCatalog.value || !selectedSchema.value) return '';
+    try {
+      const response = await schemaApi.getConfig(selectedCatalog.value.id, selectedSchema.value.name);
+      return response.content;
+    } catch (e) {
+      console.error('Failed to load schema config:', e);
+      return '';
+    }
+  },
+  onSaved: async () => {
+    // 刷新 schema 数据
+    if (selectedCatalog.value && selectedSchema.value) {
+      await store.fetchCatalog(selectedCatalog.value.id);
+    }
+  },
+});
 
-const configModified = computed(() => configContent.value !== originalConfig.value);
+// 解构配置管理器的状态和方法
+const {
+  configContent,
+  configModified,
+  savingConfig,
+  saveConfig,
+  copyConfig,
+  loadConfigContent: loadConfig,
+} = schemaConfigManager;
 
 // 同步状态
 const syncing = ref(false);
@@ -460,58 +460,56 @@ const createMenuItems = computed(() => [
   },
 ]);
 
-// Asset 筛选
-const assetFilter = ref('');
+// ItemListCard 列配置类型
+type ItemType = string | number | Record<string, unknown>;
 
-const filteredAssets = computed(() => {
-  const assets = currentAssets.value || [];
-  if (!assetFilter.value) return assets;
-  
-  const filter = assetFilter.value.toLowerCase();
-  return assets.filter(a => 
-    a.name.toLowerCase().includes(filter)
-  );
-});
+// Asset 列配置
+const assetColumns: ColumnConfig[] = [
+  { 
+    key: 'icon', 
+    type: 'icon', 
+    iconFn: (item: ItemType) => getAssetIcon((item as Record<string, unknown>).asset_type as string),
+    classFn: (item: ItemType) => getAssetIconColor((item as Record<string, unknown>).asset_type as string),
+  },
+  { 
+    key: 'name', 
+    type: 'text', 
+    field: 'name', 
+    flex: true, 
+    class: 'font-medium',
+    searchable: true,
+  },
+  { 
+    key: 'type', 
+    type: 'badge', 
+    valueFn: (item: ItemType) => getAssetTypeLabel((item as Record<string, unknown>).asset_type as string),
+    classFn: (item: ItemType) => getAssetTypeClass((item as Record<string, unknown>).asset_type as string),
+  },
+  { 
+    key: 'created_at', 
+    type: 'text', 
+    valueFn: (item: ItemType) => formatDate((item as Record<string, unknown>).created_at as string),
+    class: 'text-muted-foreground',
+  },
+  { 
+    key: 'delete', 
+    type: 'button', 
+    icon: Trash2,
+    action: 'delete',
+    class: 'p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors',
+  },
+];
 
-// 加载配置 - 从后端获取 schema.yaml 文件原始内容
-async function loadConfig() {
-  if (!selectedCatalog.value || !selectedSchema.value) {
-    configContent.value = '';
-    originalConfig.value = '';
-    return;
-  }
-  
-  try {
-    const response = await schemaApi.getConfig(selectedCatalog.value.id, selectedSchema.value.name);
-    configContent.value = response.content;
-    originalConfig.value = response.content;
-  } catch (e) {
-    console.error('Failed to load schema config:', e);
-    configContent.value = '';
-    originalConfig.value = '';
-  }
-}
-
-// 保存配置
-async function saveConfig() {
-  savingConfig.value = true;
-  try {
-    // TODO: 调用后端 API 保存配置
-    console.log('Save config:', configContent.value);
-    originalConfig.value = configContent.value;
-  } finally {
-    savingConfig.value = false;
-  }
-}
-
-// 复制配置
-async function copyConfig() {
-  try {
-    await navigator.clipboard.writeText(configContent.value);
-    // TODO: 显示复制成功提示
-  } catch (e) {
-    console.error('Failed to copy:', e);
-  }
+// 获取 Asset 图标颜色
+function getAssetIconColor(type: string) {
+  const colorMap: Record<string, string> = {
+    table: "text-blue-500",
+    volume: "text-green-500",
+    agent: "text-orange-500",
+    note: "text-gray-500",
+    model: "text-purple-500",
+  };
+  return colorMap[type] || "text-gray-500";
 }
 
 // 格式化日期
@@ -543,19 +541,9 @@ function getAssetIcon(type: string) {
     volume: FolderOpen,
     agent: Bot,
     note: FileText,
+    model: Cpu,
   };
   return iconMap[type] || FileText;
-}
-
-// 获取 Asset 图标颜色
-function getAssetIconColor(type: string) {
-  const colorMap: Record<string, string> = {
-    table: "text-blue-500",
-    volume: "text-green-500",
-    agent: "text-orange-500",
-    note: "text-gray-500",
-  };
-  return colorMap[type] || "text-gray-500";
 }
 
 // 获取 Asset 类型标签
@@ -565,6 +553,7 @@ function getAssetTypeLabel(type: string) {
     volume: 'Volume',
     agent: 'Agent',
     note: 'Note',
+    model: 'Model',
   };
   return labelMap[type] || type;
 }
@@ -576,6 +565,7 @@ function getAssetTypeClass(type: string) {
     volume: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     agent: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
     note: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+    model: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
   };
   return classMap[type] || "bg-gray-100 text-gray-700";
 }
@@ -591,6 +581,22 @@ function confirmDeleteSchema() {
 // 执行删除
 async function handleConfirmDelete() {
   if (!selectedCatalog.value || !selectedSchema.value) return;
+  
+  // 如果有待删除的 Model
+  if (modelToDelete.value) {
+    const success = await store.deleteModel(
+      selectedCatalog.value.id, 
+      selectedSchema.value.name, 
+      modelToDelete.value.name
+    );
+    if (success) {
+      showDeleteDialog.value = false;
+      modelToDelete.value = null;
+      // 重新加载 Models 列表
+      await loadModels();
+    }
+    return;
+  }
   
   // 如果有待删除的 Asset
   if (assetToDelete.value) {
@@ -659,6 +665,8 @@ async function handleCreateModel(catalogId: string, schemaName: string, data: Mo
   const result = await store.createModel(catalogId, schemaName, data);
   if (result) {
     showCreateModelDialog.value = false;
+    // 重新加载 Models 列表
+    await loadModels();
   }
 }
 
@@ -679,6 +687,8 @@ async function handleSyncMetadata() {
       await store.fetchCatalog(selectedCatalog.value.id);
       // 重新加载 assets
       await store.fetchAssets(selectedCatalog.value.id, selectedSchema.value.name);
+      // 重新加载 models
+      await loadModels();
     }
   } catch (error) {
     console.error('Sync metadata failed:', error);
@@ -700,21 +710,77 @@ function handleAssetClick(asset: Asset) {
   store.selectAsset(asset);
 }
 
+// 点击 Model 行打开详情
+function handleModelClick(model: Model) {
+  if (selectedCatalog.value && selectedSchema.value) {
+    store.selectModel(selectedCatalog.value.id, selectedSchema.value.name, model.name);
+  }
+}
+
+// 处理 Asset/Model 行点击事件（ItemListCard）
+function handleAssetRowClick(payload: { item: ItemType; index: number }) {
+  const item = payload.item as UnifiedAssetItem;
+  if (item._isModel) {
+    handleModelClick(item._originalData as Model);
+  } else {
+    handleAssetClick(item._originalData as Asset);
+  }
+}
+
+// 处理 Asset/Model 操作事件（ItemListCard）
+function handleAssetAction(payload: { column: ColumnConfig; item: ItemType; index: number; action: string }) {
+  if (payload.action === 'delete') {
+    const item = payload.item as UnifiedAssetItem;
+    if (item._isModel) {
+      confirmDeleteModel(item._originalData as Model);
+    } else {
+      confirmDeleteAsset(item._originalData as Asset);
+    }
+  }
+}
+
 // 确认删除 Asset
 const assetToDelete = ref<Asset | null>(null);
+const modelToDelete = ref<Model | null>(null);
 
 function confirmDeleteAsset(asset: Asset) {
   assetToDelete.value = asset;
+  modelToDelete.value = null;
   deleteMessage.value = t('detail.confirmDeleteAsset', { name: asset.name });
   deleteDescription.value = t('detail.confirmDeleteAssetDesc');
   showDeleteDialog.value = true;
 }
 
-// 监听 Schema 变化，重新加载配置
+function confirmDeleteModel(model: Model) {
+  modelToDelete.value = model;
+  assetToDelete.value = null;
+  deleteMessage.value = t('detail.confirmDeleteAsset', { name: model.name });
+  deleteDescription.value = t('detail.confirmDeleteAssetDesc');
+  showDeleteDialog.value = true;
+}
+
+// 加载 Models
+async function loadModels() {
+  if (!selectedCatalog.value || !selectedSchema.value) {
+    currentModels.value = [];
+    return;
+  }
+  
+  try {
+    const models = await modelApi.list(selectedCatalog.value.id, selectedSchema.value.name);
+    currentModels.value = models;
+  } catch (e) {
+    console.error('Failed to load models:', e);
+    currentModels.value = [];
+  }
+}
+
+// 监听 Schema 变化，重新加载配置和 Models
 watch(selectedSchema, () => {
   activeTab.value = 'overview';
   syncResult.value = null;
   loadConfig();
+  loadModels();
 }, { immediate: true });
 </script>
 

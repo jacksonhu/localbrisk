@@ -63,6 +63,9 @@
       :version="appInfo?.version || '0.1.0'"
       @close="isAboutOpen = false"
     />
+    
+    <!-- Toast 通知容器 -->
+    <ToastContainer />
   </div>
 </template>
 
@@ -73,6 +76,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import tauriService from "@/services/tauri";
 import SettingsDialog from "@/components/settings/SettingsDialog.vue";
 import AboutDialog from "@/components/settings/AboutDialog.vue";
+import ToastContainer from "@/components/common/ToastContainer.vue";
 import { setLocale } from "@/i18n";
 import logoSvg from "@/assets/logo.svg";
 

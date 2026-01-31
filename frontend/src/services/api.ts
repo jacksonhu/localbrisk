@@ -111,6 +111,12 @@ export const catalogApi = {
     request<Catalog>(`/api/catalogs/${catalogId}`),
 
   /**
+   * 获取 Catalog 配置文件 (config.yaml) 原始内容
+   */
+  getConfig: (catalogId: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/config`),
+
+  /**
    * 创建 Catalog
    */
   create: (data: CatalogCreate): Promise<Catalog> =>

@@ -210,38 +210,14 @@
 
       <!-- 配置 Tab -->
       <div v-if="activeTab === 'config'" class="h-full">
-        <div class="card-float h-full flex flex-col">
-          <div class="p-4 border-b border-border flex items-center justify-between">
-            <h3 class="font-medium flex items-center gap-2">
-              <FileCode class="w-4 h-4" />
-              {{ t('detail.configFile') }} (model.yaml)
-            </h3>
-            <div class="flex items-center gap-2">
-              <button
-                @click="saveConfig"
-                :disabled="!configModified || savingConfig"
-                class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Save class="w-4 h-4" />
-                {{ t('common.save') }}
-              </button>
-              <button
-                @click="copyConfig"
-                class="px-3 py-1.5 text-sm border border-input rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-              >
-                <Copy class="w-4 h-4" />
-                {{ t('common.copy') }}
-              </button>
-            </div>
-          </div>
-          <div class="flex-1 p-4 overflow-hidden">
-            <textarea
-              v-model="configContent"
-              class="w-full h-full font-mono text-sm bg-muted/50 border border-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-              spellcheck="false"
-            ></textarea>
-          </div>
-        </div>
+        <ConfigEditor
+          v-model="configContent"
+          :title="`${t('detail.configFile')} (model.yaml)`"
+          :modified="configModified"
+          :saving="savingConfig"
+          @save="saveConfig"
+          @copy="copyConfig"
+        />
       </div>
 
       <!-- Chat Tab (预留) -->
@@ -272,11 +248,13 @@ import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, Cpu, Pencil, Trash2,
-  FileText, FileCode, Save, Copy, MessageSquare,
+  FileText, FileCode, MessageSquare,
   HardDrive, Cloud, Eye, EyeOff
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import ConfigEditor from "@/components/common/ConfigEditor.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
+import { useConfigManager } from "@/composables/useConfigManager";
 import { modelApi } from "@/services/api";
 
 const { t } = useI18n();
@@ -296,12 +274,45 @@ const tabs = computed(() => [
   { id: 'chat' as const, label: 'Chat', icon: MessageSquare },
 ]);
 
-// 配置内容
-const configContent = ref('');
-const originalConfig = ref('');
-const savingConfig = ref(false);
+// 使用配置管理器处理 Model 配置
+const modelConfigManager = useConfigManager({
+  type: 'model',
+  getConfigPath: () => {
+    if (!selectedModel.value?.path) return undefined;
+    // Model 配置文件名为 {modelName}.yaml
+    return selectedModel.value.path;
+  },
+  loadConfig: async () => {
+    if (!selectedCatalog.value || !selectedSchema.value || !selectedModel.value) return '';
+    try {
+      const response = await modelApi.getConfig(
+        selectedCatalog.value.id,
+        selectedSchema.value.name,
+        selectedModel.value.name
+      );
+      return response.content;
+    } catch (e) {
+      console.error('Failed to load model config:', e);
+      return '';
+    }
+  },
+  onSaved: async () => {
+    // 刷新 model 数据
+    if (selectedCatalog.value && selectedSchema.value && selectedModel.value) {
+      await store.selectModel(selectedCatalog.value.id, selectedSchema.value.name, selectedModel.value.name);
+    }
+  },
+});
 
-const configModified = computed(() => configContent.value !== originalConfig.value);
+// 解构配置管理器的状态和方法
+const {
+  configContent,
+  configModified,
+  savingConfig,
+  saveConfig,
+  copyConfig,
+  loadConfigContent: loadConfig,
+} = modelConfigManager;
 
 // 弹窗状态
 const showDeleteDialog = ref(false);
@@ -341,51 +352,6 @@ function maskApiKey(apiKey?: string): string {
   if (!apiKey) return '-';
   if (apiKey.length <= 8) return '********';
   return apiKey.slice(0, 4) + '****' + apiKey.slice(-4);
-}
-
-// 加载配置 - 从后端获取 model.yaml 文件原始内容
-async function loadConfig() {
-  if (!selectedCatalog.value || !selectedSchema.value || !selectedModel.value) {
-    configContent.value = '';
-    originalConfig.value = '';
-    return;
-  }
-  
-  try {
-    const response = await modelApi.getConfig(
-      selectedCatalog.value.id, 
-      selectedSchema.value.name, 
-      selectedModel.value.name
-    );
-    configContent.value = response.content;
-    originalConfig.value = response.content;
-  } catch (e) {
-    console.error('Failed to load model config:', e);
-    configContent.value = '';
-    originalConfig.value = '';
-  }
-}
-
-// 保存配置
-async function saveConfig() {
-  savingConfig.value = true;
-  try {
-    // TODO: 调用后端 API 保存配置
-    console.log('Save model config:', configContent.value);
-    originalConfig.value = configContent.value;
-  } finally {
-    savingConfig.value = false;
-  }
-}
-
-// 复制配置
-async function copyConfig() {
-  try {
-    await navigator.clipboard.writeText(configContent.value);
-    // TODO: 显示复制成功提示
-  } catch (e) {
-    console.error('Failed to copy:', e);
-  }
 }
 
 // 格式化日期
