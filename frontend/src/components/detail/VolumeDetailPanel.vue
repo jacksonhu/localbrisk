@@ -344,38 +344,13 @@
 
       <!-- 配置 Tab -->
       <div v-if="activeTab === 'config'" class="flex-1">
-        <div class="card-float h-full flex flex-col">
-          <div class="p-4 border-b border-border flex items-center justify-between">
-            <h3 class="font-medium flex items-center gap-2">
-              <FileCode class="w-4 h-4" />
-              {{ t('detail.configFile') }}
-            </h3>
-            <div class="flex items-center gap-2">
-              <button
-                @click="saveConfig"
-                :disabled="!configModified || savingConfig"
-                class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Save class="w-4 h-4" />
-                {{ t('common.save') }}
-              </button>
-              <button
-                @click="copyConfig"
-                class="px-3 py-1.5 text-sm border border-input rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-              >
-                <Copy class="w-4 h-4" />
-                {{ t('common.copy') }}
-              </button>
-            </div>
-          </div>
-          <div class="flex-1 p-4 overflow-hidden">
-            <textarea
-              v-model="configContent"
-              class="w-full h-full font-mono text-sm bg-muted/50 border border-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-              spellcheck="false"
-            ></textarea>
-          </div>
-        </div>
+        <ConfigEditor
+          v-model="configContent"
+          :modified="configModified"
+          :saving="savingConfig"
+          @save="saveConfig"
+          @copy="copyConfig"
+        />
       </div>
     </div>
 
@@ -447,20 +422,32 @@ import {
   ArrowLeft, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight,
   FolderOpen, Folder, Pencil, Search, Trash2, RefreshCw, Download,
   FolderPlus, File as FileIcon, Loader2, HardDrive, Cloud,
-  FileText, FileCode, Save, Copy, Eye
+  FileText, FileCode, Eye
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import ConfigEditor from "@/components/common/ConfigEditor.vue";
 import UniversalViewer from "@/components/viewer/UniversalViewer.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
+import { useConfigManager } from "@/composables/useConfigManager";
+import { assetApi } from "@/services/api";
 import { 
   createLocalVolumeService, 
   createS3VolumeService,
-  readLocalTextFile,
-  readLocalBinaryFile,
   type FileInfo,
   type VolumeFileService,
   type S3Config
 } from "@/services/fileService";
+import { 
+  PREVIEWABLE_EXTENSIONS, 
+  BINARY_EXTENSIONS, 
+  FILE_ICON_COLORS,
+  isFilePreviewable,
+  isBinaryFile,
+  getFileIconColor,
+  formatFileSize,
+  formatDate,
+  readLocalFileContent,
+} from "@/composables/useFileBrowser";
 
 const { t } = useI18n();
 const store = useCatalogStore();
@@ -509,12 +496,44 @@ const s3Config = computed<S3Config | null>(() => {
 // 文件服务实例
 const fileService = ref<VolumeFileService | null>(null);
 
-// 配置内容
-const configContent = ref('');
-const originalConfig = ref('');
-const savingConfig = ref(false);
+// 使用配置管理器处理 Volume 配置
+const volumeConfigManager = useConfigManager({
+  type: 'asset',
+  getConfigPath: () => {
+    if (!selectedAsset.value?.path) return undefined;
+    return selectedAsset.value.path;
+  },
+  loadConfig: async () => {
+    if (!selectedCatalog.value || !selectedSchema.value || !selectedAsset.value) return '';
+    try {
+      const response = await assetApi.getConfig(
+        selectedCatalog.value.id,
+        selectedSchema.value.name,
+        selectedAsset.value.name
+      );
+      return response.content;
+    } catch (e) {
+      console.error('Failed to load asset config:', e);
+      return '';
+    }
+  },
+  onSaved: async () => {
+    // 刷新 asset 数据
+    if (selectedCatalog.value && selectedSchema.value) {
+      await store.fetchAssets(selectedCatalog.value.id, selectedSchema.value.name);
+    }
+  },
+});
 
-const configModified = computed(() => configContent.value !== originalConfig.value);
+// 解构配置管理器的状态和方法
+const {
+  configContent,
+  configModified,
+  savingConfig,
+  saveConfig,
+  copyConfig,
+  loadConfigContent: loadConfig,
+} = volumeConfigManager;
 
 // 文件列表状态
 const files = ref<FileInfo[]>([]);
@@ -597,124 +616,6 @@ function initFileService() {
   }
 }
 
-// 生成 YAML 配置内容
-function generateConfigYaml(): string {
-  if (!selectedAsset.value) return '';
-  
-  const config: Record<string, unknown> = {
-    name: selectedAsset.value.name,
-    asset_type: selectedAsset.value.asset_type,
-    schema_id: selectedAsset.value.schema_id,
-  };
-  
-  if (selectedAsset.value.path) {
-    config.path = selectedAsset.value.path;
-  }
-  
-  // 添加元数据
-  if (selectedAsset.value.metadata) {
-    const meta = selectedAsset.value.metadata;
-    if (meta.description) config.description = meta.description;
-    if (meta.volume_type) config.volume_type = meta.volume_type;
-    if (meta.storage_location) config.storage_location = meta.storage_location;
-    if (meta.s3_endpoint) config.s3_endpoint = meta.s3_endpoint;
-    if (meta.s3_bucket) config.s3_bucket = meta.s3_bucket;
-  }
-  
-  config.created_at = selectedAsset.value.created_at;
-  if (selectedAsset.value.updated_at) {
-    config.updated_at = selectedAsset.value.updated_at;
-  }
-  
-  // 简单的 YAML 格式化
-  return Object.entries(config)
-    .map(([key, value]) => {
-      if (typeof value === 'string' && (value.includes(':') || value.includes('#') || value.includes('\n'))) {
-        return `${key}: "${value}"`;
-      }
-      return `${key}: ${value}`;
-    })
-    .join('\n');
-}
-
-// 加载配置
-function loadConfig() {
-  const yaml = generateConfigYaml();
-  configContent.value = yaml;
-  originalConfig.value = yaml;
-}
-
-// 保存配置
-async function saveConfig() {
-  savingConfig.value = true;
-  try {
-    // TODO: 调用后端 API 保存配置
-    console.log('Save config:', configContent.value);
-    originalConfig.value = configContent.value;
-  } finally {
-    savingConfig.value = false;
-  }
-}
-
-// 复制配置
-async function copyConfig() {
-  try {
-    await navigator.clipboard.writeText(configContent.value);
-    // TODO: 显示复制成功提示
-  } catch (e) {
-    console.error('Failed to copy:', e);
-  }
-}
-
-// 格式化日期
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '-';
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return dateStr;
-  }
-}
-
-// 格式化文件大小
-function formatFileSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '-';
-  if (bytes === 0) return '0 B';
-  
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const k = 1024;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + units[i];
-}
-
-// 获取文件图标颜色
-function getFileIconColor(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const colorMap: Record<string, string> = {
-    pdf: 'text-red-500',
-    doc: 'text-blue-500',
-    docx: 'text-blue-500',
-    xls: 'text-green-500',
-    xlsx: 'text-green-500',
-    ppt: 'text-orange-500',
-    pptx: 'text-orange-500',
-    jpg: 'text-purple-500',
-    jpeg: 'text-purple-500',
-    png: 'text-purple-500',
-    gif: 'text-purple-500',
-    mp4: 'text-pink-500',
-    mp3: 'text-cyan-500',
-    zip: 'text-yellow-600',
-    rar: 'text-yellow-600',
-    json: 'text-yellow-500',
-    csv: 'text-green-600',
-    parquet: 'text-blue-600',
-  };
-  return colorMap[ext || ''] || 'text-gray-500';
-}
-
 // 导航函数
 function goBack() {
   store.clearSelectedAsset();
@@ -767,43 +668,18 @@ function navigateToFolder(file: FileInfo) {
   refreshFiles();
 }
 
-// 支持预览的文件类型
-const PREVIEWABLE_EXTENSIONS = new Set([
-  // 图片
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico',
-  // PDF
-  'pdf',
-  // 文本/代码
-  'txt', 'log', 'md', 'markdown',
-  'js', 'ts', 'jsx', 'tsx', 'vue', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h',
-  'cs', 'rb', 'php', 'swift', 'kt', 'scala', 'sql', 'sh', 'bash', 'zsh', 'ps1',
-  'html', 'css', 'scss', 'less', 'json', 'yaml', 'yml', 'xml', 'toml', 'ini', 'conf', 'env',
-  // 表格
-  'csv', 'xlsx', 'xls',
-  // Office 文档
-  'doc', 'docx', 'ppt', 'pptx',
-]);
-
-// 二进制文件类型
-const BINARY_EXTENSIONS = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico',
-  'pdf', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt',
-]);
-
 // 检查文件是否可预览
 function isPreviewable(fileName: string): boolean {
-  const ext = fileName.split('.').pop()?.toLowerCase() || '';
-  return PREVIEWABLE_EXTENSIONS.has(ext);
+  return isFilePreviewable(fileName);
 }
 
 // 打开文件查看器
 async function openFileViewer(file: FileInfo) {
   if (file.is_directory) return;
   
-  const ext = file.name.split('.').pop()?.toLowerCase() || '';
-  
   if (!isPreviewable(file.name)) {
     // 不支持预览，可以考虑提示用户
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
     console.log('File type not supported for preview:', ext);
     return;
   }
@@ -821,14 +697,8 @@ async function openFileViewer(file: FileInfo) {
       : `${storageLocation.value}/${file.name}`;
     
     if (volumeType.value === 'local') {
-      // 本地文件
-      if (BINARY_EXTENSIONS.has(ext)) {
-        // 二进制文件
-        viewerFileContent.value = await readLocalBinaryFile(fullPath);
-      } else {
-        // 文本文件
-        viewerFileContent.value = await readLocalTextFile(fullPath);
-      }
+      // 本地文件 - 使用公共函数读取
+      viewerFileContent.value = await readLocalFileContent(fullPath);
     } else if (volumeType.value === 's3' && fileService.value) {
       // S3 文件 - 需要通过 fileService 读取
       // TODO: 实现 S3 文件内容读取

@@ -5,11 +5,24 @@
 
 // ============ 枚举类型 ============
 
+/** 实体类型枚举 */
+export type EntityType = 
+  | "catalog" 
+  | "schema" 
+  | "agent" 
+  | "table" 
+  | "volume" 
+  | "model" 
+  | "prompt" 
+  | "skill" 
+  | "note" 
+  | "function";
+
 /** 数据库连接类型 */
 export type ConnectionType = "mysql" | "postgresql" | "sqlite" | "duckdb";
 
-/** Schema 来源类型 */
-export type SchemaSource = "local" | "connection";
+/** Schema 类型 */
+export type SchemaType = "local" | "external";
 
 /** 资产类型 */
 export type AssetType = "table" | "volume" | "agent" | "note" | "function" | "model";
@@ -20,9 +33,49 @@ export type VolumeType = "local" | "s3";
 /** 导航树节点类型 */
 export type NodeType = "catalog" | "schema" | "asset_type" | "table" | "volume" | "agent" | "note" | "function" | "model" | "placeholder" | "folder" | "skill" | "prompt";
 
+// ============ 基础实体类型 ============
+
+/**
+ * 基础实体接口
+ * 所有 Catalog 下的实体都具有这些基础属性
+ */
+export interface BaseEntity {
+  /** 名称（唯一标识，用于文件夹/文件名） */
+  name: string;
+  /** 展示名称（UI 显示用） */
+  display_name?: string;
+  /** 描述 */
+  description?: string;
+  /** 标签列表 */
+  tags?: string[];
+  /** 实体类型 */
+  entity_type?: EntityType;
+  /** 文件系统路径 */
+  path?: string;
+  /** 创建时间 */
+  created_at?: string;
+  /** 更新时间 */
+  updated_at?: string;
+}
+
+/** 创建实体的基础请求 */
+export interface BaseEntityCreate {
+  name: string;
+  display_name?: string;
+  description?: string;
+  tags?: string[];
+}
+
+/** 更新实体的基础请求 */
+export interface BaseEntityUpdate {
+  display_name?: string;
+  description?: string;
+  tags?: string[];
+}
+
 // ============ 连接配置 ============
 
-/** 外部数据库连接配置 */
+/** 外部数据库连接配置 - 现在属于 Schema 级别 */
 export interface ConnectionConfig {
   type: ConnectionType;
   host?: string;
@@ -30,75 +83,50 @@ export interface ConnectionConfig {
   db_name: string;
   username?: string;
   password?: string;
-  sync_schema?: boolean;
 }
 
 // ============ Catalog 相关 ============
 
 /** Catalog 完整信息 */
-export interface Catalog {
+export interface Catalog extends BaseEntity {
   id: string;
-  name: string;
-  display_name: string;
+  entity_type?: "catalog";
   owner: string;
-  description?: string;
-  tags: string[];
-  path: string;
-  has_connections: boolean;
-  allow_custom_schema: boolean;
-  created_at: string;
-  updated_at: string;
   schemas: Schema[];
   agents?: Agent[];  // Catalog 下的 Agent 列表
-  models?: Model[];  // Catalog 下的 Model 列表
-  connections?: ConnectionConfig[];
 }
 
 /** 创建 Catalog 请求 */
-export interface CatalogCreate {
-  name: string;
-  display_name?: string;
+export interface CatalogCreate extends BaseEntityCreate {
   owner?: string;
-  description?: string;
-  allow_custom_schema?: boolean;
-  connections?: ConnectionConfig[];
 }
 
 /** 更新 Catalog 请求 */
-export interface CatalogUpdate {
-  display_name?: string;
-  description?: string;
-  tags?: string[];
-  allow_custom_schema?: boolean;
-  connections?: ConnectionConfig[];
-}
+export interface CatalogUpdate extends BaseEntityUpdate {}
 
 // ============ Schema 相关 ============
 
 /** Schema 完整信息 */
-export interface Schema {
+export interface Schema extends BaseEntity {
   id: string;
-  name: string;
   catalog_id: string;
   owner: string;
-  description?: string;
-  source: SchemaSource;
-  connection_name?: string;
-  readonly: boolean;
-  path?: string;
-  created_at: string;
+  entity_type?: "schema";
+  schema_type: SchemaType;  // Schema 类型：local 或 external
+  connection?: ConnectionConfig;  // 数据库连接配置（External 类型必须有）
+  synced_at?: string;  // 最后同步时间（仅 External 类型有）
 }
 
 /** 创建 Schema 请求 */
-export interface SchemaCreate {
-  name: string;
+export interface SchemaCreate extends BaseEntityCreate {
   owner?: string;
-  description?: string;
+  schema_type: SchemaType;  // Schema 类型
+  connection?: ConnectionConfig;  // External 类型必填
 }
 
 /** 更新 Schema 请求 */
-export interface SchemaUpdate {
-  description?: string;
+export interface SchemaUpdate extends BaseEntityUpdate {
+  connection?: ConnectionConfig;  // 仅 External 类型可更新
 }
 
 // ============ Asset 相关 ============
@@ -112,22 +140,16 @@ export interface AssetMetadata {
 }
 
 /** Asset 完整信息 */
-export interface Asset {
+export interface Asset extends BaseEntity {
   id: string;
-  name: string;
   schema_id: string;
   asset_type: AssetType;
-  path: string;
   metadata: AssetMetadata;
-  created_at: string;
-  updated_at?: string;
 }
 
 /** 创建 Asset 请求 */
-export interface AssetCreate {
-  name: string;
+export interface AssetCreate extends BaseEntityCreate {
   asset_type: AssetType;
-  description?: string;
   // Volume 特有字段
   volume_type?: VolumeType;
   storage_location?: string;      // 本地存储路径（仅 local 类型）
@@ -154,8 +176,7 @@ export interface CatalogTreeNode {
   node_type: NodeType;
   children: CatalogTreeNode[];
   icon?: string;
-  readonly: boolean;
-  source?: SchemaSource;
+  schema_type?: SchemaType;  // 仅 schema 节点有
   metadata: Record<string, any>;
 }
 
@@ -168,8 +189,7 @@ export interface CatalogItem {
   expanded?: boolean;
   children?: CatalogItem[];
   metadata?: Record<string, any>;
-  readonly?: boolean;
-  source?: SchemaSource;
+  schema_type?: SchemaType;  // 仅 schema 节点有
 }
 
 // ============ 辅助类型 ============
@@ -183,21 +203,19 @@ export interface Column {
 }
 
 /** Table 详细信息 */
-export interface Table {
+export interface Table extends BaseEntity {
   id: string;
-  name: string;
   schema_id: string;
-  path: string;
+  entity_type?: "table";
   format: "parquet" | "csv" | "json" | "delta";
   columns?: Column[];
 }
 
 /** Volume 信息 */
-export interface Volume {
+export interface Volume extends BaseEntity {
   id: string;
-  name: string;
   schema_id: string;
-  path: string;
+  entity_type?: "volume";
   volume_type: VolumeType;
   storage_location?: string;       // 本地存储路径
   // S3 配置
@@ -207,44 +225,105 @@ export interface Volume {
   s3_secret_key?: string;
 }
 
-/** Agent 信息 - Catalog 下的一级子项 */
-export interface Agent {
+/** Agent 元数据 - BMAD Spec 中的 metadata 节 */
+export interface AgentMetadata {
+  // 注意：不需要 ID 字段，Agent 的唯一性由 Catalog 下的目录路径决定
+  display_name?: string;
+  description?: string;
+}
+
+/** 用户提示词模板 - 对应 prompts/ 目录下的文件 */
+export interface AgentPromptTemplate {
+  name: string;
+}
+
+/** Agent 指令配置 */
+export interface AgentInstruction {
+  llm_model?: string;  // LLM 模型引用，引用 Schema 下定义的 Model 名称
+  system_prompt?: string;
+  user_prompt_templates?: AgentPromptTemplate[];  // 提示词模板（对应 prompts/ 目录）
+}
+
+/** Agent 路由配置 */
+export interface AgentRouting {
+  trigger_keywords?: string[];
+  required_context_keys?: string[];
+  next_possible_agents?: string[];
+}
+
+/** 原生技能 - 对应 skills/ 目录下的文件 */
+export interface AgentNativeSkill {
+  name: string;
+}
+
+/** MCP 工具配置 */
+export interface AgentMCPTool {
+  server_id: string;
+  tools?: string[];
+}
+
+/** Agent 能力配置 */
+export interface AgentCapabilities {
+  native_skills?: AgentNativeSkill[];  // 原生技能（对应 skills/ 目录）
+  mcp_tools?: AgentMCPTool[];
+}
+
+/** 人机协作配置 */
+export interface AgentHumanInTheLoop {
+  trigger?: string;
+}
+
+/** Agent 治理配置 */
+export interface AgentGovernance {
+  human_in_the_loop?: AgentHumanInTheLoop;
+  termination_criteria?: string;
+}
+
+/** Agent 信息 - Catalog 下的一级子项（基于 BMAD Standard Spec） */
+export interface Agent extends BaseEntity {
   id: string;
-  name: string;
-  catalog_id: string;  // 所属 Catalog
-  description?: string;
-  path: string;  // Agent 文件夹路径
-  system_prompt?: string;  // Agent 的系统提示词
-  model_reference?: string;  // 引用的模型，格式：schema_name.model_name
-  skills: string[];  // skills 文件列表
-  prompts: string[];  // prompts (markdown) 文件列表
-  created_at: string;
-  updated_at?: string;
+  catalog_id: string;
+  entity_type?: "agent";
+  
+  // BMAD Standard Spec 配置节
+  agent_metadata?: AgentMetadata;
+  instruction?: AgentInstruction;
+  routing?: AgentRouting;
+  capabilities?: AgentCapabilities;
+  governance?: AgentGovernance;
+  
+  // 兼容旧版字段（快捷访问）
+  system_prompt?: string;
+  llm_model?: string;  // LLM 模型引用
+  
+  // skills 和 prompts 文件列表（目录扫描结果）
+  skills: string[];
+  prompts: string[];
 }
 
-/** 创建 Agent 请求 */
-export interface AgentCreate {
-  name: string;
-  description?: string;
-  system_prompt?: string;
-  model_reference?: string;  // 引用的模型
-}
+/** 创建 Agent 请求 - 简化版，仅需 name */
+export interface AgentCreate extends BaseEntityCreate {}
 
-/** 更新 Agent 请求 */
-export interface AgentUpdate {
-  description?: string;
+/** 更新 Agent 请求 - 支持完整的 BMAD Spec 配置 */
+export interface AgentUpdate extends BaseEntityUpdate {
+  // BMAD Standard Spec 配置节
+  metadata?: AgentMetadata;
+  instruction?: AgentInstruction;
+  routing?: AgentRouting;
+  capabilities?: AgentCapabilities;
+  governance?: AgentGovernance;
+  
+  // 兼容旧版字段
   system_prompt?: string;
-  model_reference?: string;  // 引用的模型
+  llm_model?: string;  // LLM 模型引用
 }
 
 /** Note 信息 */
-export interface Note {
+export interface Note extends BaseEntity {
   id: string;
-  name: string;
   schema_id: string;
+  entity_type?: "note";
   content: string;
-  created_at: string;
-  updated_at: string;
 }
 
 // ============ Model 相关 ============
@@ -280,11 +359,10 @@ export type EndpointProvider =
   | "other";
 
 /** Model 信息 - Schema 下的资产类型 */
-export interface Model {
+export interface Model extends BaseEntity {
   id: string;
-  name: string;
   schema_id: string;  // 所属 Schema
-  description?: string;
+  entity_type?: "model";
   model_type: ModelType;
   // 本地模型字段
   local_provider?: string;
@@ -297,15 +375,10 @@ export interface Model {
   api_base_url?: string;
   api_key?: string;
   model_id?: string;
-  path: string;
-  created_at: string;
-  updated_at?: string;
 }
 
 /** 创建 Model 请求 */
-export interface ModelCreate {
-  name: string;
-  description?: string;
+export interface ModelCreate extends BaseEntityCreate {
   model_type: ModelType;
   // 本地模型字段
   local_provider?: string;
@@ -321,8 +394,7 @@ export interface ModelCreate {
 }
 
 /** 更新 Model 请求 */
-export interface ModelUpdate {
-  description?: string;
+export interface ModelUpdate extends BaseEntityUpdate {
   api_key?: string;
   api_base_url?: string;
   model_id?: string;
@@ -338,4 +410,33 @@ export interface DeleteResponse {
 /** 错误响应 */
 export interface ErrorResponse {
   detail: string;
+}
+
+/** 同步结果 */
+export interface SyncResult {
+  success: boolean;
+  schemas_synced: number;
+  tables_synced: number;
+  columns_synced: number;
+  errors: string[];
+  warnings: string[];
+}
+
+// ============ Prompt 相关 ============
+
+/** Prompt 信息 - Agent 下的子资源 */
+export interface Prompt extends BaseEntity {
+  entity_type?: "prompt";
+  content: string;
+  enabled: boolean;  // 是否在 agent_spec.yaml 的 enabled_prompts 中
+}
+
+/** 创建 Prompt 请求 */
+export interface PromptCreate extends BaseEntityCreate {
+  content: string;
+}
+
+/** 更新 Prompt 请求 */
+export interface PromptUpdate extends BaseEntityUpdate {
+  content?: string;
 }

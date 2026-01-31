@@ -12,12 +12,16 @@ import type {
   Schema,
   SchemaCreate,
   SchemaUpdate,
+  SyncResult,
   Asset,
   AssetCreate,
   Agent,
   AgentCreate,
   AgentUpdate,
   DeleteResponse,
+  Prompt,
+  PromptCreate,
+  PromptUpdate,
 } from "@/types/catalog";
 
 const API_BASE_URL = "http://127.0.0.1:8765";
@@ -107,6 +111,12 @@ export const catalogApi = {
     request<Catalog>(`/api/catalogs/${catalogId}`),
 
   /**
+   * 获取 Catalog 配置文件 (config.yaml) 原始内容
+   */
+  getConfig: (catalogId: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/config`),
+
+  /**
    * 创建 Catalog
    */
   create: (data: CatalogCreate): Promise<Catalog> =>
@@ -141,6 +151,8 @@ export const catalogApi = {
 
 // ============ Schema API ============
 
+// ============ Schema API ============
+
 export const schemaApi = {
   /**
    * 获取 Catalog 下的所有 Schema
@@ -150,13 +162,15 @@ export const schemaApi = {
 
   /**
    * 获取单个 Schema 详情
-   * 注意：后端暂无此接口，从 Catalog 详情中提取
    */
-  get: async (catalogId: string, schemaName: string): Promise<Schema | null> => {
-    const catalog = await catalogApi.get(catalogId);
-    const schema = catalog.schemas.find(s => s.name === schemaName);
-    return schema || null;
-  },
+  get: (catalogId: string, schemaName: string): Promise<Schema> =>
+    request<Schema>(`/api/catalogs/${catalogId}/schemas/${schemaName}`),
+
+  /**
+   * 获取 Schema 配置文件 (schema.yaml) 原始内容
+   */
+  getConfig: (catalogId: string, schemaName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/config`),
 
   /**
    * 创建 Schema
@@ -182,6 +196,14 @@ export const schemaApi = {
   delete: (catalogId: string, schemaName: string): Promise<DeleteResponse> =>
     request<DeleteResponse>(`/api/catalogs/${catalogId}/schemas/${schemaName}`, {
       method: "DELETE",
+    }),
+
+  /**
+   * 同步 Schema 元数据（手动触发）
+   */
+  sync: (catalogId: string, schemaName: string): Promise<SyncResult> =>
+    request<SyncResult>(`/api/catalogs/${catalogId}/schemas/${schemaName}/sync`, {
+      method: "POST",
     }),
 };
 
@@ -221,6 +243,12 @@ export const assetApi = {
     }),
 
   /**
+   * 获取 Asset 配置文件原始内容
+   */
+  getConfig: (catalogId: string, schemaName: string, assetName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/assets/${assetName}/config`),
+
+  /**
    * 预览表数据
    */
   previewTableData: (
@@ -251,6 +279,12 @@ export const agentApi = {
     request<Agent>(`/api/catalogs/${catalogId}/agents/${agentName}`),
 
   /**
+   * 获取 Agent 配置文件 (agent_spec.yaml) 原始内容
+   */
+  getConfig: (catalogId: string, agentName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/config`),
+
+  /**
    * 创建 Agent
    */
   create: (catalogId: string, data: AgentCreate): Promise<Agent> =>
@@ -279,16 +313,31 @@ export const agentApi = {
   /**
    * 获取 Agent Prompt 内容
    */
-  getPrompt: (catalogId: string, agentName: string, promptName: string): Promise<{ name: string; content: string }> =>
-    request<{ name: string; content: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`),
+  getPrompt: (catalogId: string, agentName: string, promptName: string): Promise<Prompt> =>
+    request<Prompt>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`),
 
   /**
-   * 创建/更新 Agent Prompt
+   * 获取 Agent 所有 Prompts
    */
-  createPrompt: (catalogId: string, agentName: string, promptName: string, content: string): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`, {
+  listPrompts: (catalogId: string, agentName: string): Promise<Prompt[]> =>
+    request<Prompt[]>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts`),
+
+  /**
+   * 创建 Agent Prompt
+   */
+  createPrompt: (catalogId: string, agentName: string, data: PromptCreate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * 更新 Agent Prompt
+   */
+  updatePrompt: (catalogId: string, agentName: string, promptName: string, data: PromptUpdate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
     }),
 
   /**
@@ -321,6 +370,32 @@ export const agentApi = {
     request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}`, {
       method: "DELETE",
     }),
+
+  /**
+   * 切换 Prompt 启用状态
+   */
+  togglePromptEnabled: (catalogId: string, agentName: string, promptName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}/toggle?enabled=${enabled}`, {
+      method: "POST",
+    }),
+
+  /**
+   * 切换 Skill 启用状态
+   */
+  toggleSkillEnabled: (catalogId: string, agentName: string, skillName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}/toggle?enabled=${enabled}`, {
+      method: "POST",
+    }),
+
+  /**
+   * 从本地 zip 文件路径导入 Skill
+   * 本地桌面应用场景，直接传递本地文件路径
+   */
+  importSkillFromZip: (catalogId: string, agentName: string, zipFilePath: string): Promise<{ success: boolean; skill_name?: string; message: string; path?: string }> =>
+    request<{ success: boolean; skill_name?: string; message: string; path?: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/import`, {
+      method: "POST",
+      body: JSON.stringify({ zip_file_path: zipFilePath }),
+    }),
 };
 
 // ============ Model API（Schema 级别） ============
@@ -339,6 +414,12 @@ export const modelApi = {
    */
   get: (catalogId: string, schemaName: string, modelName: string): Promise<Model> =>
     request<Model>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}`),
+
+  /**
+   * 获取 Model 配置文件原始内容
+   */
+  getConfig: (catalogId: string, schemaName: string, modelName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}/config`),
 
   /**
    * 创建 Model

@@ -1,352 +1,293 @@
+<!--
+  CreateModelDialog - 创建 Model 弹窗
+  支持本地模型和 API 端点两种模式
+-->
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center">
-        <!-- 背景遮罩 -->
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="close"></div>
-        
-        <!-- 弹窗内容 -->
-        <div class="relative bg-card rounded-xl shadow-float-lg w-[560px] max-h-[85vh] overflow-hidden">
-          <!-- 标题栏 -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="flex items-center gap-2">
-              <Cpu class="w-5 h-5 text-primary" />
-              <h2 class="text-lg font-semibold text-foreground">
-                {{ t('model.createModel') }}
-              </h2>
-            </div>
-            <button
-              @click="close"
-              class="p-1.5 rounded-lg hover:bg-muted transition-colors"
-            >
-              <X class="w-5 h-5 text-muted-foreground" />
-            </button>
-          </div>
-          
-          <!-- 表单内容 -->
-          <form @submit.prevent="handleSubmit" class="p-6 space-y-5 overflow-y-auto max-h-[65vh]">
-            <!-- 模型名称 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('model.modelName') }}
-                <span class="text-red-500">*</span>
-              </label>
-              <input
-                v-model="form.name"
-                type="text"
-                :placeholder="t('model.modelNameHint')"
-                class="w-full px-3 py-2 bg-background border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                :class="errors.name ? 'border-red-500' : 'border-input'"
-                @input="validateName"
-              />
-              <p v-if="errors.name" class="text-xs text-red-500">{{ errors.name }}</p>
-            </div>
+  <BaseDialog
+    :is-open="isOpen"
+    :title="t('model.createModel')"
+    :icon="Cpu"
+    width="xl"
+    max-height="screen"
+    @close="close"
+  >
+    <form @submit.prevent="handleSubmit" class="space-y-5">
+      <!-- 模型名称 -->
+      <FormField
+        :label="t('model.modelName')"
+        :error="errors.name"
+        required
+      >
+        <FormInput
+          v-model="form.name"
+          :placeholder="t('model.modelNameHint')"
+          :error="!!errors.name"
+          @input="validateName"
+        />
+      </FormField>
 
-            <!-- 描述 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('common.description') }}
-                <span class="text-muted-foreground text-xs ml-1">({{ t('common.optional') }})</span>
-              </label>
-              <textarea
-                v-model="form.description"
-                rows="2"
-                :placeholder="t('model.descriptionHint')"
-                class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-              ></textarea>
-            </div>
+      <!-- 描述 -->
+      <FormField
+        :label="t('common.description')"
+        optional
+      >
+        <FormTextarea
+          v-model="form.description"
+          :placeholder="t('model.descriptionHint')"
+          :rows="2"
+        />
+      </FormField>
 
-            <!-- 模型类型选择 -->
-            <div class="space-y-2">
-              <label class="block text-sm font-medium text-foreground">
-                {{ t('model.modelType') }}
-                <span class="text-red-500">*</span>
-              </label>
-              <div class="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  @click="form.model_type = 'local'"
-                  class="flex flex-col items-center gap-2 p-4 border rounded-lg transition-colors"
-                  :class="form.model_type === 'local' 
-                    ? 'border-primary bg-primary/5 text-primary' 
-                    : 'border-input hover:border-muted-foreground'"
-                >
-                  <HardDrive class="w-6 h-6" />
-                  <span class="text-sm font-medium">{{ t('model.localModel') }}</span>
-                  <span class="text-xs text-muted-foreground">{{ t('model.localModelDesc') }}</span>
-                </button>
-                <button
-                  type="button"
-                  @click="form.model_type = 'endpoint'"
-                  class="flex flex-col items-center gap-2 p-4 border rounded-lg transition-colors"
-                  :class="form.model_type === 'endpoint' 
-                    ? 'border-primary bg-primary/5 text-primary' 
-                    : 'border-input hover:border-muted-foreground'"
-                >
-                  <Cloud class="w-6 h-6" />
-                  <span class="text-sm font-medium">{{ t('model.endpointModel') }}</span>
-                  <span class="text-xs text-muted-foreground">{{ t('model.endpointModelDesc') }}</span>
-                </button>
-              </div>
-            </div>
+      <!-- 模型类型选择 -->
+      <FormField
+        :label="t('model.modelType')"
+        required
+      >
+        <div class="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            @click="form.model_type = 'local'"
+            class="flex flex-col items-center gap-2 p-4 border rounded-lg transition-colors"
+            :class="form.model_type === 'local' 
+              ? 'border-primary bg-primary/5 text-primary' 
+              : 'border-input hover:border-muted-foreground'"
+          >
+            <HardDrive class="w-6 h-6" />
+            <span class="text-sm font-medium">{{ t('model.localModel') }}</span>
+            <span class="text-xs text-muted-foreground">{{ t('model.localModelDesc') }}</span>
+          </button>
+          <button
+            type="button"
+            @click="form.model_type = 'endpoint'"
+            class="flex flex-col items-center gap-2 p-4 border rounded-lg transition-colors"
+            :class="form.model_type === 'endpoint' 
+              ? 'border-primary bg-primary/5 text-primary' 
+              : 'border-input hover:border-muted-foreground'"
+          >
+            <Cloud class="w-6 h-6" />
+            <span class="text-sm font-medium">{{ t('model.endpointModel') }}</span>
+            <span class="text-xs text-muted-foreground">{{ t('model.endpointModelDesc') }}</span>
+          </button>
+        </div>
+      </FormField>
 
-            <!-- 本地模型配置 -->
-            <template v-if="form.model_type === 'local'">
-              <!-- 开源模型类型 -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('model.localProvider') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <select
-                  v-model="form.local_provider"
-                  class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">{{ t('model.selectProvider') }}</option>
-                  <option v-for="provider in localProviders" :key="provider.value" :value="provider.value">
-                    {{ provider.label }}
-                  </option>
-                </select>
-              </div>
+      <!-- 本地模型配置 -->
+      <template v-if="form.model_type === 'local'">
+        <!-- 开源模型类型 -->
+        <FormField
+          :label="t('model.localProvider')"
+          required
+        >
+          <FormSelect
+            v-model="form.local_provider"
+            :options="localProviderOptions"
+            :placeholder="t('model.selectProvider')"
+          />
+        </FormField>
 
-              <!-- 模型来源 -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('model.modelSource') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <div class="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    @click="form.local_source = 'volume'"
-                    class="flex items-center gap-3 p-3 border rounded-lg transition-colors"
-                    :class="form.local_source === 'volume' 
-                      ? 'border-primary bg-primary/5' 
-                      : 'border-input hover:border-muted-foreground'"
-                  >
-                    <FolderOpen class="w-5 h-5" :class="form.local_source === 'volume' ? 'text-primary' : ''" />
-                    <div class="text-left">
-                      <div class="text-sm font-medium">{{ t('model.volumeSource') }}</div>
-                      <div class="text-xs text-muted-foreground">{{ t('model.volumeSourceDesc') }}</div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    @click="form.local_source = 'huggingface'"
-                    class="flex items-center gap-3 p-3 border rounded-lg transition-colors"
-                    :class="form.local_source === 'huggingface' 
-                      ? 'border-primary bg-primary/5' 
-                      : 'border-input hover:border-muted-foreground'"
-                  >
-                    <Download class="w-5 h-5" :class="form.local_source === 'huggingface' ? 'text-primary' : ''" />
-                    <div class="text-left">
-                      <div class="text-sm font-medium">HuggingFace</div>
-                      <div class="text-xs text-muted-foreground">{{ t('model.huggingfaceDesc') }}</div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Volume 引用 -->
-              <div v-if="form.local_source === 'volume'" class="space-y-4">
-                <!-- Schema 选择 -->
-                <div class="space-y-2">
-                  <label class="block text-sm font-medium text-foreground">
-                    {{ t('model.selectSchema') }}
-                    <span class="text-red-500">*</span>
-                  </label>
-                  <select
-                    v-model="selectedSchemaName"
-                    @change="onSchemaChange(selectedSchemaName)"
-                    class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">{{ t('model.selectSchemaHint') }}</option>
-                    <option v-for="schema in schemas" :key="schema.id" :value="schema.name">
-                      {{ schema.name }}
-                    </option>
-                  </select>
-                </div>
-
-                <!-- Volume 选择 -->
-                <div class="space-y-2">
-                  <label class="block text-sm font-medium text-foreground">
-                    {{ t('model.volumeReference') }}
-                    <span class="text-red-500">*</span>
-                  </label>
-                  <div class="relative">
-                    <select
-                      v-model="form.volume_reference"
-                      :disabled="!selectedSchemaName || loadingVolumes"
-                      class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="">{{ loadingVolumes ? t('common.loading') : t('model.selectVolumeHint') }}</option>
-                      <option v-for="volume in volumes" :key="volume.id" :value="`${selectedSchemaName}.${volume.name}`">
-                        {{ volume.name }}
-                      </option>
-                    </select>
-                    <Loader2 v-if="loadingVolumes" class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
-                  </div>
-                  <p v-if="volumes.length === 0 && selectedSchemaName && !loadingVolumes" class="text-xs text-amber-600">
-                    {{ t('model.noVolumesInSchema') }}
-                  </p>
-                  <p v-else class="text-xs text-muted-foreground">{{ t('model.volumeReferenceDesc') }}</p>
-                </div>
-              </div>
-
-              <!-- HuggingFace 配置 -->
-              <template v-if="form.local_source === 'huggingface'">
-                <div class="space-y-2">
-                  <label class="block text-sm font-medium text-foreground">
-                    {{ t('model.huggingfaceRepo') }}
-                    <span class="text-red-500">*</span>
-                  </label>
-                  <input
-                    v-model="form.huggingface_repo"
-                    type="text"
-                    :placeholder="t('model.huggingfaceRepoHint')"
-                    class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                  />
-                </div>
-                <div class="space-y-2">
-                  <label class="block text-sm font-medium text-foreground">
-                    {{ t('model.huggingfaceFilename') }}
-                    <span class="text-muted-foreground text-xs ml-1">({{ t('common.optional') }})</span>
-                  </label>
-                  <input
-                    v-model="form.huggingface_filename"
-                    type="text"
-                    :placeholder="t('model.huggingfaceFilenameHint')"
-                    class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                  />
-                </div>
-              </template>
-            </template>
-
-            <!-- API 端点配置 -->
-            <template v-if="form.model_type === 'endpoint'">
-              <!-- API 提供商 -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('model.endpointProvider') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <div class="grid grid-cols-4 gap-2">
-                  <button
-                    v-for="provider in endpointProviders"
-                    :key="provider.value"
-                    type="button"
-                    @click="selectEndpointProvider(provider.value)"
-                    class="flex flex-col items-center gap-1.5 p-3 border rounded-lg transition-colors"
-                    :class="form.endpoint_provider === provider.value 
-                      ? 'border-primary bg-primary/5' 
-                      : 'border-input hover:border-muted-foreground'"
-                  >
-                    <component :is="provider.icon" class="w-5 h-5" :class="form.endpoint_provider === provider.value ? 'text-primary' : 'text-muted-foreground'" />
-                    <span class="text-xs font-medium">{{ provider.label }}</span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- API Base URL -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('model.apiBaseUrl') }}
-                  <span class="text-muted-foreground text-xs ml-1">({{ t('common.optional') }})</span>
-                </label>
-                <input
-                  v-model="form.api_base_url"
-                  type="text"
-                  :placeholder="getApiUrlPlaceholder()"
-                  class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                />
-                <p class="text-xs text-muted-foreground">{{ t('model.apiBaseUrlDesc') }}</p>
-              </div>
-
-              <!-- API Key -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('model.apiKey') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <div class="relative">
-                  <input
-                    v-model="form.api_key"
-                    :type="showApiKey ? 'text' : 'password'"
-                    :placeholder="t('model.apiKeyHint')"
-                    class="w-full px-3 py-2 pr-10 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                  />
-                  <button
-                    type="button"
-                    @click="showApiKey = !showApiKey"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded"
-                  >
-                    <Eye v-if="!showApiKey" class="w-4 h-4 text-muted-foreground" />
-                    <EyeOff v-else class="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </div>
-              </div>
-
-              <!-- 模型 ID -->
-              <div class="space-y-2">
-                <label class="block text-sm font-medium text-foreground">
-                  {{ t('model.modelId') }}
-                  <span class="text-red-500">*</span>
-                </label>
-                <select
-                  v-if="getModelOptions().length > 0"
-                  v-model="form.model_id"
-                  class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">{{ t('model.selectModel') }}</option>
-                  <option v-for="model in getModelOptions()" :key="model.value" :value="model.value">
-                    {{ model.label }}
-                  </option>
-                </select>
-                <input
-                  v-else
-                  v-model="form.model_id"
-                  type="text"
-                  :placeholder="t('model.modelIdHint')"
-                  class="w-full px-3 py-2 bg-background border border-input rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                />
-              </div>
-            </template>
-          </form>
-          
-          <!-- 底部按钮 -->
-          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/30">
+        <!-- 模型来源 -->
+        <FormField
+          :label="t('model.modelSource')"
+          required
+        >
+          <div class="grid grid-cols-2 gap-3">
             <button
               type="button"
-              @click="close"
-              class="px-4 py-2 text-sm border border-input rounded-lg hover:bg-muted transition-colors"
+              @click="form.local_source = 'volume'"
+              class="flex items-center gap-3 p-3 border rounded-lg transition-colors"
+              :class="form.local_source === 'volume' 
+                ? 'border-primary bg-primary/5' 
+                : 'border-input hover:border-muted-foreground'"
             >
-              {{ t('common.cancel') }}
+              <FolderOpen class="w-5 h-5" :class="form.local_source === 'volume' ? 'text-primary' : ''" />
+              <div class="text-left">
+                <div class="text-sm font-medium">{{ t('model.volumeSource') }}</div>
+                <div class="text-xs text-muted-foreground">{{ t('model.volumeSourceDesc') }}</div>
+              </div>
             </button>
             <button
-              @click="handleSubmit"
-              :disabled="isSubmitting || !isValid"
-              class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              type="button"
+              @click="form.local_source = 'huggingface'"
+              class="flex items-center gap-3 p-3 border rounded-lg transition-colors"
+              :class="form.local_source === 'huggingface' 
+                ? 'border-primary bg-primary/5' 
+                : 'border-input hover:border-muted-foreground'"
             >
-              <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
-              {{ t('common.create') }}
+              <Download class="w-5 h-5" :class="form.local_source === 'huggingface' ? 'text-primary' : ''" />
+              <div class="text-left">
+                <div class="text-sm font-medium">HuggingFace</div>
+                <div class="text-xs text-muted-foreground">{{ t('model.huggingfaceDesc') }}</div>
+              </div>
             </button>
           </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+        </FormField>
+
+        <!-- Volume 引用 -->
+        <template v-if="form.local_source === 'volume'">
+          <FormField
+            :label="t('model.selectSchema')"
+            required
+          >
+            <FormSelect
+              v-model="selectedSchemaName"
+              :options="schemaOptions"
+              :placeholder="t('model.selectSchemaHint')"
+              @update:model-value="onSchemaChange"
+            />
+          </FormField>
+
+          <FormField
+            :label="t('model.volumeReference')"
+            :hint="volumes.length === 0 && selectedSchemaName && !loadingVolumes 
+              ? t('model.noVolumesInSchema') 
+              : t('model.volumeReferenceDesc')"
+            :hint-type="volumes.length === 0 && selectedSchemaName && !loadingVolumes ? 'warning' : 'default'"
+            required
+          >
+            <FormSelect
+              v-model="form.volume_reference"
+              :options="volumeOptions"
+              :placeholder="loadingVolumes ? t('common.loading') : t('model.selectVolumeHint')"
+              :disabled="!selectedSchemaName || loadingVolumes"
+              :loading="loadingVolumes"
+            />
+          </FormField>
+        </template>
+
+        <!-- HuggingFace 配置 -->
+        <template v-if="form.local_source === 'huggingface'">
+          <FormField
+            :label="t('model.huggingfaceRepo')"
+            required
+          >
+            <FormInput
+              v-model="form.huggingface_repo"
+              :placeholder="t('model.huggingfaceRepoHint')"
+              class="font-mono"
+            />
+          </FormField>
+          <FormField
+            :label="t('model.huggingfaceFilename')"
+            optional
+          >
+            <FormInput
+              v-model="form.huggingface_filename"
+              :placeholder="t('model.huggingfaceFilenameHint')"
+              class="font-mono"
+            />
+          </FormField>
+        </template>
+      </template>
+
+      <!-- API 端点配置 -->
+      <template v-if="form.model_type === 'endpoint'">
+        <!-- API 提供商 -->
+        <FormField
+          :label="t('model.endpointProvider')"
+          required
+        >
+          <div class="grid grid-cols-4 gap-2">
+            <button
+              v-for="provider in endpointProviders"
+              :key="provider.value"
+              type="button"
+              @click="selectEndpointProvider(provider.value)"
+              class="flex flex-col items-center gap-1.5 p-3 border rounded-lg transition-colors"
+              :class="form.endpoint_provider === provider.value 
+                ? 'border-primary bg-primary/5' 
+                : 'border-input hover:border-muted-foreground'"
+            >
+              <component :is="provider.icon" class="w-5 h-5" :class="form.endpoint_provider === provider.value ? 'text-primary' : 'text-muted-foreground'" />
+              <span class="text-xs font-medium">{{ provider.label }}</span>
+            </button>
+          </div>
+        </FormField>
+
+        <!-- API Base URL -->
+        <FormField
+          :label="t('model.apiBaseUrl')"
+          :hint="t('model.apiBaseUrlDesc')"
+          optional
+        >
+          <FormInput
+            v-model="form.api_base_url"
+            :placeholder="getApiUrlPlaceholder()"
+            class="font-mono"
+          />
+        </FormField>
+
+        <!-- API Key -->
+        <FormField
+          :label="t('model.apiKey')"
+          required
+        >
+          <div class="relative">
+            <FormInput
+              v-model="form.api_key"
+              :type="showApiKey ? 'text' : 'password'"
+              :placeholder="t('model.apiKeyHint')"
+              class="font-mono pr-10"
+            />
+            <button
+              type="button"
+              @click="showApiKey = !showApiKey"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded"
+            >
+              <Eye v-if="!showApiKey" class="w-4 h-4 text-muted-foreground" />
+              <EyeOff v-else class="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
+        </FormField>
+
+        <!-- 模型 ID -->
+        <FormField
+          :label="t('model.modelId')"
+          required
+        >
+          <FormSelect
+            v-if="getModelOptions().length > 0"
+            v-model="form.model_id"
+            :options="getModelOptions()"
+            :placeholder="t('model.selectModel')"
+          />
+          <FormInput
+            v-else
+            v-model="form.model_id"
+            :placeholder="t('model.modelIdHint')"
+            class="font-mono"
+          />
+        </FormField>
+      </template>
+    </form>
+
+    <template #footer>
+      <DialogFooter
+        :submitting="isSubmitting"
+        :disabled="!isValid"
+        @cancel="close"
+        @submit="handleSubmit"
+      />
+    </template>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
-  X, Loader2, Cpu, HardDrive, Cloud, FolderOpen, Download,
+  Cpu, HardDrive, Cloud, FolderOpen, Download,
   Eye, EyeOff, Sparkles, Bot, Zap, Globe, Brain, MessageSquare
 } from 'lucide-vue-next';
 import type { ModelCreate, Schema, Asset } from '@/types/catalog';
 import { useCatalogStore } from '@/stores/catalogStore';
 import { assetApi } from '@/services/api';
+import { NAME_REGEX } from '@/utils/validationUtils';
+import BaseDialog from '@/components/common/BaseDialog.vue';
+import DialogFooter from '@/components/common/DialogFooter.vue';
+import FormField from '@/components/common/FormField.vue';
+import FormInput from '@/components/common/FormInput.vue';
+import FormTextarea from '@/components/common/FormTextarea.vue';
+import FormSelect from '@/components/common/FormSelect.vue';
 
 const { t } = useI18n();
 const store = useCatalogStore();
@@ -365,7 +306,7 @@ const emit = defineEmits<{
 }>();
 
 // 本地模型提供商选项
-const localProviders = [
+const localProviderOptions = [
   { value: 'qianwen', label: '通义千问 (Qwen)' },
   { value: 'deepseek', label: 'DeepSeek' },
   { value: 'llama', label: 'Llama' },
@@ -480,8 +421,18 @@ const volumes = ref<Asset[]>([]);
 const selectedSchemaName = ref('');
 const loadingVolumes = ref(false);
 
-// 名称验证正则
-const nameRegex = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+// Schema 选项
+const schemaOptions = computed(() => 
+  schemas.value.map(s => ({ value: s.name, label: s.name }))
+);
+
+// Volume 选项
+const volumeOptions = computed(() => 
+  volumes.value.map(v => ({ 
+    value: `${selectedSchemaName.value}.${v.name}`, 
+    label: v.name 
+  }))
+);
 
 // 验证名称
 function validateName() {
@@ -489,7 +440,7 @@ function validateName() {
     errors.name = t('errors.modelNameRequired');
     return false;
   }
-  if (!nameRegex.test(form.name)) {
+  if (!NAME_REGEX.test(form.name)) {
     errors.name = t('errors.modelNameInvalid');
     return false;
   }
@@ -499,7 +450,7 @@ function validateName() {
 
 // 表单是否有效
 const isValid = computed(() => {
-  if (!form.name || !nameRegex.test(form.name)) return false;
+  if (!form.name || !NAME_REGEX.test(form.name)) return false;
   
   if (form.model_type === 'local') {
     if (!form.local_provider) return false;
@@ -517,11 +468,9 @@ const isValid = computed(() => {
 // 选择端点提供商
 function selectEndpointProvider(provider: string) {
   form.endpoint_provider = provider;
-  // 自动填充默认 API URL
   if (providerDefaultUrls[provider]) {
     form.api_base_url = providerDefaultUrls[provider];
   }
-  // 清空之前选择的模型
   form.model_id = '';
 }
 
@@ -546,12 +495,10 @@ async function loadSchemas() {
   if (!props.catalogId) return;
   
   try {
-    // 从 store 的 selectedCatalog 中获取 schemas
     const catalog = store.selectedCatalog.value;
     if (catalog && catalog.id === props.catalogId) {
       schemas.value = catalog.schemas || [];
     } else {
-      // 如果没有，则调用 API 获取
       const schemaList = await store.fetchSchemas(props.catalogId);
       schemas.value = schemaList;
     }
@@ -571,7 +518,6 @@ async function loadVolumes(schemaName: string) {
   loadingVolumes.value = true;
   try {
     const assets = await assetApi.list(props.catalogId, schemaName);
-    // 只筛选 volume 类型的 asset
     volumes.value = assets.filter(a => a.asset_type === 'volume');
   } catch (e) {
     console.error('Failed to load volumes:', e);
@@ -582,10 +528,10 @@ async function loadVolumes(schemaName: string) {
 }
 
 // 选择 Schema 时加载 Volumes
-function onSchemaChange(schemaName: string) {
-  selectedSchemaName.value = schemaName;
+function onSchemaChange(schemaName: string | number) {
+  selectedSchemaName.value = schemaName as string;
   form.volume_reference = '';
-  loadVolumes(schemaName);
+  loadVolumes(schemaName as string);
 }
 
 // 关闭弹窗
@@ -662,20 +608,7 @@ function resetForm() {
 watch(() => props.isOpen, async (isOpen) => {
   if (isOpen) {
     resetForm();
-    // 加载 Schema 列表
     await loadSchemas();
   }
 });
 </script>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

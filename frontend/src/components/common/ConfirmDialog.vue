@@ -1,65 +1,89 @@
+<!-- 
+  ConfirmDialog - 确认弹窗组件
+  用于删除等危险操作的确认
+  
+  使用方式：
+  <ConfirmDialog
+    :is-open="showConfirm"
+    :message="t('confirm.deleteMessage', { name: item.name })"
+    description="删除后无法恢复"
+    @close="showConfirm = false"
+    @confirm="handleDelete"
+  />
+-->
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center">
-        <!-- 背景遮罩 -->
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="close"></div>
-        
-        <!-- 弹窗内容 -->
-        <div class="relative bg-card rounded-xl shadow-float-lg w-[400px] overflow-hidden">
-          <!-- 标题栏 -->
-          <div class="flex items-center gap-3 px-6 py-4 border-b border-border">
-            <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-              <AlertTriangle class="w-5 h-5 text-red-600 dark:text-red-400" />
-            </div>
-            <h2 class="text-lg font-semibold text-foreground">
-              {{ t('confirm.deleteTitle') }}
-            </h2>
-          </div>
-          
-          <!-- 内容 -->
-          <div class="p-6 space-y-4">
-            <p class="text-foreground">{{ message }}</p>
-            <p v-if="description" class="text-sm text-muted-foreground">{{ description }}</p>
-          </div>
-          
-          <!-- 底部按钮 -->
-          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/30">
-            <button
-              type="button"
-              @click="close"
-              class="px-4 py-2 text-sm border border-input rounded-lg hover:bg-muted transition-colors"
-            >
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              @click="handleConfirm"
-              :disabled="isLoading"
-              class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin" />
-              {{ t('common.delete') }}
-            </button>
-          </div>
+  <BaseDialog
+    :is-open="isOpen"
+    :title="title || t('confirm.deleteTitle')"
+    width="sm"
+    @close="close"
+  >
+    <!-- 自定义标题栏 -->
+    <template #header>
+      <div class="flex items-center gap-3">
+        <div 
+          class="w-10 h-10 rounded-full flex items-center justify-center"
+          :class="variant === 'danger' 
+            ? 'bg-red-100 dark:bg-red-900/30' 
+            : 'bg-amber-100 dark:bg-amber-900/30'"
+        >
+          <AlertTriangle 
+            class="w-5 h-5" 
+            :class="variant === 'danger' 
+              ? 'text-red-600 dark:text-red-400' 
+              : 'text-amber-600 dark:text-amber-400'" 
+          />
         </div>
+        <h2 class="text-lg font-semibold text-foreground">
+          {{ title || t('confirm.deleteTitle') }}
+        </h2>
       </div>
-    </Transition>
-  </Teleport>
+    </template>
+    
+    <!-- 内容 -->
+    <div class="space-y-3">
+      <p class="text-foreground">{{ message }}</p>
+      <p v-if="description" class="text-sm text-muted-foreground">{{ description }}</p>
+    </div>
+    
+    <!-- 底部按钮 -->
+    <template #footer>
+      <DialogFooter
+        :submitting="isLoading"
+        :submit-text="confirmText || t('common.delete')"
+        :variant="variant"
+        @cancel="close"
+        @submit="handleConfirm"
+      />
+    </template>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { AlertTriangle, Loader2 } from 'lucide-vue-next';
+import { AlertTriangle } from 'lucide-vue-next';
+import BaseDialog from './BaseDialog.vue';
+import DialogFooter from './DialogFooter.vue';
 
 const { t } = useI18n();
 
 // Props
-defineProps<{
+interface Props {
   isOpen: boolean;
   message: string;
   description?: string;
-}>();
+  title?: string;
+  confirmText?: string;
+  variant?: 'danger' | 'warning';
+}
+
+withDefaults(defineProps<Props>(), {
+  description: '',
+  title: '',
+  confirmText: '',
+  variant: 'danger',
+});
 
 // Emits
 const emit = defineEmits<{
@@ -75,20 +99,8 @@ function close() {
   emit('close');
 }
 
-// 确认删除
+// 确认
 function handleConfirm() {
   emit('confirm');
 }
 </script>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

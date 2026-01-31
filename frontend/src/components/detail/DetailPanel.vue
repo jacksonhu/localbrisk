@@ -76,7 +76,6 @@
         <!-- 操作按钮 -->
         <div class="flex items-center gap-2 relative">
           <button
-            v-if="selectedCatalog.allow_custom_schema"
             @click="showCreateMenu = !showCreateMenu"
             class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
           >
@@ -170,8 +169,8 @@
                   <p class="font-medium">{{ formatDate(selectedCatalog.updated_at) }}</p>
                 </div>
                 <div>
-                  <label class="text-muted-foreground">{{ t('info.hasConnections') }}</label>
-                  <p class="font-medium">{{ selectedCatalog.has_connections ? t('common.yes') : t('common.no') }}</p>
+                  <label class="text-muted-foreground">{{ t('info.schemasCount') }}</label>
+                  <p class="font-medium">{{ selectedCatalog.schemas?.length || 0 }}</p>
                 </div>
               </div>
             </div>
@@ -239,17 +238,17 @@
                   <div class="flex items-center gap-2">
                     <Database class="w-4 h-4 text-purple-500" />
                     <span class="font-medium">{{ schema.name }}</span>
-                    <Lock v-if="schema.readonly" class="w-3 h-3 text-muted-foreground" />
+                    <HardDrive v-if="schema.schema_type === 'local'" class="w-3 h-3 text-green-500" />
+                    <PlugZap v-else class="w-3 h-3 text-cyan-500" :title="schema.connection?.type" />
                   </div>
                   <div class="flex items-center gap-1">
-                    <span :class="schema.source === 'local' ? 'text-green-600' : 'text-blue-600'">
-                      {{ schema.source === 'local' ? t('catalog.local') : t('catalog.connection') }}
+                    <span :class="schema.schema_type === 'local' ? 'text-green-600' : 'text-blue-600'">
+                      {{ schema.schema_type === 'local' ? t('catalog.local') : t('catalog.external') }}
                     </span>
                   </div>
                   <span class="text-muted-foreground">{{ formatDate(schema.created_at) }}</span>
                   <div class="flex items-center gap-2">
                     <button
-                      v-if="!schema.readonly"
                       @click.stop="confirmDeleteSchema(schema)"
                       class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors"
                       :title="t('catalog.deleteSchema')"
@@ -267,7 +266,6 @@
                 </div>
                 <p class="text-muted-foreground mb-4">{{ t('detail.noSchemas') }}</p>
                 <button
-                  v-if="selectedCatalog.allow_custom_schema"
                   @click="showCreateSchemaDialog = true"
                   class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
@@ -280,48 +278,23 @@
 
         <!-- 配置 Tab -->
         <div v-if="activeCatalogTab === 'config'" class="flex-1">
-          <div class="card-float h-full flex flex-col">
-            <div class="p-4 border-b border-border flex items-center justify-between">
-              <h3 class="font-medium flex items-center gap-2">
-                <FileCode class="w-4 h-4" />
-                {{ t('detail.configFile') }}
-              </h3>
-              <div class="flex items-center gap-2">
-                <button
-                  @click="saveCatalogConfig"
-                  :disabled="!catalogConfigModified || savingCatalogConfig"
-                  class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <Save class="w-4 h-4" />
-                  {{ t('common.save') }}
-                </button>
-                <button
-                  @click="copyCatalogConfig"
-                  class="px-3 py-1.5 text-sm border border-input rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-                >
-                  <Copy class="w-4 h-4" />
-                  {{ t('common.copy') }}
-                </button>
-              </div>
-            </div>
-            <div class="flex-1 p-4 overflow-hidden">
-              <textarea
-                v-model="catalogConfigContent"
-                class="w-full h-full font-mono text-sm bg-muted/50 border border-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                spellcheck="false"
-              ></textarea>
-            </div>
-          </div>
+          <ConfigEditor
+            v-model="catalogConfigContent"
+            :modified="catalogConfigModified"
+            :saving="savingCatalogConfig"
+            @save="saveCatalogConfig"
+            @copy="copyCatalogConfig"
+          />
         </div>
       </div>
     </div>
 
     <!-- 创建 Schema 弹窗 -->
-    <CreateSchemaDialog
+    <SchemaDialog
       :is-open="showCreateSchemaDialog"
       :catalog-id="selectedCatalog?.id || ''"
       @close="showCreateSchemaDialog = false"
-      @submit="handleCreateSchema"
+      @create="handleCreateSchema"
     />
 
     <!-- 创建 Agent 弹窗 -->
@@ -356,18 +329,21 @@ import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, ChevronDown, Folder, Pencil, Search, Plus, 
-  Database, Lock, Trash2, FileText, FileCode, Save, Copy, Bot
+  Database, HardDrive, Trash2, FileText, FileCode, Bot, PlugZap
 } from "lucide-vue-next";
-import CreateSchemaDialog from "@/components/catalog/CreateSchemaDialog.vue";
+import SchemaDialog from "@/components/catalog/SchemaDialog.vue";
 import CreateAgentDialog from "@/components/catalog/CreateAgentDialog.vue";
 import CreateCatalogDialog from "@/components/catalog/CreateCatalogDialog.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import ConfigEditor from "@/components/common/ConfigEditor.vue";
 import SchemaDetailPanel from "@/components/detail/SchemaDetailPanel.vue";
 import TableDetailPanel from "@/components/detail/TableDetailPanel.vue";
 import VolumeDetailPanel from "@/components/detail/VolumeDetailPanel.vue";
 import AgentDetailPanel from "@/components/detail/AgentDetailPanel.vue";
 import ModelDetailPanel from "@/components/detail/ModelDetailPanel.vue";
 import { useCatalogStore } from "@/stores/catalogStore";
+import { useConfigManager } from "@/composables/useConfigManager";
+import { catalogApi } from "@/services/api";
 import type { Schema, SchemaCreate, CatalogUpdate, AgentCreate } from "@/types/catalog";
 
 const { t } = useI18n();
@@ -388,12 +364,40 @@ const catalogTabs = computed(() => [
   { id: 'config' as const, label: t('detail.config'), icon: FileCode },
 ]);
 
-// 配置内容
-const catalogConfigContent = ref('');
-const originalCatalogConfig = ref('');
-const savingCatalogConfig = ref(false);
+// 使用配置管理器处理 Catalog 配置
+const catalogConfigManager = useConfigManager({
+  type: 'catalog',
+  getConfigPath: () => {
+    if (!selectedCatalog.value?.path) return undefined;
+    return `${selectedCatalog.value.path}/config.yaml`;
+  },
+  loadConfig: async () => {
+    if (!selectedCatalog.value) return '';
+    try {
+      const response = await catalogApi.getConfig(selectedCatalog.value.id);
+      return response.content;
+    } catch (e) {
+      console.error('Failed to load catalog config:', e);
+      return '';
+    }
+  },
+  onSaved: async () => {
+    // 刷新 catalog 数据
+    if (selectedCatalog.value) {
+      await store.fetchCatalog(selectedCatalog.value.id);
+    }
+  },
+});
 
-const catalogConfigModified = computed(() => catalogConfigContent.value !== originalCatalogConfig.value);
+// 解构配置管理器的状态和方法
+const {
+  configContent: catalogConfigContent,
+  configModified: catalogConfigModified,
+  savingConfig: savingCatalogConfig,
+  saveConfig: saveCatalogConfig,
+  copyConfig: copyCatalogConfig,
+  loadConfigContent: loadCatalogConfig,
+} = catalogConfigManager;
 
 // 弹窗状态
 const showCreateSchemaDialog = ref(false);
@@ -530,78 +534,6 @@ async function handleUpdateCatalog(catalogId: string, data: CatalogUpdate) {
   const result = await store.updateCatalog(catalogId, data);
   if (result) {
     showEditCatalogDialog.value = false;
-  }
-}
-
-// 生成 Catalog YAML 配置
-function generateCatalogConfigYaml(): string {
-  if (!selectedCatalog.value) return '';
-  
-  const catalog = selectedCatalog.value;
-  const lines: string[] = [];
-  
-  lines.push(`name: ${catalog.name}`);
-  if (catalog.display_name) {
-    lines.push(`display_name: ${catalog.display_name}`);
-  }
-  if (catalog.description) {
-    lines.push(`description: "${catalog.description}"`);
-  }
-  lines.push(`allow_custom_schema: ${catalog.allow_custom_schema}`);
-  lines.push(`has_connections: ${catalog.has_connections}`);
-  
-  if (catalog.tags && catalog.tags.length > 0) {
-    lines.push('tags:');
-    catalog.tags.forEach(tag => {
-      lines.push(`  - ${tag}`);
-    });
-  }
-  
-  if (catalog.schemas && catalog.schemas.length > 0) {
-    lines.push('schemas:');
-    catalog.schemas.forEach(schema => {
-      lines.push(`  - name: ${schema.name}`);
-      lines.push(`    source: ${schema.source}`);
-      if (schema.readonly) {
-        lines.push(`    readonly: ${schema.readonly}`);
-      }
-    });
-  }
-  
-  lines.push(`created_at: ${catalog.created_at}`);
-  if (catalog.updated_at) {
-    lines.push(`updated_at: ${catalog.updated_at}`);
-  }
-  
-  return lines.join('\n');
-}
-
-// 加载 Catalog 配置
-function loadCatalogConfig() {
-  const yaml = generateCatalogConfigYaml();
-  catalogConfigContent.value = yaml;
-  originalCatalogConfig.value = yaml;
-}
-
-// 保存 Catalog 配置
-async function saveCatalogConfig() {
-  savingCatalogConfig.value = true;
-  try {
-    // TODO: 调用后端 API 保存配置
-    console.log('Save catalog config:', catalogConfigContent.value);
-    originalCatalogConfig.value = catalogConfigContent.value;
-  } finally {
-    savingCatalogConfig.value = false;
-  }
-}
-
-// 复制 Catalog 配置
-async function copyCatalogConfig() {
-  try {
-    await navigator.clipboard.writeText(catalogConfigContent.value);
-    // TODO: 显示复制成功提示
-  } catch (e) {
-    console.error('Failed to copy:', e);
   }
 }
 

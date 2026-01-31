@@ -7,7 +7,7 @@ App_Data/Catalogs/{catalog_name}/
 ├── config.yaml                    # Catalog 配置
 ├── agents/                        # Agent 目录
 │   └── {agent_name}/
-│       ├── agent.yaml             # Agent 配置
+│       ├── agent_spec.yaml             # Agent 配置
 │       ├── prompts/               # Prompts 子目录
 │       └── skills/                # Skills 子目录
 └── schemas/                       # Schema 目录
@@ -168,7 +168,7 @@ def _create_sample_catalog_data(catalogs_dir: Path):
         yaml.dump(agents_schema_config, f, default_flow_style=False, allow_unicode=True)
     
     (agents_schema_dir / "agents").mkdir(exist_ok=True)
-    (agents_schema_dir / "agents" / "test_agent.yaml").write_text('name: test_agent\ntype: chat')
+    (agents_schema_dir / "agents" / "test_agent_spec.yaml").write_text('name: test_agent\ntype: chat')
     
     # Schema 3: notes（本地 Schema）
     notes_schema_dir = schemas_dir / "notes"
