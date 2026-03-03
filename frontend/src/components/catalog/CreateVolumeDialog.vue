@@ -207,14 +207,14 @@ const isTauriEnv = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in win
 // Props
 const props = defineProps<{
   isOpen: boolean;
-  catalogId: string;
-  schemaName: string;
+  businessUnitId: string;
+  bundleName: string;
 }>();
 
 // Emits
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'submit', catalogId: string, schemaName: string, data: AssetCreate): void;
+  (e: 'submit', businessUnitId: string, bundleName: string, data: AssetCreate): void;
 }>();
 
 // 表单状态
@@ -384,7 +384,7 @@ async function handleSubmit() {
       data.description = form.description;
     }
     
-    emit('submit', props.catalogId, props.schemaName, data);
+    emit('submit', props.businessUnitId, props.bundleName, data);
   } finally {
     isSubmitting.value = false;
   }

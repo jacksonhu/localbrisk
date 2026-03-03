@@ -1,10 +1,10 @@
 <template>
   <div class="detail-panel h-full flex flex-col">
     <!-- 未选中状态 -->
-    <div v-if="!selectedCatalog && !selectedSchema && !selectedAsset && !selectedAgent && !selectedModel" class="h-full flex items-center justify-center p-6">
+    <div v-if="!selectedBusinessUnit && !selectedAssetBundle && !selectedAsset && !selectedAgent && !selectedModel" class="h-full flex items-center justify-center p-6">
       <div class="text-center">
         <Folder class="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-        <p class="text-muted-foreground">{{ t('detail.selectCatalog') }}</p>
+        <p class="text-muted-foreground">{{ t('detail.selectBusinessUnit') }}</p>
       </div>
     </div>
 
@@ -27,13 +27,13 @@
       v-else-if="selectedAsset && selectedAsset.asset_type === 'volume'" 
     />
 
-    <!-- Schema 详情页 -->
-    <SchemaDetailPanel 
-      v-else-if="selectedSchema" 
+    <!-- Asset Bundle 详情页 -->
+    <AssetBundleDetailPanel 
+      v-else-if="selectedAssetBundle" 
     />
 
-    <!-- Catalog 详情页 -->
-    <div v-else-if="selectedCatalog" class="h-full flex flex-col p-6">
+    <!-- Business Unit 详情页 -->
+    <div v-else-if="selectedBusinessUnit" class="h-full flex flex-col p-6">
       <!-- 面包屑导航 -->
       <div class="flex items-center gap-2 text-sm text-muted-foreground mb-4">
         <button 
@@ -43,30 +43,30 @@
           <ArrowLeft class="w-4 h-4" />
         </button>
         <span class="text-primary cursor-pointer hover:underline" @click="goBack">
-          {{ t('detail.catalogExplorer') }}
+          {{ t('detail.businessUnitExplorer') }}
         </span>
         <ChevronRight class="w-3 h-3" />
-        <span>{{ selectedCatalog.display_name || selectedCatalog.name }}</span>
+        <span>{{ selectedBusinessUnit.display_name || selectedBusinessUnit.name }}</span>
       </div>
 
       <!-- 标题区域 -->
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
           <Folder class="w-6 h-6 text-yellow-500" />
-          <h1 class="text-2xl font-semibold">{{ selectedCatalog.display_name || selectedCatalog.name }}</h1>
+          <h1 class="text-2xl font-semibold">{{ selectedBusinessUnit.display_name || selectedBusinessUnit.name }}</h1>
           <!-- 修改和删除图标 -->
           <div class="flex items-center gap-1 ml-2">
             <button
-              @click="showEditCatalogDialog = true"
+              @click="showEditBusinessUnitDialog = true"
               class="p-1.5 rounded-lg hover:bg-muted transition-colors"
-              :title="t('catalog.editCatalog')"
+              :title="t('businessUnit.editBusinessUnit')"
             >
               <Pencil class="w-4 h-4 text-muted-foreground hover:text-foreground" />
             </button>
             <button
-              @click="confirmDeleteCatalog"
+              @click="confirmDeleteBusinessUnit"
               class="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-              :title="t('catalog.deleteCatalog')"
+              :title="t('businessUnit.deleteBusinessUnit')"
             >
               <Trash2 class="w-4 h-4 text-muted-foreground hover:text-red-600" />
             </button>
@@ -114,11 +114,11 @@
       <!-- Tab 切换 -->
       <div class="flex items-center gap-1 border-b border-border mb-6">
         <button
-          v-for="tab in catalogTabs"
+          v-for="tab in businessUnitTabs"
           :key="tab.id"
-          @click="activeCatalogTab = tab.id"
+          @click="activeBusinessUnitTab = tab.id"
           class="px-4 py-2 text-sm font-medium transition-colors relative"
-          :class="activeCatalogTab === tab.id 
+          :class="activeBusinessUnitTab === tab.id 
             ? 'text-primary' 
             : 'text-muted-foreground hover:text-foreground'"
         >
@@ -128,7 +128,7 @@
           </div>
           <!-- 激活指示器 -->
           <div
-            v-if="activeCatalogTab === tab.id"
+            v-if="activeBusinessUnitTab === tab.id"
             class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
           ></div>
         </button>
@@ -137,7 +137,7 @@
       <!-- Tab 内容 -->
       <div class="flex-1 overflow-hidden flex flex-col">
         <!-- 概览 Tab -->
-        <template v-if="activeCatalogTab === 'overview'">
+        <template v-if="activeBusinessUnitTab === 'overview'">
           <div class="flex-1 overflow-y-auto space-y-6">
             <!-- 描述卡片 -->
             <div class="card-float p-4">
@@ -148,29 +148,29 @@
                 </button>
               </div>
               <p class="text-muted-foreground text-sm">
-                {{ selectedCatalog.description || t('detail.noDescription') }}
+                {{ selectedBusinessUnit.description || t('detail.noDescription') }}
               </p>
             </div>
 
-            <!-- Catalog 基本信息 -->
+            <!-- Business Unit 基本信息 -->
             <div class="card-float p-4">
-              <h3 class="font-medium mb-4">{{ t('detail.catalogInfo') }}</h3>
+              <h3 class="font-medium mb-4">{{ t('detail.businessUnitInfo') }}</h3>
               <div class="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <label class="text-muted-foreground">{{ t('common.name') }}</label>
-                  <p class="font-medium">{{ selectedCatalog.name }}</p>
+                  <p class="font-medium">{{ selectedBusinessUnit.name }}</p>
                 </div>
                 <div>
                   <label class="text-muted-foreground">{{ t('common.createdAt') }}</label>
-                  <p class="font-medium">{{ formatDate(selectedCatalog.created_at) }}</p>
+                  <p class="font-medium">{{ formatDate(selectedBusinessUnit.created_at) }}</p>
                 </div>
                 <div>
                   <label class="text-muted-foreground">{{ t('common.updatedAt') }}</label>
-                  <p class="font-medium">{{ formatDate(selectedCatalog.updated_at) }}</p>
+                  <p class="font-medium">{{ formatDate(selectedBusinessUnit.updated_at) }}</p>
                 </div>
                 <div>
-                  <label class="text-muted-foreground">{{ t('info.schemasCount') }}</label>
-                  <p class="font-medium">{{ selectedCatalog.schemas?.length || 0 }}</p>
+                  <label class="text-muted-foreground">{{ t('info.assetBundlesCount') }}</label>
+                  <p class="font-medium">{{ selectedBusinessUnit.asset_bundles?.length || 0 }}</p>
                 </div>
               </div>
             </div>
@@ -185,24 +185,24 @@
               </div>
               <div class="flex flex-wrap gap-2">
                 <span
-                    v-for="tag in selectedCatalog.tags"
+                    v-for="tag in selectedBusinessUnit.tags"
                     :key="tag"
                     class="px-2 py-1 text-xs bg-primary/10 text-primary rounded"
                 >
                   {{ tag }}
                 </span>
-                <span v-if="!selectedCatalog.tags?.length" class="text-sm text-muted-foreground">
+                <span v-if="!selectedBusinessUnit.tags?.length" class="text-sm text-muted-foreground">
                   {{ t('common.noData') }}
                 </span>
               </div>
             </div>
 
-            <!-- Schema 列表 -->
+            <!-- Asset Bundle 列表 -->
             <div class="card-float overflow-hidden">
               <div class="p-4 border-b border-border flex items-center justify-between">
-                <h3 class="font-medium">Schemas</h3>
+                <h3 class="font-medium">Asset Bundles</h3>
                 <span class="text-sm text-primary bg-primary/10 px-2 py-1 rounded">
-                  {{ t('detail.schemasCount', { count: filteredSchemas.length }) }}
+                  {{ t('detail.assetBundlesCount', { count: filteredAssetBundles.length }) }}
                 </span>
               </div>
               
@@ -211,9 +211,9 @@
                 <div class="relative">
                   <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
-                    v-model="schemaFilter"
+                    v-model="assetBundleFilter"
                     type="text"
-                    :placeholder="t('detail.filterSchemas')"
+                    :placeholder="t('detail.filterAssetBundles')"
                     class="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background"
                   />
                 </div>
@@ -227,31 +227,31 @@
                 <span>{{ t('common.actions') }}</span>
               </div>
 
-              <!-- Schema 行 -->
-              <div v-if="filteredSchemas.length > 0">
+              <!-- Asset Bundle 行 -->
+              <div v-if="filteredAssetBundles.length > 0">
                 <div
-                  v-for="schema in filteredSchemas"
-                  :key="schema.id"
+                  v-for="bundle in filteredAssetBundles"
+                  :key="bundle.id"
                   class="grid grid-cols-4 gap-4 text-sm px-4 py-3 border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                  @click="handleSchemaClick(schema)"
+                  @click="handleAssetBundleClick(bundle)"
                 >
                   <div class="flex items-center gap-2">
                     <Database class="w-4 h-4 text-purple-500" />
-                    <span class="font-medium">{{ schema.name }}</span>
-                    <HardDrive v-if="schema.schema_type === 'local'" class="w-3 h-3 text-green-500" />
-                    <PlugZap v-else class="w-3 h-3 text-cyan-500" :title="schema.connection?.type" />
+                    <span class="font-medium">{{ bundle.name }}</span>
+                    <HardDrive v-if="bundle.bundle_type === 'local'" class="w-3 h-3 text-green-500" />
+                    <PlugZap v-else class="w-3 h-3 text-cyan-500" :title="bundle.connection?.type" />
                   </div>
                   <div class="flex items-center gap-1">
-                    <span :class="schema.schema_type === 'local' ? 'text-green-600' : 'text-blue-600'">
-                      {{ schema.schema_type === 'local' ? t('catalog.local') : t('catalog.external') }}
+                    <span :class="bundle.bundle_type === 'local' ? 'text-green-600' : 'text-blue-600'">
+                      {{ bundle.bundle_type === 'local' ? t('businessUnit.local') : t('businessUnit.external') }}
                     </span>
                   </div>
-                  <span class="text-muted-foreground">{{ formatDate(schema.created_at) }}</span>
+                  <span class="text-muted-foreground">{{ formatDate(bundle.created_at) }}</span>
                   <div class="flex items-center gap-2">
                     <button
-                      @click.stop="confirmDeleteSchema(schema)"
+                      @click.stop="confirmDeleteAssetBundle(bundle)"
                       class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors"
-                      :title="t('catalog.deleteSchema')"
+                      :title="t('businessUnit.deleteAssetBundle')"
                     >
                       <Trash2 class="w-4 h-4" />
                     </button>
@@ -264,12 +264,12 @@
                 <div class="w-16 h-16 bg-muted rounded-lg flex items-center justify-center mb-4">
                   <Database class="w-8 h-8 text-muted-foreground" />
                 </div>
-                <p class="text-muted-foreground mb-4">{{ t('detail.noSchemas') }}</p>
+                <p class="text-muted-foreground mb-4">{{ t('detail.noAssetBundles') }}</p>
                 <button
-                  @click="showCreateSchemaDialog = true"
+                  @click="showCreateAssetBundleDialog = true"
                   class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
-                  {{ t('detail.createFirstSchema') }}
+                  {{ t('detail.createFirstAssetBundle') }}
                 </button>
               </div>
             </div>
@@ -277,40 +277,40 @@
         </template>
 
         <!-- 配置 Tab -->
-        <div v-if="activeCatalogTab === 'config'" class="flex-1">
+        <div v-if="activeBusinessUnitTab === 'config'" class="flex-1">
           <ConfigEditor
-            v-model="catalogConfigContent"
-            :modified="catalogConfigModified"
-            :saving="savingCatalogConfig"
-            @save="saveCatalogConfig"
-            @copy="copyCatalogConfig"
+            v-model="businessUnitConfigContent"
+            :modified="businessUnitConfigModified"
+            :saving="savingBusinessUnitConfig"
+            @save="saveBusinessUnitConfig"
+            @copy="copyBusinessUnitConfig"
           />
         </div>
       </div>
     </div>
 
-    <!-- 创建 Schema 弹窗 -->
-    <SchemaDialog
-      :is-open="showCreateSchemaDialog"
-      :catalog-id="selectedCatalog?.id || ''"
-      @close="showCreateSchemaDialog = false"
-      @create="handleCreateSchema"
+    <!-- 创建 Asset Bundle 弹窗 -->
+    <AssetBundleDialog
+      :is-open="showCreateAssetBundleDialog"
+      :business-unit-id="selectedBusinessUnit?.id || ''"
+      @close="showCreateAssetBundleDialog = false"
+      @create="handleCreateAssetBundle"
     />
 
     <!-- 创建 Agent 弹窗 -->
     <CreateAgentDialog
       :is-open="showCreateAgentDialog"
-      :catalog-id="selectedCatalog?.id || ''"
+      :business-unit-id="selectedBusinessUnit?.id || ''"
       @close="showCreateAgentDialog = false"
       @submit="handleCreateAgent"
     />
 
-    <!-- 编辑 Catalog 弹窗 -->
-    <CreateCatalogDialog
-      :is-open="showEditCatalogDialog"
-      :catalog="selectedCatalog"
-      @close="showEditCatalogDialog = false"
-      @update="handleUpdateCatalog"
+    <!-- 编辑 Business Unit 弹窗 -->
+    <CreateBusinessUnitDialog
+      :is-open="showEditBusinessUnitDialog"
+      :business-unit="selectedBusinessUnit"
+      @close="showEditBusinessUnitDialog = false"
+      @update="handleUpdateBusinessUnit"
     />
 
     <!-- 确认删除弹窗 -->
@@ -331,110 +331,110 @@ import {
   ArrowLeft, ChevronRight, ChevronDown, Folder, Pencil, Search, Plus, 
   Database, HardDrive, Trash2, FileText, FileCode, Bot, PlugZap
 } from "lucide-vue-next";
-import SchemaDialog from "@/components/catalog/SchemaDialog.vue";
+import AssetBundleDialog from "@/components/catalog/AssetBundleDialog.vue";
 import CreateAgentDialog from "@/components/catalog/CreateAgentDialog.vue";
-import CreateCatalogDialog from "@/components/catalog/CreateCatalogDialog.vue";
+import CreateBusinessUnitDialog from "@/components/catalog/CreateBusinessUnitDialog.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import ConfigEditor from "@/components/common/ConfigEditor.vue";
-import SchemaDetailPanel from "@/components/detail/SchemaDetailPanel.vue";
+import AssetBundleDetailPanel from "@/components/detail/AssetBundleDetailPanel.vue";
 import TableDetailPanel from "@/components/detail/TableDetailPanel.vue";
 import VolumeDetailPanel from "@/components/detail/VolumeDetailPanel.vue";
 import AgentDetailPanel from "@/components/detail/AgentDetailPanel.vue";
 import ModelDetailPanel from "@/components/detail/ModelDetailPanel.vue";
-import { useCatalogStore } from "@/stores/catalogStore";
+import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { useConfigManager } from "@/composables/useConfigManager";
-import { catalogApi } from "@/services/api";
-import type { Schema, SchemaCreate, CatalogUpdate, AgentCreate } from "@/types/catalog";
+import { businessUnitApi } from "@/services/api";
+import type { AssetBundle, AssetBundleCreate, BusinessUnitUpdate, AgentCreate } from "@/types/catalog";
 
 const { t } = useI18n();
-const store = useCatalogStore();
+const store = useBusinessUnitStore();
 
 // 使用 computed 保持响应式
-const selectedCatalog = computed(() => store.selectedCatalog.value);
-const selectedSchema = computed(() => store.selectedSchema.value);
+const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
+const selectedAssetBundle = computed(() => store.selectedAssetBundle.value);
 const selectedAsset = computed(() => store.selectedAsset.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
 const selectedModel = computed(() => store.selectedModel.value);
 
-// Catalog Tab 状态
-const activeCatalogTab = ref<'overview' | 'config'>('overview');
+// Business Unit Tab 状态
+const activeBusinessUnitTab = ref<'overview' | 'config'>('overview');
 
-const catalogTabs = computed(() => [
+const businessUnitTabs = computed(() => [
   { id: 'overview' as const, label: t('detail.overview'), icon: FileText },
   { id: 'config' as const, label: t('detail.config'), icon: FileCode },
 ]);
 
-// 使用配置管理器处理 Catalog 配置
-const catalogConfigManager = useConfigManager({
-  type: 'catalog',
+// 使用配置管理器处理 Business Unit 配置
+const businessUnitConfigManager = useConfigManager({
+  type: 'business_unit',
   getConfigPath: () => {
-    if (!selectedCatalog.value?.path) return undefined;
-    return `${selectedCatalog.value.path}/config.yaml`;
+    if (!selectedBusinessUnit.value?.path) return undefined;
+    return `${selectedBusinessUnit.value.path}/config.yaml`;
   },
   loadConfig: async () => {
-    if (!selectedCatalog.value) return '';
+    if (!selectedBusinessUnit.value) return '';
     try {
-      const response = await catalogApi.getConfig(selectedCatalog.value.id);
+      const response = await businessUnitApi.getConfig(selectedBusinessUnit.value.id);
       return response.content;
     } catch (e) {
-      console.error('Failed to load catalog config:', e);
+      console.error('Failed to load business unit config:', e);
       return '';
     }
   },
   onSaved: async () => {
-    // 刷新 catalog 数据
-    if (selectedCatalog.value) {
-      await store.fetchCatalog(selectedCatalog.value.id);
+    // 刷新 business unit 数据
+    if (selectedBusinessUnit.value) {
+      await store.fetchBusinessUnit(selectedBusinessUnit.value.id);
     }
   },
 });
 
 // 解构配置管理器的状态和方法
 const {
-  configContent: catalogConfigContent,
-  configModified: catalogConfigModified,
-  savingConfig: savingCatalogConfig,
-  saveConfig: saveCatalogConfig,
-  copyConfig: copyCatalogConfig,
-  loadConfigContent: loadCatalogConfig,
-} = catalogConfigManager;
+  configContent: businessUnitConfigContent,
+  configModified: businessUnitConfigModified,
+  savingConfig: savingBusinessUnitConfig,
+  saveConfig: saveBusinessUnitConfig,
+  copyConfig: copyBusinessUnitConfig,
+  loadConfigContent: loadBusinessUnitConfig,
+} = businessUnitConfigManager;
 
 // 弹窗状态
-const showCreateSchemaDialog = ref(false);
+const showCreateAssetBundleDialog = ref(false);
 const showCreateAgentDialog = ref(false);
-const showEditCatalogDialog = ref(false);
+const showEditBusinessUnitDialog = ref(false);
 const showDeleteDialog = ref(false);
 const showCreateMenu = ref(false);
 const deleteMessage = ref('');
 const deleteDescription = ref('');
-const schemaToDelete = ref<Schema | null>(null);
-const deleteType = ref<'schema' | 'catalog'>('schema');
+const assetBundleToDelete = ref<AssetBundle | null>(null);
+const deleteType = ref<'asset_bundle' | 'business_unit'>('asset_bundle');
 
 // 创建菜单项
 const createMenuItems = computed(() => [
   { 
-    type: 'schema', 
-    label: t('catalog.createSchema'), 
+    type: 'asset_bundle', 
+    label: t('businessUnit.createAssetBundle'), 
     icon: Database, 
     iconColor: 'text-purple-500' 
   },
   { 
     type: 'agent', 
-    label: t('catalog.createAgent'), 
+    label: t('businessUnit.createAgent'), 
     icon: Bot, 
     iconColor: 'text-orange-500' 
   },
 ]);
 
-// Schema 筛选
-const schemaFilter = ref('');
+// Asset Bundle 筛选
+const assetBundleFilter = ref('');
 
-const filteredSchemas = computed(() => {
-  const schemas = selectedCatalog.value?.schemas || [];
-  if (!schemaFilter.value) return schemas;
+const filteredAssetBundles = computed(() => {
+  const bundles = selectedBusinessUnit.value?.asset_bundles || [];
+  if (!assetBundleFilter.value) return bundles;
   
-  const filter = schemaFilter.value.toLowerCase();
-  return schemas.filter(s => 
+  const filter = assetBundleFilter.value.toLowerCase();
+  return bundles.filter(s => 
     s.name.toLowerCase().includes(filter)
   );
 });
@@ -452,19 +452,19 @@ function formatDate(dateStr?: string): string {
 
 // 返回
 function goBack() {
-  store.selectedCatalog.value = null;
+  store.selectedBusinessUnit.value = null;
 }
 
-// 点击 Schema 行打开详情
-function handleSchemaClick(schema: Schema) {
-  store.selectSchema(selectedCatalog.value!.id, schema);
+// 点击 Asset Bundle 行打开详情
+function handleAssetBundleClick(bundle: AssetBundle) {
+  store.selectAssetBundle(selectedBusinessUnit.value!.id, bundle);
 }
 
-// 创建 Schema
-async function handleCreateSchema(catalogId: string, data: SchemaCreate) {
-  const result = await store.createSchema(catalogId, data);
+// 创建 Asset Bundle
+async function handleCreateAssetBundle(businessUnitId: string, data: AssetBundleCreate) {
+  const result = await store.createAssetBundle(businessUnitId, data);
   if (result) {
-    showCreateSchemaDialog.value = false;
+    showCreateAssetBundleDialog.value = false;
   }
 }
 
@@ -473,8 +473,8 @@ function handleCreateItem(type: string) {
   showCreateMenu.value = false;
   
   switch (type) {
-    case 'schema':
-      showCreateSchemaDialog.value = true;
+    case 'asset_bundle':
+      showCreateAssetBundleDialog.value = true;
       break;
     case 'agent':
       showCreateAgentDialog.value = true;
@@ -483,64 +483,64 @@ function handleCreateItem(type: string) {
 }
 
 // 创建 Agent
-async function handleCreateAgent(catalogId: string, data: AgentCreate) {
-  const result = await store.createAgent(catalogId, data);
+async function handleCreateAgent(businessUnitId: string, data: AgentCreate) {
+  const result = await store.createAgent(businessUnitId, data);
   if (result) {
     showCreateAgentDialog.value = false;
   }
 }
 
-// 确认删除 Schema
-function confirmDeleteSchema(schema: Schema) {
-  schemaToDelete.value = schema;
-  deleteType.value = 'schema';
-  deleteMessage.value = t('catalog.confirmDeleteSchema', { name: schema.name });
-  deleteDescription.value = t('catalog.confirmDeleteSchemaDesc');
+// 确认删除 Asset Bundle
+function confirmDeleteAssetBundle(bundle: AssetBundle) {
+  assetBundleToDelete.value = bundle;
+  deleteType.value = 'asset_bundle';
+  deleteMessage.value = t('businessUnit.confirmDeleteAssetBundle', { name: bundle.name });
+  deleteDescription.value = t('businessUnit.confirmDeleteAssetBundleDesc');
   showDeleteDialog.value = true;
 }
 
-// 确认删除 Catalog
-function confirmDeleteCatalog() {
-  if (!selectedCatalog.value) return;
-  deleteType.value = 'catalog';
-  deleteMessage.value = t('catalog.confirmDeleteCatalog', { name: selectedCatalog.value.name });
-  deleteDescription.value = t('catalog.confirmDeleteCatalogDesc');
+// 确认删除 Business Unit
+function confirmDeleteBusinessUnit() {
+  if (!selectedBusinessUnit.value) return;
+  deleteType.value = 'business_unit';
+  deleteMessage.value = t('businessUnit.confirmDeleteBusinessUnit', { name: selectedBusinessUnit.value.name });
+  deleteDescription.value = t('businessUnit.confirmDeleteBusinessUnitDesc');
   showDeleteDialog.value = true;
 }
 
 // 执行删除
 async function handleConfirmDelete() {
-  if (deleteType.value === 'schema') {
-    if (!schemaToDelete.value || !selectedCatalog.value) return;
+  if (deleteType.value === 'asset_bundle') {
+    if (!assetBundleToDelete.value || !selectedBusinessUnit.value) return;
     
-    const success = await store.deleteSchema(selectedCatalog.value.id, schemaToDelete.value.name);
+    const success = await store.deleteAssetBundle(selectedBusinessUnit.value.id, assetBundleToDelete.value.name);
     if (success) {
       showDeleteDialog.value = false;
-      schemaToDelete.value = null;
+      assetBundleToDelete.value = null;
     }
-  } else if (deleteType.value === 'catalog') {
-    if (!selectedCatalog.value) return;
+  } else if (deleteType.value === 'business_unit') {
+    if (!selectedBusinessUnit.value) return;
     
-    const success = await store.deleteCatalog(selectedCatalog.value.id);
+    const success = await store.deleteBusinessUnit(selectedBusinessUnit.value.id);
     if (success) {
       showDeleteDialog.value = false;
-      store.selectedCatalog.value = null;
+      store.selectedBusinessUnit.value = null;
     }
   }
 }
 
-// 更新 Catalog
-async function handleUpdateCatalog(catalogId: string, data: CatalogUpdate) {
-  const result = await store.updateCatalog(catalogId, data);
+// 更新 Business Unit
+async function handleUpdateBusinessUnit(businessUnitId: string, data: BusinessUnitUpdate) {
+  const result = await store.updateBusinessUnit(businessUnitId, data);
   if (result) {
-    showEditCatalogDialog.value = false;
+    showEditBusinessUnitDialog.value = false;
   }
 }
 
-// 监听 Catalog 变化
-watch(selectedCatalog, () => {
-  activeCatalogTab.value = 'overview';
-  loadCatalogConfig();
+// 监听 Business Unit 变化
+watch(selectedBusinessUnit, () => {
+  activeBusinessUnitTab.value = 'overview';
+  loadBusinessUnitConfig();
 }, { immediate: true });
 </script>
 

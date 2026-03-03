@@ -31,10 +31,12 @@ from fastapi.testclient import TestClient
 
 # 从全局常量导入配置文件名
 from app.core.constants import (
-    CATALOG_CONFIG_FILE,
+    BUSINESS_UNIT_CONFIG_FILE as CATALOG_CONFIG_FILE,  # 兼容旧名称
     AGENT_CONFIG_FILE,
-    SCHEMA_CONFIG_FILE,
 )
+
+# 兼容旧代码，定义 SCHEMA_CONFIG_FILE
+SCHEMA_CONFIG_FILE = "schema.yaml"
 
 
 def _clear_catalog_modules():

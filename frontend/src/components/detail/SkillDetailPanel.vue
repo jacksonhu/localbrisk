@@ -3,7 +3,7 @@
     <!-- 面包屑导航 -->
     <Breadcrumb
       :items="[
-        { label: selectedCatalog?.display_name || selectedCatalog?.name || '', onClick: goToCatalog },
+        { label: selectedBusinessUnit?.display_name || selectedBusinessUnit?.name || '', onClick: goToBusinessUnit },
         { label: selectedAgent?.name || '', onClick: goToAgent },
         { label: skillName || '' }
       ]"
@@ -221,7 +221,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import Breadcrumb from "@/components/common/Breadcrumb.vue";
 import MarkdownEditor from "@/components/viewer/MarkdownEditor.vue";
 import UniversalViewer from "@/components/viewer/UniversalViewer.vue";
-import { useCatalogStore } from "@/stores/catalogStore";
+import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { agentApi } from "@/services/api";
 import { 
   useFileBrowser, 
@@ -231,11 +231,11 @@ import {
 } from "@/composables/useFileBrowser";
 
 const { t } = useI18n();
-const store = useCatalogStore();
+const store = useBusinessUnitStore();
 
 // Props
 const props = defineProps<{
-  catalogId: string;
+  businessUnitId: string;
   agentName: string;
   skillName: string;
 }>();
@@ -247,7 +247,7 @@ const emit = defineEmits<{
 }>();
 
 // 使用 computed 保持响应式
-const selectedCatalog = computed(() => store.selectedCatalog.value);
+const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
 
 // 文件浏览器
@@ -288,12 +288,12 @@ const viewerFileSize = ref<number | undefined>(undefined);
 
 // 加载 Skill 详情
 async function loadSkill() {
-  if (!props.catalogId || !props.agentName || !props.skillName) return;
+  if (!props.businessUnitId || !props.agentName || !props.skillName) return;
   
   isLoading.value = true;
   try {
     // 获取 SKILL.md 内容和路径
-    const response = await agentApi.getSkill(props.catalogId, props.agentName, props.skillName);
+    const response = await agentApi.getSkill(props.businessUnitId, props.agentName, props.skillName);
     skillMdContent.value = response.content || '';
     skillPath.value = response.path || '';
     
@@ -331,7 +331,7 @@ function handleFileClick(file: FileInfo) {
 async function toggleEnabled() {
   const newEnabled = !isEnabled.value;
   try {
-    await agentApi.toggleSkillEnabled(props.catalogId, props.agentName, props.skillName, newEnabled);
+    await agentApi.toggleSkillEnabled(props.businessUnitId, props.agentName, props.skillName, newEnabled);
     // 刷新 Agent 数据以更新 capabilities.native_skills 列表
     await store.refreshSelectedAgent();
   } catch (e) {
@@ -343,7 +343,7 @@ async function toggleEnabled() {
 // 保存 SKILL.md 内容
 async function handleSaveContent(content: string) {
   try {
-    await agentApi.createSkill(props.catalogId, props.agentName, props.skillName, content);
+    await agentApi.createSkill(props.businessUnitId, props.agentName, props.skillName, content);
     skillMdContent.value = content;
     // 通知编辑器更新原始内容
     editorRef.value?.updateOriginalContent();
@@ -396,10 +396,10 @@ function goBack() {
   emit('back');
 }
 
-// 返回到 Catalog
-function goToCatalog() {
+// 返回到 Business Unit
+function goToBusinessUnit() {
   store.clearSelectedAgent();
-  store.selectedCatalog.value = null;
+  store.selectedBusinessUnit.value = null;
 }
 
 // 返回到 Agent 详情
@@ -417,7 +417,7 @@ function confirmDeleteSkill() {
 // 执行删除
 async function handleConfirmDelete() {
   try {
-    await agentApi.deleteSkill(props.catalogId, props.agentName, props.skillName);
+    await agentApi.deleteSkill(props.businessUnitId, props.agentName, props.skillName);
     showDeleteDialog.value = false;
     emit('deleted');
   } catch (e) {
@@ -427,7 +427,7 @@ async function handleConfirmDelete() {
 }
 
 // 监听 props 变化，重新加载
-watch([() => props.catalogId, () => props.agentName, () => props.skillName], async () => {
+watch([() => props.businessUnitId, () => props.agentName, () => props.skillName], async () => {
   await loadSkill();
 }, { immediate: true });
 </script>

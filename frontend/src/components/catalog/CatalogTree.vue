@@ -30,7 +30,7 @@
         <span class="truncate flex-1" :class="isSelected(item) ? 'text-primary' : 'text-foreground'">{{ item.name || '(无名称)' }}</span>
 
         <!-- External 类型标识 -->
-        <PlugZap v-if="item.type === 'schema' && item.schema_type === 'external'" class="w-3 h-3 text-cyan-500 flex-shrink-0" />
+        <PlugZap v-if="(item.type === 'schema' || item.type === 'asset_bundle') && item.bundle_type === 'external'" class="w-3 h-3 text-cyan-500 flex-shrink-0" />
 
       </div>
 
@@ -52,30 +52,32 @@
 
 <script setup lang="ts">
 import { ChevronRight, Folder, Database, Table, FolderOpen, Bot, FileText, PlugZap, Code, Cpu, Layers } from "lucide-vue-next";
-import type { CatalogItem } from "@/types/catalog";
+import type { BusinessUnitItem } from "@/types/catalog";
 
 const props = defineProps<{
-  items: CatalogItem[];
+  items: BusinessUnitItem[];
   parentId?: string;
   selectedId?: string;
 }>();
 
 const emit = defineEmits<{
-  select: [item: CatalogItem];
-  'toggle-expand': [item: CatalogItem];
-  'ensure-expand': [item: CatalogItem];  // 确保展开（点击节点内容时）
-  'context-menu': [event: MouseEvent, item: CatalogItem, parentId?: string];
+  select: [item: BusinessUnitItem];
+  'toggle-expand': [item: BusinessUnitItem];
+  'ensure-expand': [item: BusinessUnitItem];  // 确保展开（点击节点内容时）
+  'context-menu': [event: MouseEvent, item: BusinessUnitItem, parentId?: string];
 }>();
 
 // 判断节点是否被选中
-const isSelected = (item: CatalogItem) => {
+const isSelected = (item: BusinessUnitItem) => {
   if (!props.selectedId) return false;
   return item.id === props.selectedId;
 };
 
 const getIcon = (type: string) => {
   const iconMap: Record<string, any> = {
+    business_unit: Folder,
     catalog: Folder,
+    asset_bundle: Database,
     schema: Database,
     asset_type: Layers,
     table: Table,
@@ -94,7 +96,9 @@ const getIcon = (type: string) => {
 
 const getIconColor = (type: string) => {
   const colorMap: Record<string, string> = {
+    business_unit: "text-yellow-500",
     catalog: "text-yellow-500",
+    asset_bundle: "text-purple-500",
     schema: "text-purple-500",
     asset_type: "text-gray-500",
     table: "text-blue-500",
@@ -112,7 +116,7 @@ const getIconColor = (type: string) => {
 };
 
 // 判断节点是否可展开
-const canExpand = (item: CatalogItem) => {
+const canExpand = (item: BusinessUnitItem) => {
   if (item.type === 'placeholder') {
     return false;
   }
@@ -127,11 +131,11 @@ const canExpand = (item: CatalogItem) => {
   return false;
 };
 
-const handleToggleExpand = (item: CatalogItem) => {
+const handleToggleExpand = (item: BusinessUnitItem) => {
   emit("toggle-expand", item);
 };
 
-const handleClick = (item: CatalogItem) => {
+const handleClick = (item: BusinessUnitItem) => {
   // 占位符节点不响应点击
   if (item.type === "placeholder") {
     return;
@@ -142,7 +146,7 @@ const handleClick = (item: CatalogItem) => {
   
   // 根据节点类型决定行为
   // 1. 容器类节点（只展开，不选择）：asset_type, folder
-  // 2. 可展开+可选择的节点：catalog, schema, agent
+  // 2. 可展开+可选择的节点：business_unit, asset_bundle, agent
   // 3. 只选择的叶子节点：prompt, skill, table, volume, model
   
   switch (item.type) {
@@ -155,7 +159,9 @@ const handleClick = (item: CatalogItem) => {
     // 可展开的父节点：确保展开 + 选择
     // 点击节点内容时应该确保展开，而不是切换展开
     // 切换展开状态应该通过点击展开箭头来实现
+    case "business_unit":
     case "catalog":
+    case "asset_bundle":
     case "schema":
     case "agent":
       emit("ensure-expand", item);
@@ -179,7 +185,7 @@ const handleClick = (item: CatalogItem) => {
   }
 };
 
-const handleContextMenu = (event: MouseEvent, item: CatalogItem) => {
+const handleContextMenu = (event: MouseEvent, item: BusinessUnitItem) => {
   // 资产类型节点、文件夹节点和占位符节点不显示右键菜单
   if (item.type !== "placeholder" && item.type !== "asset_type" && item.type !== "folder") {
     emit("context-menu", event, item, props.parentId);

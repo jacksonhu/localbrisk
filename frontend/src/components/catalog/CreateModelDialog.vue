@@ -125,30 +125,30 @@
         <!-- Volume 引用 -->
         <template v-if="form.local_source === 'volume'">
           <FormField
-            :label="t('model.selectSchema')"
+            :label="t('model.selectAssetBundle')"
             required
           >
             <FormSelect
-              v-model="selectedSchemaName"
-              :options="schemaOptions"
-              :placeholder="t('model.selectSchemaHint')"
-              @update:model-value="onSchemaChange"
+              v-model="selectedBundleName"
+              :options="assetBundleOptions"
+              :placeholder="t('model.selectAssetBundleHint')"
+              @update:model-value="onAssetBundleChange"
             />
           </FormField>
 
           <FormField
             :label="t('model.volumeReference')"
-            :hint="volumes.length === 0 && selectedSchemaName && !loadingVolumes 
-              ? t('model.noVolumesInSchema') 
+            :hint="volumes.length === 0 && selectedBundleName && !loadingVolumes 
+              ? t('model.noVolumesInAssetBundle') 
               : t('model.volumeReferenceDesc')"
-            :hint-type="volumes.length === 0 && selectedSchemaName && !loadingVolumes ? 'warning' : 'default'"
+            :hint-type="volumes.length === 0 && selectedBundleName && !loadingVolumes ? 'warning' : 'default'"
             required
           >
             <FormSelect
               v-model="form.volume_reference"
               :options="volumeOptions"
               :placeholder="loadingVolumes ? t('common.loading') : t('model.selectVolumeHint')"
-              :disabled="!selectedSchemaName || loadingVolumes"
+              :disabled="!selectedBundleName || loadingVolumes"
               :loading="loadingVolumes"
             />
           </FormField>
@@ -242,22 +242,41 @@
         <!-- 模型 ID -->
         <FormField
           :label="t('model.modelId')"
+          :hint="getModelHint()"
           required
         >
-          <FormSelect
-            v-if="getModelOptions().length > 0"
-            v-model="form.model_id"
-            :options="getModelOptions()"
-            :placeholder="t('model.selectModel')"
-          />
           <FormInput
-            v-else
             v-model="form.model_id"
             :placeholder="t('model.modelIdHint')"
             class="font-mono"
           />
         </FormField>
       </template>
+
+      <!-- Temperature 参数（所有模型类型都可设置） -->
+      <FormField
+        :label="t('model.temperature')"
+        :hint="t('model.temperatureHint')"
+      >
+        <div class="flex items-center gap-4">
+          <input
+            type="range"
+            v-model.number="form.temperature"
+            min="0"
+            max="2"
+            step="0.1"
+            class="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+          />
+          <FormInput
+            v-model.number="form.temperature"
+            type="number"
+            min="0"
+            max="2"
+            step="0.1"
+            class="w-20 text-center"
+          />
+        </div>
+      </FormField>
     </form>
 
     <template #footer>
@@ -272,15 +291,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
   Cpu, HardDrive, Cloud, FolderOpen, Download,
   Eye, EyeOff, Sparkles, Bot, Zap, Globe, Brain, MessageSquare
 } from 'lucide-vue-next';
-import type { ModelCreate, Schema, Asset } from '@/types/catalog';
-import { useCatalogStore } from '@/stores/catalogStore';
+import type { Component } from 'vue';
+import type { ModelCreate, AssetBundle, Asset } from '@/types/catalog';
+import { useBusinessUnitStore } from '@/stores/businessUnitStore';
 import { assetApi } from '@/services/api';
+import { llmApi, type ProviderOption, type ModelOption } from '@/services/llm-api';
 import { NAME_REGEX } from '@/utils/validationUtils';
 import BaseDialog from '@/components/common/BaseDialog.vue';
 import DialogFooter from '@/components/common/DialogFooter.vue';
@@ -290,105 +311,113 @@ import FormTextarea from '@/components/common/FormTextarea.vue';
 import FormSelect from '@/components/common/FormSelect.vue';
 
 const { t } = useI18n();
-const store = useCatalogStore();
+const store = useBusinessUnitStore();
 
 // Props
 const props = defineProps<{
   isOpen: boolean;
-  catalogId: string;
-  schemaName: string;
+  businessUnitId: string;
+  agentName: string;  // 改为 agentName，Model 现在在 Agent 下
 }>();
 
 // Emits
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'submit', catalogId: string, schemaName: string, data: ModelCreate): void;
+  (e: 'submit', businessUnitId: string, agentName: string, data: ModelCreate): void;
 }>();
 
-// 本地模型提供商选项
-const localProviderOptions = [
-  { value: 'qianwen', label: '通义千问 (Qwen)' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'llama', label: 'Llama' },
-  { value: 'mistral', label: 'Mistral' },
-  { value: 'chatglm', label: 'ChatGLM' },
-  { value: 'baichuan', label: '百川' },
-  { value: 'internlm', label: 'InternLM' },
-  { value: 'qwen2', label: 'Qwen2' },
-  { value: 'other', label: '其他' },
-];
-
-// API 端点提供商选项
-const endpointProviders = [
-  { value: 'openai', label: 'OpenAI', icon: Sparkles },
-  { value: 'claude', label: 'Claude', icon: Bot },
-  { value: 'qianwen', label: '通义千问', icon: Brain },
-  { value: 'qianfan', label: '百度千帆', icon: Globe },
-  { value: 'gemini', label: 'Gemini', icon: Zap },
-  { value: 'deepseek', label: 'DeepSeek', icon: MessageSquare },
-  { value: 'zhipu', label: '智谱 AI', icon: Brain },
-  { value: 'moonshot', label: 'Moonshot', icon: Sparkles },
-];
-
-// 各提供商的模型列表
-const providerModels: Record<string, { value: string; label: string }[]> = {
-  openai: [
-    { value: 'gpt-4o', label: 'GPT-4o' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-    { value: 'gpt-4', label: 'GPT-4' },
-    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-  ],
-  claude: [
-    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
-    { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet' },
-    { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
-  ],
-  qianwen: [
-    { value: 'qwen-turbo', label: 'Qwen Turbo' },
-    { value: 'qwen-plus', label: 'Qwen Plus' },
-    { value: 'qwen-max', label: 'Qwen Max' },
-    { value: 'qwen-max-longcontext', label: 'Qwen Max Long Context' },
-  ],
-  qianfan: [
-    { value: 'ernie-4.0-8k', label: 'ERNIE 4.0' },
-    { value: 'ernie-3.5-8k', label: 'ERNIE 3.5' },
-    { value: 'ernie-speed-128k', label: 'ERNIE Speed' },
-    { value: 'ernie-lite-8k', label: 'ERNIE Lite' },
-  ],
-  gemini: [
-    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-    { value: 'gemini-1.0-pro', label: 'Gemini 1.0 Pro' },
-  ],
-  deepseek: [
-    { value: 'deepseek-chat', label: 'DeepSeek Chat' },
-    { value: 'deepseek-coder', label: 'DeepSeek Coder' },
-  ],
-  zhipu: [
-    { value: 'glm-4', label: 'GLM-4' },
-    { value: 'glm-4-flash', label: 'GLM-4 Flash' },
-    { value: 'glm-3-turbo', label: 'GLM-3 Turbo' },
-  ],
-  moonshot: [
-    { value: 'moonshot-v1-8k', label: 'Moonshot V1 8K' },
-    { value: 'moonshot-v1-32k', label: 'Moonshot V1 32K' },
-    { value: 'moonshot-v1-128k', label: 'Moonshot V1 128K' },
-  ],
+// 图标映射
+const iconMap: Record<string, Component> = {
+  Sparkles,
+  Bot,
+  Brain,
+  Globe,
+  Zap,
+  MessageSquare,
 };
 
-// 各提供商默认 API URL
-const providerDefaultUrls: Record<string, string> = {
-  openai: 'https://api.openai.com/v1',
-  claude: 'https://api.anthropic.com/v1',
-  qianwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-  qianfan: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop',
-  gemini: 'https://generativelanguage.googleapis.com/v1',
-  deepseek: 'https://api.deepseek.com/v1',
-  zhipu: 'https://open.bigmodel.cn/api/paas/v4',
-  moonshot: 'https://api.moonshot.cn/v1',
-};
+// LLM 配置数据（从后端获取）
+const localProviderOptions = ref<{ value: string; label: string }[]>([]);
+const endpointProviders = ref<{ value: string; label: string; icon: Component }[]>([]);
+const providerModels = ref<Record<string, { value: string; label: string }[]>>({});
+const providerDefaultUrls = ref<Record<string, string>>({});
+const loadingLLMConfig = ref(false);
+
+// 加载 LLM 配置
+async function loadLLMConfig() {
+  loadingLLMConfig.value = true;
+  try {
+    // 并行加载所有配置
+    const [localData, endpointData] = await Promise.all([
+      llmApi.getLocalProviders(),
+      llmApi.getEndpointProviders(),
+    ]);
+
+    // 设置本地提供商选项
+    localProviderOptions.value = localData.map(p => ({
+      value: p.value,
+      label: p.label,
+    }));
+
+    // 设置端点提供商选项（带图标）
+    endpointProviders.value = endpointData.map(p => ({
+      value: p.value,
+      label: p.label,
+      icon: iconMap[p.icon || 'Sparkles'] || Sparkles,
+    }));
+
+    // 并行加载所有提供商的模型和默认 URL
+    await Promise.all(
+      endpointData.map(async (provider) => {
+        try {
+          const [models, defaultUrl] = await Promise.all([
+            llmApi.getProviderModels(provider.value),
+            llmApi.getProviderDefaultUrl(provider.value),
+          ]);
+          
+          providerModels.value[provider.value] = models.map(m => ({
+            value: m.value,
+            label: m.label,
+          }));
+          providerDefaultUrls.value[provider.value] = defaultUrl;
+        } catch (e) {
+          console.warn(`Failed to load config for provider ${provider.value}:`, e);
+        }
+      })
+    );
+  } catch (e) {
+    console.error('Failed to load LLM configuration:', e);
+    // 回退到默认配置
+    localProviderOptions.value = [
+      { value: 'qianwen', label: '通义千问 (Qwen)' },
+      { value: 'deepseek', label: 'DeepSeek' },
+      { value: 'llama', label: 'Llama' },
+      { value: 'mistral', label: 'Mistral' },
+      { value: 'chatglm', label: 'ChatGLM' },
+      { value: 'baichuan', label: '百川' },
+      { value: 'internlm', label: 'InternLM' },
+      { value: 'qwen2', label: 'Qwen2' },
+      { value: 'other', label: '其他' },
+    ];
+    endpointProviders.value = [
+      { value: 'openai', label: 'OpenAI', icon: Sparkles },
+      { value: 'claude', label: 'Claude', icon: Bot },
+      { value: 'qianwen', label: '通义千问', icon: Brain },
+      { value: 'qianfan', label: '百度千帆', icon: Globe },
+      { value: 'gemini', label: 'Gemini', icon: Zap },
+      { value: 'deepseek', label: 'DeepSeek', icon: MessageSquare },
+      { value: 'zhipu', label: '智谱 AI', icon: Brain },
+      { value: 'moonshot', label: 'Moonshot', icon: Sparkles },
+    ];
+  } finally {
+    loadingLLMConfig.value = false;
+  }
+}
+
+// 组件挂载时加载配置
+onMounted(() => {
+  loadLLMConfig();
+});
 
 // 表单状态
 const form = reactive<ModelCreate>({
@@ -404,6 +433,7 @@ const form = reactive<ModelCreate>({
   api_base_url: '',
   api_key: '',
   model_id: '',
+  temperature: 0,
 });
 
 // 错误状态
@@ -415,21 +445,21 @@ const errors = reactive({
 const isSubmitting = ref(false);
 const showApiKey = ref(false);
 
-// Schema 和 Volume 列表
-const schemas = ref<Schema[]>([]);
+// Asset Bundle 和 Volume 列表
+const assetBundles = ref<AssetBundle[]>([]);
 const volumes = ref<Asset[]>([]);
-const selectedSchemaName = ref('');
+const selectedBundleName = ref('');
 const loadingVolumes = ref(false);
 
-// Schema 选项
-const schemaOptions = computed(() => 
-  schemas.value.map(s => ({ value: s.name, label: s.name }))
+// Asset Bundle 选项
+const assetBundleOptions = computed(() => 
+  assetBundles.value.map(s => ({ value: s.name, label: s.name }))
 );
 
 // Volume 选项
 const volumeOptions = computed(() => 
   volumes.value.map(v => ({ 
-    value: `${selectedSchemaName.value}.${v.name}`, 
+    value: `${selectedBundleName.value}.${v.name}`, 
     label: v.name 
   }))
 );
@@ -468,56 +498,60 @@ const isValid = computed(() => {
 // 选择端点提供商
 function selectEndpointProvider(provider: string) {
   form.endpoint_provider = provider;
-  if (providerDefaultUrls[provider]) {
-    form.api_base_url = providerDefaultUrls[provider];
+  if (providerDefaultUrls.value[provider]) {
+    form.api_base_url = providerDefaultUrls.value[provider];
   }
   form.model_id = '';
 }
 
 // 获取 API URL 占位符
 function getApiUrlPlaceholder() {
-  if (form.endpoint_provider && providerDefaultUrls[form.endpoint_provider]) {
-    return providerDefaultUrls[form.endpoint_provider];
+  if (form.endpoint_provider && providerDefaultUrls.value[form.endpoint_provider]) {
+    return providerDefaultUrls.value[form.endpoint_provider];
   }
   return 'https://api.example.com/v1';
 }
 
-// 获取模型选项
-function getModelOptions() {
-  if (form.endpoint_provider && providerModels[form.endpoint_provider]) {
-    return providerModels[form.endpoint_provider];
+// 获取模型提示信息
+function getModelHint() {
+  if (form.endpoint_provider && providerModels.value[form.endpoint_provider]) {
+    const models = providerModels.value[form.endpoint_provider];
+    if (models.length > 0) {
+      const examples = models.slice(0, 3).map(m => m.value).join(', ');
+      return `${t('model.modelIdDesc')}: ${examples}${models.length > 3 ? ', ...' : ''}`;
+    }
   }
-  return [];
+  return t('model.modelIdDesc');
 }
 
-// 加载 Schemas
-async function loadSchemas() {
-  if (!props.catalogId) return;
+// 加载 Asset Bundles
+async function loadAssetBundles() {
+  if (!props.businessUnitId) return;
   
   try {
-    const catalog = store.selectedCatalog.value;
-    if (catalog && catalog.id === props.catalogId) {
-      schemas.value = catalog.schemas || [];
+    const businessUnit = store.selectedBusinessUnit.value;
+    if (businessUnit && businessUnit.id === props.businessUnitId) {
+      assetBundles.value = businessUnit.asset_bundles || [];
     } else {
-      const schemaList = await store.fetchSchemas(props.catalogId);
-      schemas.value = schemaList;
+      const bundleList = await store.fetchAssetBundles(props.businessUnitId);
+      assetBundles.value = bundleList;
     }
   } catch (e) {
-    console.error('Failed to load schemas:', e);
-    schemas.value = [];
+    console.error('Failed to load asset bundles:', e);
+    assetBundles.value = [];
   }
 }
 
 // 加载 Volumes
-async function loadVolumes(schemaName: string) {
-  if (!props.catalogId || !schemaName) {
+async function loadVolumes(bundleName: string) {
+  if (!props.businessUnitId || !bundleName) {
     volumes.value = [];
     return;
   }
   
   loadingVolumes.value = true;
   try {
-    const assets = await assetApi.list(props.catalogId, schemaName);
+    const assets = await assetApi.list(props.businessUnitId, bundleName);
     volumes.value = assets.filter(a => a.asset_type === 'volume');
   } catch (e) {
     console.error('Failed to load volumes:', e);
@@ -527,11 +561,11 @@ async function loadVolumes(schemaName: string) {
   }
 }
 
-// 选择 Schema 时加载 Volumes
-function onSchemaChange(schemaName: string | number) {
-  selectedSchemaName.value = schemaName as string;
+// 选择 Asset Bundle 时加载 Volumes
+function onAssetBundleChange(bundleName: string | number) {
+  selectedBundleName.value = bundleName as string;
   form.volume_reference = '';
-  loadVolumes(schemaName as string);
+  loadVolumes(bundleName as string);
 }
 
 // 关闭弹窗
@@ -551,6 +585,7 @@ async function handleSubmit() {
     const data: ModelCreate = {
       name: form.name,
       model_type: form.model_type,
+      temperature: form.temperature,
     };
     
     if (form.description) {
@@ -577,7 +612,7 @@ async function handleSubmit() {
       }
     }
     
-    emit('submit', props.catalogId, props.schemaName, data);
+    emit('submit', props.businessUnitId, props.agentName, data);
   } finally {
     isSubmitting.value = false;
   }
@@ -597,10 +632,11 @@ function resetForm() {
   form.api_base_url = '';
   form.api_key = '';
   form.model_id = '';
+  form.temperature = 0;
   errors.name = '';
   showApiKey.value = false;
-  selectedSchemaName.value = '';
-  schemas.value = [];
+  selectedBundleName.value = '';
+  assetBundles.value = [];
   volumes.value = [];
 }
 
@@ -608,7 +644,7 @@ function resetForm() {
 watch(() => props.isOpen, async (isOpen) => {
   if (isOpen) {
     resetForm();
-    await loadSchemas();
+    await loadAssetBundles();
   }
 });
 </script>

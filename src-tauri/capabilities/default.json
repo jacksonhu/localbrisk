@@ -23,6 +23,9 @@
     "shell:allow-kill",
     "shell:allow-stdin-write",
     "dialog:default",
+    "clipboard-manager:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     {
       "identifier": "shell:allow-execute",
       "allow": [

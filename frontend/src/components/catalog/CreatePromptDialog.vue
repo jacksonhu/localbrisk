@@ -77,14 +77,14 @@ const { t } = useI18n();
 // Props
 const props = defineProps<{
   isOpen: boolean;
-  catalogId: string;
+  businessUnitId: string;
   agentName: string;
 }>();
 
 // Emits
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'submit', catalogId: string, agentName: string, data: PromptCreate): void;
+  (e: 'submit', businessUnitId: string, agentName: string, data: PromptCreate): void;
 }>();
 
 // 表单状态
@@ -139,7 +139,7 @@ async function handleSubmit() {
       content: form.content || '',
     };
     
-    emit('submit', props.catalogId, props.agentName, data);
+    emit('submit', props.businessUnitId, props.agentName, data);
   } finally {
     isSubmitting.value = false;
   }

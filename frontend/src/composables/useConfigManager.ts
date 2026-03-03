@@ -1,7 +1,7 @@
 /**
  * 配置管理 Composable
  * 提供统一的配置文件保存、加载、复制功能
- * 支持 Catalog、Schema、Agent、Model 等实体的 YAML 配置管理
+ * 支持 Business Unit、Asset Bundle、Agent、Model 等实体的 YAML 配置管理
  */
 
 import { ref, computed } from 'vue';
@@ -14,7 +14,7 @@ import { useToast } from '@/composables/useToast';
  */
 export interface ConfigManagerOptions {
   /** 配置类型，用于日志和错误提示 */
-  type: 'catalog' | 'schema' | 'agent' | 'asset' | 'model';
+  type: 'business_unit' | 'asset_bundle' | 'agent' | 'asset' | 'model';
   
   /** 获取配置文件路径的函数 */
   getConfigPath: () => string | undefined;
@@ -35,14 +35,14 @@ export interface ConfigManagerOptions {
  * @example
  * ```ts
  * const configManager = useConfigManager({
- *   type: 'catalog',
- *   getConfigPath: () => selectedCatalog.value?.path ? `${selectedCatalog.value.path}/config.yaml` : undefined,
+ *   type: 'business_unit',
+ *   getConfigPath: () => selectedBusinessUnit.value?.path ? `${selectedBusinessUnit.value.path}/config.yaml` : undefined,
  *   loadConfig: async () => {
- *     const response = await catalogApi.getConfig(catalogId);
+ *     const response = await businessUnitApi.getConfig(businessUnitId);
  *     return response.content;
  *   },
  *   onSaved: () => {
- *     store.refreshCatalog(catalogId);
+ *     store.refreshBusinessUnit(businessUnitId);
  *   }
  * });
  * ```

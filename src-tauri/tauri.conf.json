@@ -23,7 +23,8 @@
         "fullscreen": false,
         "decorations": true,
         "center": true,
-        "visible": true
+        "visible": true,
+        "useHttpsScheme": true
       }
     ],
     "security": {

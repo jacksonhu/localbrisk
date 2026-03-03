@@ -8,12 +8,12 @@
       >
         <ArrowLeft class="w-4 h-4" />
       </button>
-      <span class="text-primary cursor-pointer hover:underline" @click="goToCatalog">
-        {{ selectedCatalog?.display_name || selectedCatalog?.name }}
+      <span class="text-primary cursor-pointer hover:underline" @click="goToBusinessUnit">
+        {{ selectedBusinessUnit?.display_name || selectedBusinessUnit?.name }}
       </span>
       <ChevronRight class="w-3 h-3" />
-      <span class="text-primary cursor-pointer hover:underline" @click="goToSchema">
-        {{ selectedSchema?.name }}
+      <span class="text-primary cursor-pointer hover:underline" @click="goToAssetBundle">
+        {{ selectedAssetBundle?.name }}
       </span>
       <ChevronRight class="w-3 h-3" />
       <span>{{ selectedAsset?.name }}</span>
@@ -427,7 +427,7 @@ import {
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import ConfigEditor from "@/components/common/ConfigEditor.vue";
 import UniversalViewer from "@/components/viewer/UniversalViewer.vue";
-import { useCatalogStore } from "@/stores/catalogStore";
+import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { useConfigManager } from "@/composables/useConfigManager";
 import { assetApi } from "@/services/api";
 import { 
@@ -450,11 +450,11 @@ import {
 } from "@/composables/useFileBrowser";
 
 const { t } = useI18n();
-const store = useCatalogStore();
+const store = useBusinessUnitStore();
 
 // 使用 computed 保持响应式
-const selectedCatalog = computed(() => store.selectedCatalog.value);
-const selectedSchema = computed(() => store.selectedSchema.value);
+const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
+const selectedAssetBundle = computed(() => store.selectedAssetBundle.value);
 const selectedAsset = computed(() => store.selectedAsset.value);
 
 // Tab 状态
@@ -504,11 +504,11 @@ const volumeConfigManager = useConfigManager({
     return selectedAsset.value.path;
   },
   loadConfig: async () => {
-    if (!selectedCatalog.value || !selectedSchema.value || !selectedAsset.value) return '';
+    if (!selectedBusinessUnit.value || !selectedAssetBundle.value || !selectedAsset.value) return '';
     try {
       const response = await assetApi.getConfig(
-        selectedCatalog.value.id,
-        selectedSchema.value.name,
+        selectedBusinessUnit.value.id,
+        selectedAssetBundle.value.name,
         selectedAsset.value.name
       );
       return response.content;
@@ -519,8 +519,8 @@ const volumeConfigManager = useConfigManager({
   },
   onSaved: async () => {
     // 刷新 asset 数据
-    if (selectedCatalog.value && selectedSchema.value) {
-      await store.fetchAssets(selectedCatalog.value.id, selectedSchema.value.name);
+    if (selectedBusinessUnit.value && selectedAssetBundle.value) {
+      await store.fetchAssets(selectedBusinessUnit.value.id, selectedAssetBundle.value.name);
     }
   },
 });
@@ -621,12 +621,12 @@ function goBack() {
   store.clearSelectedAsset();
 }
 
-function goToCatalog() {
+function goToBusinessUnit() {
   store.clearSelectedAsset();
-  store.clearSelectedSchema();
+  store.clearSelectedAssetBundle();
 }
 
-function goToSchema() {
+function goToAssetBundle() {
   store.clearSelectedAsset();
 }
 
@@ -828,11 +828,11 @@ function confirmDeleteFile(file: FileInfo) {
 
 async function handleConfirmDelete() {
   if (deleteTarget.value === 'volume') {
-    if (!selectedCatalog.value || !selectedSchema.value || !selectedAsset.value) return;
+    if (!selectedBusinessUnit.value || !selectedAssetBundle.value || !selectedAsset.value) return;
     
     const success = await store.deleteAsset(
-      selectedCatalog.value.id, 
-      selectedSchema.value.name, 
+      selectedBusinessUnit.value.id, 
+      selectedAssetBundle.value.name, 
       selectedAsset.value.name
     );
     if (success) {

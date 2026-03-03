@@ -6,7 +6,7 @@
 <template>
   <BaseDialog
     :is-open="isOpen"
-    :title="t('catalog.createAgent')"
+    :title="t('businessUnit.createAgent')"
     :icon="Bot"
     width="md"
     @close="close"
@@ -14,14 +14,14 @@
     <form @submit.prevent="handleSubmit" class="space-y-5">
       <!-- Agent 名称 -->
       <FormField
-        :label="t('catalog.agentName')"
+        :label="t('businessUnit.agentName')"
         :error="errors.name"
-        :hint="t('catalog.agentNameHint')"
+        :hint="t('businessUnit.agentNameHint')"
         required
       >
         <FormInput
           v-model="form.name"
-          :placeholder="t('catalog.agentNameHint')"
+          :placeholder="t('businessUnit.agentNameHint')"
           :error="!!errors.name"
           @input="validateName"
         />
@@ -32,14 +32,14 @@
         <div class="flex gap-2">
           <Info class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
           <div class="text-xs text-blue-700 dark:text-blue-300">
-            <p class="font-medium mb-1">{{ t('catalog.agentStructure') }}</p>
+            <p class="font-medium mb-1">{{ t('businessUnit.agentStructure') }}</p>
             <ul class="list-disc list-inside space-y-0.5 text-blue-600 dark:text-blue-400">
-              <li><code class="text-xs">agent_spec.yaml</code> - {{ t('catalog.agentSpecDesc') }}</li>
-              <li><code class="text-xs">skills/</code> - {{ t('catalog.skillsDesc') }}</li>
-              <li><code class="text-xs">prompts/</code> - {{ t('catalog.promptsDesc') }}</li>
+              <li><code class="text-xs">agent_spec.yaml</code> - {{ t('businessUnit.agentSpecDesc') }}</li>
+              <li><code class="text-xs">skills/</code> - {{ t('businessUnit.skillsDesc') }}</li>
+              <li><code class="text-xs">prompts/</code> - {{ t('businessUnit.promptsDesc') }}</li>
             </ul>
             <p class="mt-2 text-blue-500 dark:text-blue-400">
-              {{ t('catalog.agentConfigHint') }}
+              {{ t('businessUnit.agentConfigHint') }}
             </p>
           </div>
         </div>
@@ -73,13 +73,13 @@ const { t } = useI18n();
 // Props
 const props = defineProps<{
   isOpen: boolean;
-  catalogId: string;
+  businessUnitId: string;
 }>();
 
 // Emits
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'submit', catalogId: string, data: AgentCreate): void;
+  (e: 'submit', businessUnitId: string, data: AgentCreate): void;
 }>();
 
 // 表单状态 - 只保留 name
@@ -132,7 +132,7 @@ async function handleSubmit() {
       name: form.name,
     };
     
-    emit('submit', props.catalogId, data);
+    emit('submit', props.businessUnitId, data);
   } finally {
     isSubmitting.value = false;
   }

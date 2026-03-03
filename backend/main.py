@@ -6,10 +6,16 @@ LocalBrisk Backend - FastAPI 主入口
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# 首先初始化日志系统
+from app.core.logging import setup_logging, get_logger
+setup_logging()
+
 from app.api import router as api_router
 from app.core.config import settings
 from app.core.middleware import I18nMiddleware
 from app.core.i18n import t, SupportedLocale
+
+logger = get_logger(__name__)
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
@@ -39,12 +45,14 @@ app.include_router(api_router, prefix="/api")
 @app.get("/")
 async def root():
     """根路径 - 健康检查"""
+    logger.debug("健康检查请求")
     return {"status": "ok", "message": "LocalBrisk Backend is running"}
 
 
 @app.get("/health")
 async def health_check():
     """健康检查端点"""
+    logger.debug("健康检查请求")
     return {"status": "healthy", "message": t("health.healthy"), "version": "0.1.0"}
 
 
@@ -64,6 +72,8 @@ async def get_supported_locales():
 
 if __name__ == "__main__":
     import uvicorn
+    
+    logger.info(f"启动 LocalBrisk Backend, host={settings.HOST}, port={settings.PORT}, debug={settings.DEBUG}")
     
     uvicorn.run(
         "main:app",

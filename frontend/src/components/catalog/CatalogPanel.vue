@@ -3,11 +3,11 @@
     <!-- 头部 -->
     <div class="px-4 py-3 border-b border-border">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-xs text-muted-foreground uppercase tracking-wider">{{ t('catalog.Workspace') }}</span>
+        <span class="text-xs text-muted-foreground uppercase tracking-wider">{{ t('businessUnit.workspace') }}</span>
         <button 
           class="w-6 h-6 rounded flex items-center justify-center bg-primary text-white hover:bg-primary/90 transition-colors"
-          :title="t('catalog.createCatalog')"
-          @click="showCreateCatalogDialog = true"
+          :title="t('businessUnit.createBusinessUnit')"
+          @click="showCreateBusinessUnitDialog = true"
         >
           <Plus class="w-4 h-4" />
         </button>
@@ -52,10 +52,10 @@
         <Folder class="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
         <p class="text-sm text-muted-foreground mb-3">{{ t('common.noData') }}</p>
         <button
-          @click="showCreateCatalogDialog = true"
+          @click="showCreateBusinessUnitDialog = true"
           class="px-3 py-1.5 text-sm bg-primary text-white rounded hover:bg-primary/90 transition-colors"
         >
-          {{ t('catalog.createCatalog') }}
+          {{ t('businessUnit.createBusinessUnit') }}
         </button>
       </div>
     </div>
@@ -72,25 +72,25 @@
       />
     </div>
 
-    <!-- 创建 Catalog 弹窗 -->
-    <CreateCatalogDialog
-      :is-open="showCreateCatalogDialog"
-      @close="showCreateCatalogDialog = false"
-      @submit="handleCreateCatalog"
+    <!-- 创建 BusinessUnit 弹窗 -->
+    <CreateBusinessUnitDialog
+      :is-open="showCreateBusinessUnitDialog"
+      @close="showCreateBusinessUnitDialog = false"
+      @submit="handleCreateBusinessUnit"
     />
 
-    <!-- 创建 Schema 弹窗 -->
-    <SchemaDialog
-      :is-open="showCreateSchemaDialog"
-      :catalog-id="selectedCatalogId"
-      @close="showCreateSchemaDialog = false"
-      @create="handleCreateSchema"
+    <!-- 创建 AssetBundle 弹窗 -->
+    <AssetBundleDialog
+      :is-open="showCreateAssetBundleDialog"
+      :business-unit-id="selectedBusinessUnitId"
+      @close="showCreateAssetBundleDialog = false"
+      @create="handleCreateAssetBundle"
     />
 
     <!-- 创建 Agent 弹窗 -->
     <CreateAgentDialog
       :is-open="showCreateAgentDialog"
-      :catalog-id="selectedCatalogId"
+      :business-unit-id="selectedBusinessUnitId"
       @close="showCreateAgentDialog = false"
       @submit="handleCreateAgent"
     />
@@ -112,30 +112,30 @@
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
         @click.stop
       >
-        <!-- Catalog 右键菜单 -->
+        <!-- BusinessUnit 右键菜单 -->
         <template v-if="contextMenu.type === 'catalog'">
           <button
             v-if="contextMenu.item?.metadata?.allow_custom_schema !== false"
             class="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
-            @click="handleAddSchema"
+            @click="handleAddAssetBundle"
           >
             <Plus class="w-4 h-4" />
-            {{ t('catalog.createSchema') }}
+            {{ t('businessUnit.createAssetBundle') }}
           </button>
           <button
             class="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
             @click="handleAddAgent"
           >
             <Bot class="w-4 h-4" />
-            {{ t('catalog.createAgent') }}
+            {{ t('businessUnit.createAgent') }}
           </button>
           <div class="border-t border-border my-1"></div>
           <button
             class="w-full px-3 py-2 text-sm text-left hover:bg-muted text-red-600 flex items-center gap-2"
-            @click="handleDeleteCatalog"
+            @click="handleDeleteBusinessUnit"
           >
             <Trash2 class="w-4 h-4" />
-            {{ t('catalog.deleteCatalog') }}
+            {{ t('businessUnit.deleteBusinessUnit') }}
           </button>
         </template>
 
@@ -146,18 +146,18 @@
             @click="handleDeleteAgent"
           >
             <Trash2 class="w-4 h-4" />
-            {{ t('catalog.deleteAgent') }}
+            {{ t('businessUnit.deleteAgent') }}
           </button>
         </template>
 
-        <!-- Schema 右键菜单 -->
+        <!-- AssetBundle 右键菜单 -->
         <template v-else-if="contextMenu.type === 'schema'">
           <button
             class="w-full px-3 py-2 text-sm text-left hover:bg-muted text-red-600 flex items-center gap-2"
-            @click="handleDeleteSchema"
+            @click="handleDeleteAssetBundle"
           >
             <Trash2 class="w-4 h-4" />
-            {{ t('catalog.deleteSchema') }}
+            {{ t('businessUnit.deleteAssetBundle') }}
           </button>
         </template>
       </div>
@@ -170,33 +170,33 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, RefreshCw, Loader2, AlertCircle, Folder, Trash2, Bot } from "lucide-vue-next";
 import CatalogTree from "./CatalogTree.vue";
-import CreateCatalogDialog from "./CreateCatalogDialog.vue";
-import SchemaDialog from "./SchemaDialog.vue";
+import CreateBusinessUnitDialog from "./CreateBusinessUnitDialog.vue";
+import AssetBundleDialog from "./AssetBundleDialog.vue";
 import CreateAgentDialog from "./CreateAgentDialog.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
-import { useCatalogStore } from "@/stores/catalogStore";
-import type { CatalogItem, CatalogCreate, SchemaCreate, AgentCreate } from "@/types/catalog";
+import { useBusinessUnitStore } from "@/stores/businessUnitStore";
+import type { BusinessUnitItem, BusinessUnitCreate, AssetBundleCreate, AgentCreate } from "@/types/catalog";
 
 const { t } = useI18n();
-const store = useCatalogStore();
+const store = useBusinessUnitStore();
 
 // 从 store 获取响应式状态
 const loading = store.loading;  // reactive 对象，不需要 .value
 const errorMsg = computed(() => store.error.value);  // ref 需要通过计算属性访问
 
 // 创建计算属性来正确访问 ref 的值
-const catalogItems = computed(() => store.catalogItems.value);
+const catalogItems = computed(() => store.businessUnitItems.value);
 
 // 使用 store 中统一的选中节点 ID 计算
 // 所有节点类型的 ID 生成逻辑都在 store 中集中管理
 const selectedNodeId = computed(() => store.selectedNodeId.value);
 
 // 弹窗状态
-const showCreateCatalogDialog = ref(false);
-const showCreateSchemaDialog = ref(false);
+const showCreateBusinessUnitDialog = ref(false);
+const showCreateAssetBundleDialog = ref(false);
 const showCreateAgentDialog = ref(false);
 const showDeleteDialog = ref(false);
-const selectedCatalogId = ref('');
+const selectedBusinessUnitId = ref('');
 const deleteMessage = ref('');
 const deleteDescription = ref('');
 const deleteTarget = ref<{ type: 'catalog' | 'schema' | 'agent'; id: string; name: string } | null>(null);
@@ -207,7 +207,7 @@ const contextMenu = ref<{
   x: number;
   y: number;
   type: 'catalog' | 'schema' | 'asset' | 'agent' | null;
-  item: CatalogItem | null;
+  item: BusinessUnitItem | null;
   parentId?: string;
 }>({
   visible: false,
@@ -223,46 +223,48 @@ async function handleRefresh() {
 }
 
 // 选择项目
-function handleSelect(item: CatalogItem) {
+function handleSelect(item: BusinessUnitItem) {
   console.log("CatalogPanel.handleSelect:", item.type, item.name, item.metadata);
   
   // 根据节点类型调用对应的 store 方法
   // 所有状态清除逻辑都在 store 的 selectXxx 方法中处理
   switch (item.type) {
     case 'catalog':
-      // 选择 Catalog：清除所有子级选择
-      store.clearSelectedSchema();
+    case 'business_unit':
+      // 选择 BusinessUnit：清除所有子级选择
+      store.clearSelectedAssetBundle();
       store.clearSelectedAgent();
-      store.selectCatalog(item.id);
+      store.selectBusinessUnit(item.id);
       break;
       
-    case 'schema': {
-      // 选择 Schema：需要 catalog_id
-      const catalogId = item.metadata?.catalog_id as string | undefined;
-      if (catalogId) {
-        store.selectSchemaByName(catalogId, item.name);
+    case 'schema':
+    case 'asset_bundle': {
+      // 选择 AssetBundle：需要 business_unit_id
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
+      if (businessUnitId) {
+        store.selectAssetBundleByName(businessUnitId, item.name);
       } else {
-        // 兼容旧数据：从 item.id 中提取 catalog_id
-        const fallbackCatalogId = item.id.substring(0, item.id.lastIndexOf('_' + item.name));
-        store.selectSchemaByName(fallbackCatalogId, item.name);
+        // 兼容旧数据：从 item.id 中提取 business_unit_id
+        const fallbackBusinessUnitId = item.id.substring(0, item.id.lastIndexOf('_' + item.name));
+        store.selectAssetBundleByName(fallbackBusinessUnitId, item.name);
       }
       break;
     }
     
     case 'agent': {
-      // 选择 Agent：需要 catalog_id
-      const catalogId = item.metadata?.catalog_id as string | undefined;
-      if (catalogId) {
-        store.selectAgent(catalogId, item.name);
+      // 选择 Agent：需要 business_unit_id
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
+      if (businessUnitId) {
+        store.selectAgent(businessUnitId, item.name);
       }
       break;
     }
     
     case 'prompt': {
-      // 选择 Prompt：需要 catalog_id 和 agent_name
-      const catalogId = item.metadata?.catalog_id as string | undefined;
+      // 选择 Prompt：需要 business_unit_id 和 agent_name
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
       const agentName = item.metadata?.agent_name as string | undefined;
-      if (catalogId && agentName) {
+      if (businessUnitId && agentName) {
         // 从节点 ID 中提取原始文件名
         // 节点 ID 格式: {agentId}_prompt_{filename}
         // 例如: market_analysis_agent_dd_prompt_ddd.md
@@ -271,16 +273,16 @@ function handleSelect(item: CatalogItem) {
         const originalFileName = prefixIndex >= 0 
           ? item.id.substring(prefixIndex + prefix.length) 
           : item.name;
-        store.selectPrompt(catalogId, agentName, originalFileName);
+        store.selectPrompt(businessUnitId, agentName, originalFileName);
       }
       break;
     }
     
     case 'skill': {
-      // 选择 Skill：需要 catalog_id 和 agent_name
-      const catalogId = item.metadata?.catalog_id as string | undefined;
+      // 选择 Skill：需要 business_unit_id 和 agent_name
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
       const agentName = item.metadata?.agent_name as string | undefined;
-      if (catalogId && agentName) {
+      if (businessUnitId && agentName) {
         // 从节点 ID 中提取 skill 名称
         // 节点 ID 格式: {agentId}_skill_{skillName}
         // 例如: market_analysis_agent_dd_skill_my-skill
@@ -289,32 +291,44 @@ function handleSelect(item: CatalogItem) {
         const skillName = prefixIndex >= 0 
           ? item.id.substring(prefixIndex + prefix.length) 
           : item.name;
-        store.selectSkill(catalogId, agentName, skillName);
+        store.selectSkill(businessUnitId, agentName, skillName);
       }
       break;
     }
     
     case 'model': {
-      // 选择 Model：需要 catalog_id 和 schema_name
-      const catalogId = item.metadata?.catalog_id as string | undefined;
-      const schemaName = item.metadata?.schema_name as string | undefined;
-      if (catalogId && schemaName) {
-        store.selectModel(catalogId, schemaName, item.name);
+      // 选择 Model：需要 business_unit_id 和 agent_name
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
+      const agentName = item.metadata?.agent_name as string | undefined;
+      if (businessUnitId && agentName) {
+        store.selectModel(businessUnitId, agentName, item.name);
       } else {
-        console.warn('Model metadata missing catalog_id or schema_name');
+        console.warn('Model metadata missing business_unit_id or agent_name');
+      }
+      break;
+    }
+    
+    case 'mcp': {
+      // 选择 MCP：需要 business_unit_id 和 agent_name
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
+      const agentName = item.metadata?.agent_name as string | undefined;
+      if (businessUnitId && agentName) {
+        store.selectMCP(businessUnitId, agentName, item.name);
+      } else {
+        console.warn('MCP metadata missing business_unit_id or agent_name');
       }
       break;
     }
     
     case 'table':
     case 'volume': {
-      // 选择 Table/Volume（Asset）：需要 catalog_id 和 schema_name
-      const catalogId = item.metadata?.catalog_id as string | undefined;
-      const schemaName = item.metadata?.schema_name as string | undefined;
-      if (catalogId && schemaName) {
-        store.selectAssetByName(catalogId, schemaName, item.name);
+      // 选择 Table/Volume（Asset）：需要 business_unit_id 和 bundle_name
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
+      const bundleName = item.metadata?.bundle_name as string | undefined;
+      if (businessUnitId && bundleName) {
+        store.selectAssetByName(businessUnitId, bundleName, item.name);
       } else {
-        console.warn('Asset metadata missing catalog_id or schema_name');
+        console.warn('Asset metadata missing business_unit_id or bundle_name');
       }
       break;
     }
@@ -325,24 +339,24 @@ function handleSelect(item: CatalogItem) {
 }
 
 // 切换展开/折叠（点击展开箭头时）
-function handleToggleExpand(item: CatalogItem) {
+function handleToggleExpand(item: BusinessUnitItem) {
   store.toggleNodeExpanded(item.id);
 }
 
 // 确保展开（点击节点内容时）
-function handleEnsureExpand(item: CatalogItem) {
+function handleEnsureExpand(item: BusinessUnitItem) {
   store.toggleNodeExpanded(item.id, true);
 }
 
 // 右键菜单
-function handleContextMenu(event: MouseEvent, item: CatalogItem, parentId?: string) {
+function handleContextMenu(event: MouseEvent, item: BusinessUnitItem, parentId?: string) {
   event.preventDefault();
   
   // 根据节点类型确定菜单类型
   let menuType: 'catalog' | 'schema' | 'asset' | 'agent' | null = null;
-  if (item.type === 'catalog') {
+  if (item.type === 'catalog' || item.type === 'business_unit') {
     menuType = 'catalog';
-  } else if (item.type === 'schema') {
+  } else if (item.type === 'schema' || item.type === 'asset_bundle') {
     menuType = 'schema';
   } else if (item.type === 'agent') {
     menuType = 'agent';
@@ -365,11 +379,11 @@ function closeContextMenu() {
   contextMenu.value.visible = false;
 }
 
-// 添加 Schema
-function handleAddSchema() {
+// 添加 AssetBundle
+function handleAddAssetBundle() {
   if (contextMenu.value.item) {
-    selectedCatalogId.value = contextMenu.value.item.id;
-    showCreateSchemaDialog.value = true;
+    selectedBusinessUnitId.value = contextMenu.value.item.id;
+    showCreateAssetBundleDialog.value = true;
   }
   closeContextMenu();
 }
@@ -377,37 +391,37 @@ function handleAddSchema() {
 // 添加 Agent
 function handleAddAgent() {
   if (contextMenu.value.item) {
-    selectedCatalogId.value = contextMenu.value.item.id;
+    selectedBusinessUnitId.value = contextMenu.value.item.id;
     showCreateAgentDialog.value = true;
   }
   closeContextMenu();
 }
 
-// 删除 Catalog
-function handleDeleteCatalog() {
+// 删除 BusinessUnit
+function handleDeleteBusinessUnit() {
   if (contextMenu.value.item) {
     deleteTarget.value = {
       type: 'catalog',
       id: contextMenu.value.item.id,
       name: contextMenu.value.item.name,
     };
-    deleteMessage.value = t('catalog.confirmDeleteCatalog', { name: contextMenu.value.item.name });
-    deleteDescription.value = t('catalog.confirmDeleteCatalogDesc');
+    deleteMessage.value = t('businessUnit.confirmDeleteBusinessUnit', { name: contextMenu.value.item.name });
+    deleteDescription.value = t('businessUnit.confirmDeleteBusinessUnitDesc');
     showDeleteDialog.value = true;
   }
   closeContextMenu();
 }
 
-// 删除 Schema
-function handleDeleteSchema() {
+// 删除 AssetBundle
+function handleDeleteAssetBundle() {
   if (contextMenu.value.item && contextMenu.value.parentId) {
     deleteTarget.value = {
       type: 'schema',
       id: contextMenu.value.parentId,
       name: contextMenu.value.item.name,
     };
-    deleteMessage.value = t('catalog.confirmDeleteSchema', { name: contextMenu.value.item.name });
-    deleteDescription.value = t('catalog.confirmDeleteSchemaDesc');
+    deleteMessage.value = t('businessUnit.confirmDeleteAssetBundle', { name: contextMenu.value.item.name });
+    deleteDescription.value = t('businessUnit.confirmDeleteAssetBundleDesc');
     showDeleteDialog.value = true;
   }
   closeContextMenu();
@@ -416,38 +430,38 @@ function handleDeleteSchema() {
 // 删除 Agent
 function handleDeleteAgent() {
   if (contextMenu.value.item) {
-    const catalogId = contextMenu.value.item.metadata?.catalog_id as string || contextMenu.value.parentId;
+    const businessUnitId = contextMenu.value.item.metadata?.business_unit_id as string || contextMenu.value.parentId;
     deleteTarget.value = {
       type: 'agent',
-      id: catalogId || '',
+      id: businessUnitId || '',
       name: contextMenu.value.item.name,
     };
-    deleteMessage.value = t('catalog.confirmDeleteAgent', { name: contextMenu.value.item.name });
-    deleteDescription.value = t('catalog.confirmDeleteAgentDesc');
+    deleteMessage.value = t('businessUnit.confirmDeleteAgent', { name: contextMenu.value.item.name });
+    deleteDescription.value = t('businessUnit.confirmDeleteAgentDesc');
     showDeleteDialog.value = true;
   }
   closeContextMenu();
 }
 
-// 创建 Catalog
-async function handleCreateCatalog(data: CatalogCreate) {
-  const result = await store.createCatalog(data);
+// 创建 BusinessUnit
+async function handleCreateBusinessUnit(data: BusinessUnitCreate) {
+  const result = await store.createBusinessUnit(data);
   if (result) {
-    showCreateCatalogDialog.value = false;
+    showCreateBusinessUnitDialog.value = false;
   }
 }
 
-// 创建 Schema
-async function handleCreateSchema(catalogId: string, data: SchemaCreate) {
-  const result = await store.createSchema(catalogId, data);
+// 创建 AssetBundle
+async function handleCreateAssetBundle(businessUnitId: string, data: AssetBundleCreate) {
+  const result = await store.createAssetBundle(businessUnitId, data);
   if (result) {
-    showCreateSchemaDialog.value = false;
+    showCreateAssetBundleDialog.value = false;
   }
 }
 
 // 创建 Agent
-async function handleCreateAgent(catalogId: string, data: AgentCreate) {
-  const result = await store.createAgent(catalogId, data);
+async function handleCreateAgent(businessUnitId: string, data: AgentCreate) {
+  const result = await store.createAgent(businessUnitId, data);
   if (result) {
     showCreateAgentDialog.value = false;
   }
@@ -459,9 +473,9 @@ async function handleConfirmDelete() {
 
   let success = false;
   if (deleteTarget.value.type === 'catalog') {
-    success = await store.deleteCatalog(deleteTarget.value.id);
+    success = await store.deleteBusinessUnit(deleteTarget.value.id);
   } else if (deleteTarget.value.type === 'schema') {
-    success = await store.deleteSchema(deleteTarget.value.id, deleteTarget.value.name);
+    success = await store.deleteAssetBundle(deleteTarget.value.id, deleteTarget.value.name);
   } else if (deleteTarget.value.type === 'agent') {
     success = await store.deleteAgent(deleteTarget.value.id, deleteTarget.value.name);
   }

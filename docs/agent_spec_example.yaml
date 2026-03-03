@@ -1,0 +1,32 @@
+baseinfo:
+ name: data_analyst
+ display_name: data_analyst
+ description: ''
+ tags: []
+ owner: admin
+ created_at: '2026-02-01T00:14:00.473298'
+ updated_at: '2026-02-01T00:16:12.141917'
+llm_config:
+ llm_model: 'testsheme.baiduqianfan'
+ temperature: 0.2
+ max_tokens: 2000
+ response_format: text
+instruction:
+ system_prompt: '你是一个精通 Python 和 Plotly 的可视化专家。
+你的职责是接收数据字典并生成符合 PySide6 QWebEngineView 显示要求的 HTML 代码。'
+ user_prompt_template: ''
+ user_prompt_templates:
+  - name: data_summery.md
+routing:
+ trigger_keywords: ["绘图", "可视化", "图表"]
+ required_context_keys: ["input_data"]
+ next_possible_agents: ["human_reviewer"]
+capabilities:
+ native_skills:
+  - name: xlsx
+  - name: diagrams-generator
+ mcp_tools: []
+governance:
+ human_in_the_loop:
+  trigger: on_error
+ termination_criteria: '1. 输出了标准 HTML 字符串且包含 Plotly 核心逻辑。'

@@ -3,7 +3,7 @@
     <!-- 面包屑导航 -->
     <Breadcrumb
       :items="[
-        { label: selectedCatalog?.display_name || selectedCatalog?.name || '', onClick: goToCatalog },
+        { label: selectedBusinessUnit?.display_name || selectedBusinessUnit?.name || '', onClick: goToBusinessUnit },
         { label: selectedAgent?.name || '', onClick: goToAgent },
         { label: selectedPrompt?.name || '' }
       ]"
@@ -155,17 +155,17 @@ import {
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import Breadcrumb from "@/components/common/Breadcrumb.vue";
 import MarkdownEditor from "@/components/viewer/MarkdownEditor.vue";
-import { useCatalogStore } from "@/stores/catalogStore";
+import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { agentApi } from "@/services/api";
 import { formatDate } from "@/utils/formatUtils";
 import type { Prompt } from "@/types/catalog";
 
 const { t } = useI18n();
-const store = useCatalogStore();
+const store = useBusinessUnitStore();
 
 // Props
 const props = defineProps<{
-  catalogId: string;
+  businessUnitId: string;
   agentName: string;
   promptName: string;
 }>();
@@ -177,7 +177,7 @@ const emit = defineEmits<{
 }>();
 
 // 使用 computed 保持响应式
-const selectedCatalog = computed(() => store.selectedCatalog.value);
+const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
 
 // Prompt 数据
@@ -209,11 +209,11 @@ const deleteDescription = ref('');
 
 // 加载 Prompt 详情
 async function loadPrompt() {
-  if (!props.catalogId || !props.agentName || !props.promptName) return;
+  if (!props.businessUnitId || !props.agentName || !props.promptName) return;
   
   isLoading.value = true;
   try {
-    const prompt = await agentApi.getPrompt(props.catalogId, props.agentName, props.promptName);
+    const prompt = await agentApi.getPrompt(props.businessUnitId, props.agentName, props.promptName);
     selectedPrompt.value = prompt;
     promptContent.value = prompt.content || '';
     // 启用状态通过 computed 从 agent.instruction.user_prompt_templates 中获取，无需手动设置
@@ -231,7 +231,7 @@ async function toggleEnabled() {
   
   const newEnabled = !isEnabled.value;
   try {
-    await agentApi.togglePromptEnabled(props.catalogId, props.agentName, props.promptName, newEnabled);
+    await agentApi.togglePromptEnabled(props.businessUnitId, props.agentName, props.promptName, newEnabled);
     // 刷新 Agent 数据以更新 instruction.user_prompt_templates 列表，但不改变选中状态
     // 使用 refreshSelectedAgent 而不是 selectAgent，避免清除 Prompt 选中状态
     await store.refreshSelectedAgent();
@@ -244,7 +244,7 @@ async function toggleEnabled() {
 // 保存内容
 async function handleSaveContent(content: string) {
   try {
-    await agentApi.updatePrompt(props.catalogId, props.agentName, props.promptName, {
+    await agentApi.updatePrompt(props.businessUnitId, props.agentName, props.promptName, {
       content,
     });
     promptContent.value = content;
@@ -270,10 +270,10 @@ function goBack() {
   emit('back');
 }
 
-// 返回到 Catalog
-function goToCatalog() {
+// 返回到 Business Unit
+function goToBusinessUnit() {
   store.clearSelectedAgent();
-  store.selectedCatalog.value = null;
+  store.selectedBusinessUnit.value = null;
 }
 
 // 返回到 Agent 详情
@@ -294,7 +294,7 @@ async function handleConfirmDelete() {
   if (!selectedPrompt.value) return;
   
   try {
-    await agentApi.deletePrompt(props.catalogId, props.agentName, props.promptName);
+    await agentApi.deletePrompt(props.businessUnitId, props.agentName, props.promptName);
     showDeleteDialog.value = false;
     emit('deleted');
   } catch (e) {
@@ -305,7 +305,7 @@ async function handleConfirmDelete() {
 
 // 监听 props 变化，重新加载
 // 使用 immediate: true 会在组件初始化时立即执行一次
-watch([() => props.catalogId, () => props.agentName, () => props.promptName], () => {
+watch([() => props.businessUnitId, () => props.agentName, () => props.promptName], () => {
   loadPrompt();
 }, { immediate: true });
 

@@ -235,9 +235,9 @@ const isTauriEnv = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in win
 // Props
 const props = defineProps<{
   isOpen: boolean;
-  catalogId: string;
+  businessUnitId: string;
   agentName: string;
-  onSubmit?: (catalogId: string, agentName: string, zipFilePath: string) => Promise<void>;
+  onSubmit?: (businessUnitId: string, agentName: string, zipFilePath: string) => Promise<void>;
 }>();
 
 // Emits
@@ -346,7 +346,7 @@ async function handleSubmit() {
   
   try {
     if (props.onSubmit) {
-      await props.onSubmit(props.catalogId, props.agentName, selectedFilePath.value);
+      await props.onSubmit(props.businessUnitId, props.agentName, selectedFilePath.value);
     }
     // 成功后关闭弹窗
     emit('close');

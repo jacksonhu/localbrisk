@@ -1,27 +1,47 @@
 /**
  * LocalBrisk API 服务
  * 与 Python FastAPI 后端通信
+ * 
+ * 概念说明：
+ * - BusinessUnit (业务单元)
+ * - AssetBundle (资源包)
+ * - Model 从 AssetBundle 移动到 Agent 下
+ * - Agent 新增 mcps 目录支持 MCP 配置
  */
 
 import { getLocale } from "@/i18n";
 import type {
-  Catalog,
-  CatalogCreate,
-  CatalogUpdate,
-  CatalogTreeNode,
-  Schema,
-  SchemaCreate,
-  SchemaUpdate,
+  // BusinessUnit
+  BusinessUnit,
+  BusinessUnitCreate,
+  BusinessUnitUpdate,
+  BusinessUnitTreeNode,
+  // AssetBundle
+  AssetBundle,
+  AssetBundleCreate,
+  AssetBundleUpdate,
   SyncResult,
+  // Asset
   Asset,
   AssetCreate,
+  // Agent
   Agent,
   AgentCreate,
   AgentUpdate,
-  DeleteResponse,
+  // Model (现在在 Agent 下)
+  Model,
+  ModelCreate,
+  ModelUpdate,
+  // MCP (新增)
+  MCP,
+  MCPCreate,
+  MCPUpdate,
+  // Prompt
   Prompt,
   PromptCreate,
   PromptUpdate,
+  // Other
+  DeleteResponse,
 } from "@/types/catalog";
 
 const API_BASE_URL = "http://127.0.0.1:8765";
@@ -95,114 +115,112 @@ export async function getSupportedLocales(): Promise<{
   return request("/api/i18n/locales");
 }
 
-// ============ Catalog API ============
+// ============ BusinessUnit API ============
 
-export const catalogApi = {
+export const businessUnitApi = {
   /**
-   * 获取所有 Catalog
+   * 获取所有 BusinessUnit
    */
-  list: (): Promise<Catalog[]> => 
-    request<Catalog[]>("/api/catalogs"),
-
-  /**
-   * 获取单个 Catalog
-   */
-  get: (catalogId: string): Promise<Catalog> => 
-    request<Catalog>(`/api/catalogs/${catalogId}`),
+  list: (): Promise<BusinessUnit[]> => 
+    request<BusinessUnit[]>("/api/business_units"),
 
   /**
-   * 获取 Catalog 配置文件 (config.yaml) 原始内容
+   * 获取单个 BusinessUnit
    */
-  getConfig: (catalogId: string): Promise<{ content: string }> =>
-    request<{ content: string }>(`/api/catalogs/${catalogId}/config`),
+  get: (businessUnitId: string): Promise<BusinessUnit> => 
+    request<BusinessUnit>(`/api/business_units/${businessUnitId}`),
 
   /**
-   * 创建 Catalog
+   * 获取 BusinessUnit 配置文件 (config.yaml) 原始内容
    */
-  create: (data: CatalogCreate): Promise<Catalog> =>
-    request<Catalog>("/api/catalogs", {
+  getConfig: (businessUnitId: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/business_units/${businessUnitId}/config`),
+
+  /**
+   * 创建 BusinessUnit
+   */
+  create: (data: BusinessUnitCreate): Promise<BusinessUnit> =>
+    request<BusinessUnit>("/api/business_units", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   /**
-   * 更新 Catalog
+   * 更新 BusinessUnit
    */
-  update: (catalogId: string, data: CatalogUpdate): Promise<Catalog> =>
-    request<Catalog>(`/api/catalogs/${catalogId}`, {
+  update: (businessUnitId: string, data: BusinessUnitUpdate): Promise<BusinessUnit> =>
+    request<BusinessUnit>(`/api/business_units/${businessUnitId}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
 
   /**
-   * 删除 Catalog
+   * 删除 BusinessUnit
    */
-  delete: (catalogId: string): Promise<DeleteResponse> =>
-    request<DeleteResponse>(`/api/catalogs/${catalogId}`, {
+  delete: (businessUnitId: string): Promise<DeleteResponse> =>
+    request<DeleteResponse>(`/api/business_units/${businessUnitId}`, {
       method: "DELETE",
     }),
 
   /**
-   * 获取 Catalog 导航树
+   * 获取 BusinessUnit 导航树
    */
-  getTree: (): Promise<CatalogTreeNode[]> =>
-    request<CatalogTreeNode[]>("/api/catalogs/tree"),
+  getTree: (): Promise<BusinessUnitTreeNode[]> =>
+    request<BusinessUnitTreeNode[]>("/api/business_units/tree"),
 };
 
-// ============ Schema API ============
+// ============ AssetBundle API ============
 
-// ============ Schema API ============
-
-export const schemaApi = {
+export const assetBundleApi = {
   /**
-   * 获取 Catalog 下的所有 Schema
+   * 获取 BusinessUnit 下的所有 AssetBundle
    */
-  list: (catalogId: string): Promise<Schema[]> =>
-    request<Schema[]>(`/api/catalogs/${catalogId}/schemas`),
+  list: (businessUnitId: string): Promise<AssetBundle[]> =>
+    request<AssetBundle[]>(`/api/business_units/${businessUnitId}/asset_bundles`),
 
   /**
-   * 获取单个 Schema 详情
+   * 获取单个 AssetBundle 详情
    */
-  get: (catalogId: string, schemaName: string): Promise<Schema> =>
-    request<Schema>(`/api/catalogs/${catalogId}/schemas/${schemaName}`),
+  get: (businessUnitId: string, bundleName: string): Promise<AssetBundle> =>
+    request<AssetBundle>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}`),
 
   /**
-   * 获取 Schema 配置文件 (schema.yaml) 原始内容
+   * 获取 AssetBundle 配置文件 (bundle.yaml) 原始内容
    */
-  getConfig: (catalogId: string, schemaName: string): Promise<{ content: string }> =>
-    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/config`),
+  getConfig: (businessUnitId: string, bundleName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}/config`),
 
   /**
-   * 创建 Schema
+   * 创建 AssetBundle
    */
-  create: (catalogId: string, data: SchemaCreate): Promise<Schema> =>
-    request<Schema>(`/api/catalogs/${catalogId}/schemas`, {
+  create: (businessUnitId: string, data: AssetBundleCreate): Promise<AssetBundle> =>
+    request<AssetBundle>(`/api/business_units/${businessUnitId}/asset_bundles`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   /**
-   * 更新 Schema
+   * 更新 AssetBundle
    */
-  update: (catalogId: string, schemaName: string, data: SchemaUpdate): Promise<Schema> =>
-    request<Schema>(`/api/catalogs/${catalogId}/schemas/${schemaName}`, {
+  update: (businessUnitId: string, bundleName: string, data: AssetBundleUpdate): Promise<AssetBundle> =>
+    request<AssetBundle>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
 
   /**
-   * 删除 Schema
+   * 删除 AssetBundle
    */
-  delete: (catalogId: string, schemaName: string): Promise<DeleteResponse> =>
-    request<DeleteResponse>(`/api/catalogs/${catalogId}/schemas/${schemaName}`, {
+  delete: (businessUnitId: string, bundleName: string): Promise<DeleteResponse> =>
+    request<DeleteResponse>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}`, {
       method: "DELETE",
     }),
 
   /**
-   * 同步 Schema 元数据（手动触发）
+   * 同步 AssetBundle 元数据（手动触发）
    */
-  sync: (catalogId: string, schemaName: string): Promise<SyncResult> =>
-    request<SyncResult>(`/api/catalogs/${catalogId}/schemas/${schemaName}/sync`, {
+  sync: (businessUnitId: string, bundleName: string): Promise<SyncResult> =>
+    request<SyncResult>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}/sync`, {
       method: "POST",
     }),
 };
@@ -220,16 +238,16 @@ export interface TablePreviewResult {
 
 export const assetApi = {
   /**
-   * 获取 Schema 下的所有 Asset
+   * 获取 AssetBundle 下的所有 Asset
    */
-  list: (catalogId: string, schemaName: string): Promise<Asset[]> =>
-    request<Asset[]>(`/api/catalogs/${catalogId}/schemas/${schemaName}/assets`),
+  list: (businessUnitId: string, bundleName: string): Promise<Asset[]> =>
+    request<Asset[]>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}/assets`),
 
   /**
    * 创建新的 Asset
    */
-  create: (catalogId: string, schemaName: string, data: AssetCreate): Promise<Asset> =>
-    request<Asset>(`/api/catalogs/${catalogId}/schemas/${schemaName}/assets`, {
+  create: (businessUnitId: string, bundleName: string, data: AssetCreate): Promise<Asset> =>
+    request<Asset>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}/assets`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -237,29 +255,29 @@ export const assetApi = {
   /**
    * 删除 Asset
    */
-  delete: (catalogId: string, schemaName: string, assetName: string): Promise<DeleteResponse> =>
-    request<DeleteResponse>(`/api/catalogs/${catalogId}/schemas/${schemaName}/assets/${assetName}`, {
+  delete: (businessUnitId: string, bundleName: string, assetName: string): Promise<DeleteResponse> =>
+    request<DeleteResponse>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}/assets/${assetName}`, {
       method: "DELETE",
     }),
 
   /**
    * 获取 Asset 配置文件原始内容
    */
-  getConfig: (catalogId: string, schemaName: string, assetName: string): Promise<{ content: string }> =>
-    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/assets/${assetName}/config`),
+  getConfig: (businessUnitId: string, bundleName: string, assetName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/business_units/${businessUnitId}/asset_bundles/${bundleName}/assets/${assetName}/config`),
 
   /**
    * 预览表数据
    */
   previewTableData: (
-    catalogId: string, 
-    schemaName: string, 
+    businessUnitId: string, 
+    bundleName: string, 
     tableName: string,
     limit: number = 100,
     offset: number = 0
   ): Promise<TablePreviewResult> =>
     request<TablePreviewResult>(
-      `/api/catalogs/${catalogId}/schemas/${schemaName}/tables/${tableName}/preview?limit=${limit}&offset=${offset}`
+      `/api/business_units/${businessUnitId}/asset_bundles/${bundleName}/tables/${tableName}/preview?limit=${limit}&offset=${offset}`
     ),
 };
 
@@ -267,28 +285,28 @@ export const assetApi = {
 
 export const agentApi = {
   /**
-   * 获取 Catalog 下的所有 Agent
+   * 获取 BusinessUnit 下的所有 Agent
    */
-  list: (catalogId: string): Promise<Agent[]> =>
-    request<Agent[]>(`/api/catalogs/${catalogId}/agents`),
+  list: (businessUnitId: string): Promise<Agent[]> =>
+    request<Agent[]>(`/api/business_units/${businessUnitId}/agents`),
 
   /**
    * 获取单个 Agent 详情
    */
-  get: (catalogId: string, agentName: string): Promise<Agent> =>
-    request<Agent>(`/api/catalogs/${catalogId}/agents/${agentName}`),
+  get: (businessUnitId: string, agentName: string): Promise<Agent> =>
+    request<Agent>(`/api/business_units/${businessUnitId}/agents/${agentName}`),
 
   /**
    * 获取 Agent 配置文件 (agent_spec.yaml) 原始内容
    */
-  getConfig: (catalogId: string, agentName: string): Promise<{ content: string }> =>
-    request<{ content: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/config`),
+  getConfig: (businessUnitId: string, agentName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/config`),
 
   /**
    * 创建 Agent
    */
-  create: (catalogId: string, data: AgentCreate): Promise<Agent> =>
-    request<Agent>(`/api/catalogs/${catalogId}/agents`, {
+  create: (businessUnitId: string, data: AgentCreate): Promise<Agent> =>
+    request<Agent>(`/api/business_units/${businessUnitId}/agents`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -296,8 +314,8 @@ export const agentApi = {
   /**
    * 更新 Agent
    */
-  update: (catalogId: string, agentName: string, data: AgentUpdate): Promise<Agent> =>
-    request<Agent>(`/api/catalogs/${catalogId}/agents/${agentName}`, {
+  update: (businessUnitId: string, agentName: string, data: AgentUpdate): Promise<Agent> =>
+    request<Agent>(`/api/business_units/${businessUnitId}/agents/${agentName}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
@@ -305,28 +323,28 @@ export const agentApi = {
   /**
    * 删除 Agent
    */
-  delete: (catalogId: string, agentName: string): Promise<DeleteResponse> =>
-    request<DeleteResponse>(`/api/catalogs/${catalogId}/agents/${agentName}`, {
+  delete: (businessUnitId: string, agentName: string): Promise<DeleteResponse> =>
+    request<DeleteResponse>(`/api/business_units/${businessUnitId}/agents/${agentName}`, {
       method: "DELETE",
     }),
 
   /**
    * 获取 Agent Prompt 内容
    */
-  getPrompt: (catalogId: string, agentName: string, promptName: string): Promise<Prompt> =>
-    request<Prompt>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`),
+  getPrompt: (businessUnitId: string, agentName: string, promptName: string): Promise<Prompt> =>
+    request<Prompt>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}`),
 
   /**
    * 获取 Agent 所有 Prompts
    */
-  listPrompts: (catalogId: string, agentName: string): Promise<Prompt[]> =>
-    request<Prompt[]>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts`),
+  listPrompts: (businessUnitId: string, agentName: string): Promise<Prompt[]> =>
+    request<Prompt[]>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts`),
 
   /**
    * 创建 Agent Prompt
    */
-  createPrompt: (catalogId: string, agentName: string, data: PromptCreate): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts`, {
+  createPrompt: (businessUnitId: string, agentName: string, data: PromptCreate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -334,8 +352,8 @@ export const agentApi = {
   /**
    * 更新 Agent Prompt
    */
-  updatePrompt: (catalogId: string, agentName: string, promptName: string, data: PromptUpdate): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`, {
+  updatePrompt: (businessUnitId: string, agentName: string, promptName: string, data: PromptUpdate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
@@ -343,22 +361,22 @@ export const agentApi = {
   /**
    * 删除 Agent Prompt
    */
-  deletePrompt: (catalogId: string, agentName: string, promptName: string): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}`, {
+  deletePrompt: (businessUnitId: string, agentName: string, promptName: string): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}`, {
       method: "DELETE",
     }),
 
   /**
    * 获取 Agent Skill 内容
    */
-  getSkill: (catalogId: string, agentName: string, skillName: string): Promise<{ name: string; content: string }> =>
-    request<{ name: string; content: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}`),
+  getSkill: (businessUnitId: string, agentName: string, skillName: string): Promise<{ name: string; content: string }> =>
+    request<{ name: string; content: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/skills/${skillName}`),
 
   /**
    * 创建/更新 Agent Skill
    */
-  createSkill: (catalogId: string, agentName: string, skillName: string, content: string): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}`, {
+  createSkill: (businessUnitId: string, agentName: string, skillName: string, content: string): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/skills/${skillName}`, {
       method: "POST",
       body: JSON.stringify({ content }),
     }),
@@ -366,24 +384,24 @@ export const agentApi = {
   /**
    * 删除 Agent Skill
    */
-  deleteSkill: (catalogId: string, agentName: string, skillName: string): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}`, {
+  deleteSkill: (businessUnitId: string, agentName: string, skillName: string): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/skills/${skillName}`, {
       method: "DELETE",
     }),
 
   /**
    * 切换 Prompt 启用状态
    */
-  togglePromptEnabled: (catalogId: string, agentName: string, promptName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
-    request<{ message: string; enabled: boolean }>(`/api/catalogs/${catalogId}/agents/${agentName}/prompts/${promptName}/toggle?enabled=${enabled}`, {
+  togglePromptEnabled: (businessUnitId: string, agentName: string, promptName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}/toggle?enabled=${enabled}`, {
       method: "POST",
     }),
 
   /**
    * 切换 Skill 启用状态
    */
-  toggleSkillEnabled: (catalogId: string, agentName: string, skillName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
-    request<{ message: string; enabled: boolean }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/${skillName}/toggle?enabled=${enabled}`, {
+  toggleSkillEnabled: (businessUnitId: string, agentName: string, skillName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/business_units/${businessUnitId}/agents/${agentName}/skills/${skillName}/toggle?enabled=${enabled}`, {
       method: "POST",
     }),
 
@@ -391,41 +409,39 @@ export const agentApi = {
    * 从本地 zip 文件路径导入 Skill
    * 本地桌面应用场景，直接传递本地文件路径
    */
-  importSkillFromZip: (catalogId: string, agentName: string, zipFilePath: string): Promise<{ success: boolean; skill_name?: string; message: string; path?: string }> =>
-    request<{ success: boolean; skill_name?: string; message: string; path?: string }>(`/api/catalogs/${catalogId}/agents/${agentName}/skills/import`, {
+  importSkillFromZip: (businessUnitId: string, agentName: string, zipFilePath: string): Promise<{ success: boolean; skill_name?: string; message: string; path?: string }> =>
+    request<{ success: boolean; skill_name?: string; message: string; path?: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/skills/import`, {
       method: "POST",
       body: JSON.stringify({ zip_file_path: zipFilePath }),
     }),
 };
 
-// ============ Model API（Schema 级别） ============
-
-import type { Model, ModelCreate, ModelUpdate } from "@/types/catalog";
+// ============ Model API（Agent 级别）============
 
 export const modelApi = {
   /**
-   * 获取 Schema 下的所有 Model
+   * 获取 Agent 下的所有 Model
    */
-  list: (catalogId: string, schemaName: string): Promise<Model[]> =>
-    request<Model[]>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models`),
+  list: (businessUnitId: string, agentName: string): Promise<Model[]> =>
+    request<Model[]>(`/api/business_units/${businessUnitId}/agents/${agentName}/models`),
 
   /**
    * 获取 Model 详情
    */
-  get: (catalogId: string, schemaName: string, modelName: string): Promise<Model> =>
-    request<Model>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}`),
+  get: (businessUnitId: string, agentName: string, modelName: string): Promise<Model> =>
+    request<Model>(`/api/business_units/${businessUnitId}/agents/${agentName}/models/${modelName}`),
 
   /**
    * 获取 Model 配置文件原始内容
    */
-  getConfig: (catalogId: string, schemaName: string, modelName: string): Promise<{ content: string }> =>
-    request<{ content: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}/config`),
+  getConfig: (businessUnitId: string, agentName: string, modelName: string): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/models/${modelName}/config`),
 
   /**
    * 创建 Model
    */
-  create: (catalogId: string, schemaName: string, data: ModelCreate): Promise<Model> =>
-    request<Model>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models`, {
+  create: (businessUnitId: string, agentName: string, data: ModelCreate): Promise<Model> =>
+    request<Model>(`/api/business_units/${businessUnitId}/agents/${agentName}/models`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -433,8 +449,8 @@ export const modelApi = {
   /**
    * 更新 Model
    */
-  update: (catalogId: string, schemaName: string, modelName: string, data: ModelUpdate): Promise<Model> =>
-    request<Model>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}`, {
+  update: (businessUnitId: string, agentName: string, modelName: string, data: ModelUpdate): Promise<Model> =>
+    request<Model>(`/api/business_units/${businessUnitId}/agents/${agentName}/models/${modelName}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
@@ -442,21 +458,246 @@ export const modelApi = {
   /**
    * 删除 Model
    */
-  delete: (catalogId: string, schemaName: string, modelName: string): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/catalogs/${catalogId}/schemas/${schemaName}/models/${modelName}`, {
+  delete: (businessUnitId: string, agentName: string, modelName: string): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/models/${modelName}`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * 启用 Model（禁用其他 Model）
+   */
+  enable: (businessUnitId: string, agentName: string, modelName: string): Promise<{ message: string; model_name: string }> =>
+    request<{ message: string; model_name: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/models/${modelName}/enable`, {
+      method: "POST",
+    }),
+};
+
+// ============ MCP API（Agent 级别）============
+
+export const mcpApi = {
+  /**
+   * 获取 Agent 下的所有 MCP
+   */
+  list: (businessUnitId: string, agentName: string): Promise<MCP[]> =>
+    request<MCP[]>(`/api/business_units/${businessUnitId}/agents/${agentName}/mcps`),
+
+  /**
+   * 获取 MCP 详情
+   */
+  get: (businessUnitId: string, agentName: string, mcpName: string): Promise<MCP> =>
+    request<MCP>(`/api/business_units/${businessUnitId}/agents/${agentName}/mcps/${mcpName}`),
+
+  /**
+   * 创建 MCP
+   */
+  create: (businessUnitId: string, agentName: string, data: MCPCreate): Promise<MCP> =>
+    request<MCP>(`/api/business_units/${businessUnitId}/agents/${agentName}/mcps`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * 更新 MCP
+   */
+  update: (businessUnitId: string, agentName: string, mcpName: string, data: MCPUpdate): Promise<MCP> =>
+    request<MCP>(`/api/business_units/${businessUnitId}/agents/${agentName}/mcps/${mcpName}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * 删除 MCP
+   */
+  delete: (businessUnitId: string, agentName: string, mcpName: string): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/mcps/${mcpName}`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * 切换 MCP 启用状态
+   */
+  toggleEnabled: (businessUnitId: string, agentName: string, mcpName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/business_units/${businessUnitId}/agents/${agentName}/mcps/${mcpName}/toggle?enabled=${enabled}`, {
+      method: "POST",
+    }),
+};
+
+// ============ Agent Runtime API ============
+
+import type {
+  ExecuteRequest,
+  ExecutionResult,
+  StatusResponse,
+  ServiceStatusResponse,
+} from "@/types/agent-runtime";
+
+export const agentRuntimeApi = {
+  /**
+   * 加载 Agent
+   */
+  load: (businessUnitId: string, agentName: string): Promise<{ message: string; agent_name: string; business_unit_id: string }> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/load`, {
+      method: "POST",
+    }),
+
+  /**
+   * 获取流式执行 SSE URL
+   */
+  getStreamUrl: (businessUnitId: string, agentName: string): string =>
+    `${API_BASE_URL}/api/runtime/${businessUnitId}/agents/${agentName}/execute/stream`,
+
+  /**
+   * 获取 Agent 执行状态
+   */
+  getStatus: (businessUnitId: string, agentName: string): Promise<StatusResponse> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/status`),
+
+  /**
+   * 取消 Agent 执行
+   */
+  cancel: (businessUnitId: string, agentName: string): Promise<{ message: string; success: boolean }> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/cancel`, {
+      method: "POST",
+    }),
+
+  /**
+   * 卸载 Agent
+   */
+  unload: (businessUnitId: string, agentName: string): Promise<{ message: string; success: boolean }> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/unload`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * 获取执行快照（断线重连）
+   */
+  getExecutionSnapshot: (businessUnitId: string, agentName: string, executionId: string): Promise<any> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/execution/${executionId}/snapshot`),
+
+  /**
+   * 列出已加载的 Agent
+   */
+  listLoaded: (): Promise<any[]> =>
+    request("/api/runtime/agents/loaded"),
+};
+
+// ============ Model Runtime API ============
+
+export const modelRuntimeApi = {
+  /**
+   * 加载 Model（Agent 下的 Model）
+   */
+  load: (businessUnitId: string, agentName: string, modelName: string): Promise<{ message: string; model_name: string; business_unit_id: string }> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/models/${modelName}/load`, {
+      method: "POST",
+    }),
+
+  /**
+   * 执行 Model（同步）
+   */
+  execute: (businessUnitId: string, agentName: string, modelName: string, data: ExecuteRequest): Promise<ExecutionResult> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/models/${modelName}/execute`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * 执行 Model（流式）- 使用 fetch 实现
+   */
+  executeStream: async function* (
+    businessUnitId: string,
+    agentName: string,
+    modelName: string,
+    data: ExecuteRequest
+  ): AsyncGenerator<any, void, unknown> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/runtime/${businessUnitId}/agents/${agentName}/models/${modelName}/execute/stream`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getLanguageHeaders(),
+        },
+        body: JSON.stringify(data),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            yield data;
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+    }
+  },
+
+  /**
+   * 获取 Model 执行状态
+   */
+  getStatus: (businessUnitId: string, agentName: string, modelName: string): Promise<StatusResponse> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/models/${modelName}/status`),
+
+  /**
+   * 取消 Model 执行
+   */
+  cancel: (businessUnitId: string, agentName: string, modelName: string): Promise<{ message: string; success: boolean }> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/models/${modelName}/cancel`, {
+      method: "POST",
+    }),
+
+  /**
+   * 卸载 Model
+   */
+  unload: (businessUnitId: string, agentName: string, modelName: string): Promise<{ message: string; success: boolean }> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/models/${modelName}/unload`, {
       method: "DELETE",
     }),
 };
 
 // ============ 默认导出 ============
 
+// 导入 LLM API
+import { llmApi } from './llm-api';
+
 export default {
   healthCheck,
   readyCheck,
   getSupportedLocales,
-  catalog: catalogApi,
-  schema: schemaApi,
+  businessUnit: businessUnitApi,
+  assetBundle: assetBundleApi,
   asset: assetApi,
   agent: agentApi,
   model: modelApi,
+  mcp: mcpApi,
+  agentRuntime: agentRuntimeApi,
+  modelRuntime: modelRuntimeApi,
+  llm: llmApi,
 };
+
+// 重新导出 LLM API
+export { llmApi } from './llm-api';
+export type { ProviderOption, ModelOption, ProviderSummary } from './llm-api';

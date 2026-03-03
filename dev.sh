@@ -7,8 +7,14 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
+# 设置开发模式环境变量
+export LOCALBRISK_DEV_MODE=1
+export LOCALBRISK_DEBUG=1
+
 echo "======================================"
 echo "LocalBrisk 开发模式"
+echo "======================================"
+echo "日志输出: ~/Library/Logs/LocalBrisk/app.log"
 echo "======================================"
 
 # 清理函数
@@ -23,23 +29,45 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
+# Python 虚拟环境路径
+VENV_PATH="$PROJECT_ROOT/backend/venv"
+PYTHON_BIN="$VENV_PATH/bin/python"
+PIP_BIN="$VENV_PATH/bin/pip"
+
+# 检查并设置虚拟环境
+setup_venv() {
+    if [ ! -d "$VENV_PATH" ]; then
+        echo "创建 Python 虚拟环境..."
+        python3 -m venv "$VENV_PATH"
+        echo "安装依赖包..."
+        "$PIP_BIN" install -r "$PROJECT_ROOT/backend/requirements.txt"
+    else
+        echo "✓ 使用已存在的虚拟环境: $VENV_PATH"
+        echo "  Python 版本: $($PYTHON_BIN --version)"
+    fi
+}
+
+# 更新依赖包（可选）
+update_deps() {
+    echo "检查并更新依赖包..."
+    "$PIP_BIN" install -r "$PROJECT_ROOT/backend/requirements.txt" --quiet --upgrade
+}
+
 # 启动 Python 后端
 start_backend() {
     echo "启动 Python 后端..."
     cd "$PROJECT_ROOT/backend"
     
-    # 创建虚拟环境（如果不存在）
-    if [ ! -d "venv" ]; then
-        echo "创建 Python 虚拟环境..."
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install -r requirements.txt
-    else
-        source venv/bin/activate
+    # 设置虚拟环境
+    setup_venv
+    
+    # 如果传入了 --update-deps 参数，则更新依赖
+    if [ "$UPDATE_DEPS" = "1" ]; then
+        update_deps
     fi
     
-    # 后台启动 Python 服务
-    python main.py &
+    # 后台启动 Python 服务（直接使用 venv 中的 python，无需 activate）
+    "$PYTHON_BIN" main.py &
     BACKEND_PID=$!
     echo "✓ Python 后端已启动 (PID: $BACKEND_PID)"
     
@@ -83,10 +111,62 @@ start_tauri() {
     npx tauri dev
 }
 
+# 显示帮助信息
+show_help() {
+    echo "用法: ./dev.sh [选项]"
+    echo ""
+    echo "选项:"
+    echo "  --update-deps    启动前更新 Python 依赖包"
+    echo "  --backend-only   只启动后端服务"
+    echo "  --frontend-only  只启动前端服务"
+    echo "  --help           显示帮助信息"
+    echo ""
+}
+
 # 主流程
 main() {
-    start_backend
-    start_tauri
+    UPDATE_DEPS=0
+    BACKEND_ONLY=0
+    FRONTEND_ONLY=0
+    
+    # 解析命令行参数
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --update-deps)
+                UPDATE_DEPS=1
+                shift
+                ;;
+            --backend-only)
+                BACKEND_ONLY=1
+                shift
+                ;;
+            --frontend-only)
+                FRONTEND_ONLY=1
+                shift
+                ;;
+            --help)
+                show_help
+                exit 0
+                ;;
+            *)
+                echo "未知选项: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+    
+    if [ "$FRONTEND_ONLY" = "1" ]; then
+        start_tauri
+    elif [ "$BACKEND_ONLY" = "1" ]; then
+        start_backend
+        echo ""
+        echo "按 Ctrl+C 停止服务..."
+        wait $BACKEND_PID
+    else
+        start_backend
+        start_tauri
+    fi
 }
 
 main "$@"

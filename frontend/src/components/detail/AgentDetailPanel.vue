@@ -3,7 +3,7 @@
     <!-- 当查看 Prompt 详情时显示 PromptDetailPanel -->
     <PromptDetailPanel
       v-if="selectedPromptName"
-      :catalog-id="selectedCatalog?.id || ''"
+      :business-unit-id="selectedBusinessUnit?.id || ''"
       :agent-name="selectedAgent?.name || ''"
       :prompt-name="selectedPromptName"
       @back="store.clearSelectedPrompt()"
@@ -13,7 +13,7 @@
     <!-- 当查看 Skill 详情时显示 SkillDetailPanel -->
     <SkillDetailPanel
       v-else-if="selectedSkillName"
-      :catalog-id="selectedCatalog?.id || ''"
+      :business-unit-id="selectedBusinessUnit?.id || ''"
       :agent-name="selectedAgent?.name || ''"
       :skill-name="selectedSkillName"
       @back="store.clearSelectedSkill()"
@@ -25,7 +25,7 @@
       <!-- 面包屑导航 -->
       <Breadcrumb
         :items="[
-          { label: selectedCatalog?.display_name || selectedCatalog?.name || '', onClick: goToCatalog },
+          { label: selectedBusinessUnit?.display_name || selectedBusinessUnit?.name || '', onClick: goToBusinessUnit },
           { label: selectedAgent?.name || '' }
         ]"
         @back="goBack"
@@ -79,6 +79,13 @@
               >
                 <FileText class="w-4 h-4 text-blue-500" />
                 {{ t('agent.createPrompt') }}
+              </button>
+              <button
+                @click="handleCreateModel"
+                class="w-full px-4 py-3 text-left text-sm hover:bg-muted transition-colors flex items-center gap-3"
+              >
+                <Cpu class="w-4 h-4 text-orange-500" />
+                {{ t('model.createModel') }}
               </button>
             </div>
           </Transition>
@@ -135,7 +142,7 @@
                 <p class="font-medium">{{ formatDate(selectedAgent?.created_at) }}</p>
               </div>
               <div v-if="selectedAgent?.model_reference">
-                <label class="text-muted-foreground">{{ t('catalog.modelReference') }}</label>
+                <label class="text-muted-foreground">{{ t('businessUnit.modelReference') }}</label>
                 <p class="font-medium font-mono text-xs bg-muted px-2 py-1 rounded mt-1">
                   {{ selectedAgent.model_reference }}
                 </p>
@@ -152,7 +159,7 @@
           <!-- 系统提示词 -->
           <div v-if="selectedAgent?.system_prompt" class="card-float p-4">
             <div class="flex items-center justify-between mb-3">
-              <h3 class="font-medium">{{ t('catalog.systemPrompt') }}</h3>
+              <h3 class="font-medium">{{ t('businessUnit.systemPrompt') }}</h3>
             </div>
             <div class="bg-muted/50 rounded-lg p-4 text-sm font-mono whitespace-pre-wrap max-h-48 overflow-y-auto">
               {{ selectedAgent.system_prompt }}
@@ -188,6 +195,21 @@
             @row-click="handlePromptRowClick"
             @toggle="handlePromptToggleEvent"
           />
+
+          <!-- Models 列表 -->
+          <ItemListCard
+            title="Models"
+            :title-icon="Cpu"
+            :items="selectedAgent?.models || []"
+            :columns="modelColumns"
+            key-field="name"
+            show-count
+            :count-label="t('agent.items')"
+            :empty-text="t('agent.noModels')"
+            row-clickable
+            @row-click="handleModelRowClick"
+            @toggle="handleModelToggleEvent"
+          />
         </div>
 
         <!-- 配置 Tab -->
@@ -202,15 +224,13 @@
           />
         </div>
 
-        <!-- Chat Tab (预留) -->
+        <!-- Chat Tab -->
         <div v-if="activeTab === 'chat'" class="h-full">
-          <div class="card-float h-full flex flex-col items-center justify-center">
-            <MessageSquare class="w-16 h-16 text-muted-foreground/30 mb-4" />
-            <h3 class="text-lg font-medium mb-2">{{ t('agent.chatTitle') }}</h3>
-            <p class="text-muted-foreground text-sm text-center max-w-md">
-              {{ t('agent.chatPlaceholder') }}
-            </p>
-          </div>
+          <AgentWorkspace
+            v-if="selectedBusinessUnit && selectedAgent"
+            :business-unit-id="selectedBusinessUnit.id"
+            :agent-name="selectedAgent.name"
+          />
         </div>
       </div>
 
@@ -226,7 +246,7 @@
       <!-- 创建 Prompt 弹窗 -->
       <CreatePromptDialog
         :is-open="showCreatePromptDialog"
-        :catalog-id="selectedCatalog?.id || ''"
+        :business-unit-id="selectedBusinessUnit?.id || ''"
         :agent-name="selectedAgent?.name || ''"
         @close="showCreatePromptDialog = false"
         @submit="handleSubmitPrompt"
@@ -235,10 +255,19 @@
       <!-- 创建 Skill 弹窗 -->
       <CreateSkillDialog
         :is-open="showCreateSkillDialog"
-        :catalog-id="selectedCatalog?.id || ''"
+        :business-unit-id="selectedBusinessUnit?.id || ''"
         :agent-name="selectedAgent?.name || ''"
         :on-submit="handleSubmitSkill"
         @close="showCreateSkillDialog = false"
+      />
+
+      <!-- 创建 Model 弹窗 -->
+      <CreateModelDialog
+        :is-open="showCreateModelDialog"
+        :business-unit-id="selectedBusinessUnit?.id || ''"
+        :agent-name="selectedAgent?.name || ''"
+        @close="showCreateModelDialog = false"
+        @submit="handleSubmitModel"
       />
     </div>
   </div>
@@ -249,28 +278,30 @@ import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, ChevronDown, Bot, Trash2, Plus,
-  FileText, FileCode, Code, MessageSquare
+  FileText, FileCode, Code, MessageSquare, Cpu
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import Breadcrumb from "@/components/common/Breadcrumb.vue";
 import CreatePromptDialog from "@/components/catalog/CreatePromptDialog.vue";
 import CreateSkillDialog from "@/components/catalog/CreateSkillDialog.vue";
+import CreateModelDialog from "@/components/catalog/CreateModelDialog.vue";
 import PromptDetailPanel from "@/components/detail/PromptDetailPanel.vue";
 import SkillDetailPanel from "@/components/detail/SkillDetailPanel.vue";
+import AgentWorkspace from "@/components/detail/AgentWorkspace.vue";
 import ItemListCard from "@/components/common/ItemListCard.vue";
 import ConfigEditor from "@/components/common/ConfigEditor.vue";
 import type { ColumnConfig } from "@/components/common/ItemListCard.vue";
-import { useCatalogStore } from "@/stores/catalogStore";
+import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { useConfigManager } from "@/composables/useConfigManager";
-import { agentApi } from "@/services/api";
+import { agentApi, modelApi } from "@/services/api";
 import { formatDate } from "@/utils/formatUtils";
-import type { PromptCreate } from "@/types/catalog";
+import type { PromptCreate, ModelCreate } from "@/types/catalog";
 
 const { t } = useI18n();
-const store = useCatalogStore();
+const store = useBusinessUnitStore();
 
 // 使用 computed 保持响应式
-const selectedCatalog = computed(() => store.selectedCatalog.value);
+const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
 const selectedPromptName = computed({
   get: () => store.selectedPromptName.value,
@@ -298,9 +329,9 @@ const agentConfigManager = useConfigManager({
     return `${selectedAgent.value.path}/agent_spec.yaml`;
   },
   loadConfig: async () => {
-    if (!selectedCatalog.value || !selectedAgent.value) return '';
+    if (!selectedBusinessUnit.value || !selectedAgent.value) return '';
     try {
-      const response = await agentApi.getConfig(selectedCatalog.value.id, selectedAgent.value.name);
+      const response = await agentApi.getConfig(selectedBusinessUnit.value.id, selectedAgent.value.name);
       return response.content;
     } catch (e) {
       console.error('Failed to load agent config:', e);
@@ -309,8 +340,8 @@ const agentConfigManager = useConfigManager({
   },
   onSaved: async () => {
     // 刷新 agent 数据
-    if (selectedCatalog.value && selectedAgent.value) {
-      await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+    if (selectedBusinessUnit.value && selectedAgent.value) {
+      await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
     }
   },
 });
@@ -329,6 +360,7 @@ const {
 const showDeleteDialog = ref(false);
 const showCreatePromptDialog = ref(false);
 const showCreateSkillDialog = ref(false);
+const showCreateModelDialog = ref(false);
 const deleteMessage = ref('');
 const deleteDescription = ref('');
 
@@ -353,6 +385,13 @@ const promptColumns: ColumnConfig[] = [
   { key: 'enabled', type: 'toggle', isEnabled: isPromptEnabled },
 ];
 
+// Models 列配置
+const modelColumns: ColumnConfig[] = [
+  { key: 'icon', type: 'icon', icon: Cpu, class: 'text-orange-500' },
+  { key: 'name', type: 'text', field: 'name', flex: true, class: 'font-medium' },
+  { key: 'enabled', type: 'toggle', isEnabled: isModelEnabled },
+];
+
 // 点击外部关闭下拉菜单
 function handleClickOutside(event: MouseEvent) {
   if (createDropdownRef.value && !createDropdownRef.value.contains(event.target as Node)) {
@@ -367,13 +406,13 @@ function handleCreateSkill() {
 }
 
 // 提交创建 Skill（从本地 zip 路径导入）
-async function handleSubmitSkill(catalogId: string, agentName: string, zipFilePath: string) {
+async function handleSubmitSkill(businessUnitId: string, agentName: string, zipFilePath: string) {
   // 调用 API 导入 Skill，如果失败会抛出异常由 CreateSkillDialog 捕获并显示
-  await agentApi.importSkillFromZip(catalogId, agentName, zipFilePath);
+  await agentApi.importSkillFromZip(businessUnitId, agentName, zipFilePath);
   
   // 导入成功后，刷新 Agent 详情以更新 skills 列表
-  if (selectedCatalog.value && selectedAgent.value) {
-    await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+  if (selectedBusinessUnit.value && selectedAgent.value) {
+    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   }
   // 刷新目录树
   await store.fetchTree();
@@ -385,14 +424,34 @@ function handleCreatePrompt() {
   showCreatePromptDialog.value = true;
 }
 
-// 提交创建 Prompt
-async function handleSubmitPrompt(catalogId: string, agentName: string, data: PromptCreate) {
+// 创建 Model
+function handleCreateModel() {
+  showCreateDropdown.value = false;
+  showCreateModelDialog.value = true;
+}
+
+// 提交创建 Model
+async function handleSubmitModel(businessUnitId: string, agentName: string, data: ModelCreate) {
   try {
-    await agentApi.createPrompt(catalogId, agentName, data);
+    await store.createModel(businessUnitId, agentName, data);
+    showCreateModelDialog.value = false;
+    // 刷新 Agent 详情以更新 models 列表
+    if (selectedBusinessUnit.value && selectedAgent.value) {
+      await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
+    }
+  } catch (e) {
+    console.error('Failed to create model:', e);
+  }
+}
+
+// 提交创建 Prompt
+async function handleSubmitPrompt(businessUnitId: string, agentName: string, data: PromptCreate) {
+  try {
+    await agentApi.createPrompt(businessUnitId, agentName, data);
     showCreatePromptDialog.value = false;
     // 刷新 Agent 详情以更新 prompts 列表
-    if (selectedCatalog.value && selectedAgent.value) {
-      await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+    if (selectedBusinessUnit.value && selectedAgent.value) {
+      await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
     }
   } catch (e) {
     console.error('Failed to create prompt:', e);
@@ -435,20 +494,32 @@ function isPromptEnabled(item: ItemType): boolean {
   return promptTemplates.some(p => p.name === promptName);
 }
 
+// 检查 Model 是否启用（从 active_model 或 llm_config.llm_model）
+function isModelEnabled(item: ItemType): boolean {
+  const modelName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
+  // 检查 active_model 字段
+  if (selectedAgent.value?.active_model === modelName) {
+    return true;
+  }
+  // 也检查 llm_config.llm_model 是否包含该模型名称
+  const llmModel = selectedAgent.value?.llm_config?.llm_model || '';
+  return llmModel.includes(modelName);
+}
+
 // 处理 Skill 开关切换事件
 async function handleSkillToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
-  if (!selectedCatalog.value || !selectedAgent.value) return;
+  if (!selectedBusinessUnit.value || !selectedAgent.value) return;
   
   const skillName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
   try {
     await agentApi.toggleSkillEnabled(
-      selectedCatalog.value.id,
+      selectedBusinessUnit.value.id,
       selectedAgent.value.name,
       skillName,
       payload.enabled
     );
     // 刷新 Agent 详情以更新状态
-    await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   } catch (e) {
     console.error('Failed to toggle skill enabled:', e);
   }
@@ -456,20 +527,67 @@ async function handleSkillToggleEvent(payload: { column: ColumnConfig; item: Ite
 
 // 处理 Prompt 开关切换事件
 async function handlePromptToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
-  if (!selectedCatalog.value || !selectedAgent.value) return;
+  if (!selectedBusinessUnit.value || !selectedAgent.value) return;
   
   const promptName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
   try {
     await agentApi.togglePromptEnabled(
-      selectedCatalog.value.id,
+      selectedBusinessUnit.value.id,
       selectedAgent.value.name,
       promptName,
       payload.enabled
     );
     // 刷新 Agent 详情以更新状态
-    await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   } catch (e) {
     console.error('Failed to toggle prompt enabled:', e);
+  }
+}
+
+// 处理 Model 行点击
+function handleModelRowClick(payload: { item: ItemType; index: number }) {
+  const modelName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
+  if (selectedBusinessUnit.value && selectedAgent.value) {
+    store.selectModel(selectedBusinessUnit.value.id, selectedAgent.value.name, modelName);
+  }
+}
+
+// 处理 Model 开关切换事件（一个 Agent 只能启用一个 Model）
+async function handleModelToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
+  if (!selectedBusinessUnit.value || !selectedAgent.value) return;
+  
+  const modelName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
+  
+  // 如果是要禁用，不做任何操作（一个 Agent 必须有一个启用的 Model，或者都禁用）
+  // 如果是要启用，则调用 enable API（后端会自动禁用其他 Model）
+  if (!payload.enabled) {
+    // 禁用当前模型（清除 active_model）
+    try {
+      await modelApi.update(
+        selectedBusinessUnit.value.id,
+        selectedAgent.value.name,
+        modelName,
+        { enabled: false }
+      );
+      // 刷新 Agent 详情以更新状态
+      await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
+    } catch (e) {
+      console.error('Failed to disable model:', e);
+    }
+    return;
+  }
+  
+  try {
+    // 启用指定 Model（后端会自动禁用其他 Model）
+    await modelApi.enable(
+      selectedBusinessUnit.value.id,
+      selectedAgent.value.name,
+      modelName
+    );
+    // 刷新 Agent 详情以更新状态
+    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
+  } catch (e) {
+    console.error('Failed to enable model:', e);
   }
 }
 
@@ -477,8 +595,8 @@ async function handlePromptToggleEvent(payload: { column: ColumnConfig; item: It
 async function handlePromptDeleted() {
   store.clearSelectedPrompt();
   // 刷新 Agent 详情以更新 prompts 列表
-  if (selectedCatalog.value && selectedAgent.value) {
-    await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+  if (selectedBusinessUnit.value && selectedAgent.value) {
+    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   }
   // 刷新目录树
   await store.fetchTree();
@@ -488,37 +606,37 @@ async function handlePromptDeleted() {
 async function handleSkillDeleted() {
   store.clearSelectedSkill();
   // 刷新 Agent 详情以更新 skills 列表
-  if (selectedCatalog.value && selectedAgent.value) {
-    await store.selectAgent(selectedCatalog.value.id, selectedAgent.value.name);
+  if (selectedBusinessUnit.value && selectedAgent.value) {
+    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   }
   // 刷新目录树
   await store.fetchTree();
 }
 
-// 返回到 Catalog 列表
+// 返回到 Business Unit 列表
 function goBack() {
   store.clearSelectedAgent();
-  store.selectedCatalog.value = null;
+  store.selectedBusinessUnit.value = null;
 }
 
-// 返回到 Catalog 详情
-function goToCatalog() {
+// 返回到 Business Unit 详情
+function goToBusinessUnit() {
   store.clearSelectedAgent();
 }
 
 // 确认删除 Agent
 function confirmDeleteAgent() {
   if (!selectedAgent.value) return;
-  deleteMessage.value = t('catalog.confirmDeleteAgent', { name: selectedAgent.value.name });
-  deleteDescription.value = t('catalog.confirmDeleteAgentDesc');
+  deleteMessage.value = t('businessUnit.confirmDeleteAgent', { name: selectedAgent.value.name });
+  deleteDescription.value = t('businessUnit.confirmDeleteAgentDesc');
   showDeleteDialog.value = true;
 }
 
 // 执行删除
 async function handleConfirmDelete() {
-  if (!selectedCatalog.value || !selectedAgent.value) return;
+  if (!selectedBusinessUnit.value || !selectedAgent.value) return;
   
-  const success = await store.deleteAgent(selectedCatalog.value.id, selectedAgent.value.name);
+  const success = await store.deleteAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   if (success) {
     showDeleteDialog.value = false;
     store.clearSelectedAgent();
