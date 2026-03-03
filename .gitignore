@@ -47,6 +47,7 @@ env/
 # ------------------------------------
 # Tauri / Rust
 # ------------------------------------
+out/
 src-tauri/target/
 src-tauri/gen/schemas/
 src-tauri/binaries/
