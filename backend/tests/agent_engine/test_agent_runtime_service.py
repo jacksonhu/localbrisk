@@ -219,6 +219,7 @@ class TestAgentRuntimeServiceLoad:
             assert state.agent_name == "test_agent"
             assert state.business_unit_id == "test_unit"
             assert state.agent_instance is mock_agent
+            assert (Path(temp_agent_dir["agent_path"]) / "output" / ".task").exists()
 
 
 class TestAgentRuntimeServiceStream:
@@ -258,10 +259,10 @@ class TestAgentRuntimeServiceStream:
             
             assert len(messages) > 0
             
-            # 所有消息都应该是 StreamMessage 类型
+            # 所有消息都应该是 StreamMessage 类型，execution_id 固定为 agent_name
             for msg in messages:
                 assert isinstance(msg, StreamMessage)
-                assert msg.execution_id  # 有执行 ID
+                assert msg.execution_id == "test_agent"
             
             # 最后一条应是 DONE
             done_msg = messages[-1]
@@ -381,6 +382,54 @@ class TestAgentRuntimeServiceCancel:
         assert result is False
 
 
+class TestAgentRuntimeServiceClearContext:
+    """测试 Agent 上下文清理功能"""
+
+    @pytest.mark.asyncio
+    async def test_clear_agent_context_calls_delete_thread(self, temp_agent_dir):
+        from agent_engine.services import AgentRuntimeService
+
+        service = AgentRuntimeService()
+        mock_checkpointer = MagicMock()
+        mock_agent = MagicMock()
+        mock_agent.checkpointer = mock_checkpointer
+
+        mock_engine = MagicMock()
+        mock_engine.build_agent = AsyncMock(return_value=mock_agent)
+
+        with patch.object(service, '_ensure_engine', return_value=mock_engine):
+            await service.load_agent("test_unit", "test_agent", temp_agent_dir["agent_path"])
+            service._snapshots["test_agent"] = MagicMock()
+
+            ok = await service.clear_agent_context("test_unit", "test_agent")
+
+            assert ok is True
+            mock_checkpointer.delete_thread.assert_called_once_with("test_agent")
+            assert "test_agent" not in service._snapshots
+
+    @pytest.mark.asyncio
+    async def test_clear_agent_context_with_custom_thread_id(self, temp_agent_dir):
+        from agent_engine.services import AgentRuntimeService
+
+        service = AgentRuntimeService()
+        mock_checkpointer = MagicMock()
+        mock_agent = MagicMock()
+        mock_agent.checkpointer = mock_checkpointer
+
+        mock_engine = MagicMock()
+        mock_engine.build_agent = AsyncMock(return_value=mock_agent)
+
+        with patch.object(service, '_ensure_engine', return_value=mock_engine):
+            await service.load_agent("test_unit", "test_agent", temp_agent_dir["agent_path"])
+            service._snapshots["thread-xyz"] = MagicMock()
+
+            ok = await service.clear_agent_context("test_unit", "test_agent", "thread-xyz")
+
+            assert ok is True
+            mock_checkpointer.delete_thread.assert_called_once_with("thread-xyz")
+            assert "thread-xyz" not in service._snapshots
+
+
 class TestAgentRuntimeServiceUnload:
     """测试 Agent 卸载功能"""
     
@@ -409,6 +458,29 @@ class TestAgentRuntimeServiceUnload:
             status = await service.get_agent_status("test_unit", "test_agent")
             assert status["status"] == "not_loaded"
     
+    @pytest.mark.asyncio
+    async def test_unload_agent_calls_close_resources(self, temp_agent_dir):
+        """测试卸载时调用引擎资源关闭"""
+        from agent_engine.services import AgentRuntimeService
+
+        service = AgentRuntimeService()
+
+        mock_agent = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.build_agent = AsyncMock(return_value=mock_agent)
+
+        with patch.object(service, '_ensure_engine', return_value=mock_engine):
+            await service.load_agent(
+                "test_unit",
+                "test_agent",
+                temp_agent_dir["agent_path"]
+            )
+
+            result = await service.unload_agent("test_unit", "test_agent")
+
+            assert result is True
+            mock_engine.close_agent_resources.assert_called_once_with(mock_agent)
+
     @pytest.mark.asyncio
     async def test_unload_nonexistent_agent(self):
         """测试卸载不存在的 Agent"""
@@ -546,6 +618,41 @@ class TestExecutionSnapshot:
         assert len(snapshot.thoughts) == 1
         assert len(snapshot.tasks) == 1
         assert len(snapshot.artifacts) == 1
+
+
+class TestConversationHistory:
+    """测试会话历史持久化与读取"""
+
+    @pytest.mark.asyncio
+    async def test_execute_stream_persists_history_with_thread_id(self, temp_agent_dir):
+        from agent_engine.services import AgentRuntimeService
+
+        service = AgentRuntimeService()
+
+        mock_agent = MagicMock(spec=[])
+        mock_agent.invoke = MagicMock(return_value={
+            "messages": [MagicMock(content="历史输出")]
+        })
+
+        mock_engine = MagicMock()
+        mock_engine.build_agent = AsyncMock(return_value=mock_agent)
+
+        with patch.object(service, '_ensure_engine', return_value=mock_engine):
+            await service.load_agent("test_unit", "test_agent", temp_agent_dir["agent_path"])
+
+            async for _ in service.execute_agent_stream(
+                "test_unit",
+                "test_agent",
+                "测试输入",
+                context={"thread_id": "thread-001"},
+            ):
+                pass
+
+            history = await service.get_conversation_history("test_unit", "test_agent", "thread-001")
+            assert history["thread_id"] == "thread-001"
+            assert len(history["turns"]) == 1
+            assert history["turns"][0]["user_input"] == "测试输入"
+            assert len(history["turns"][0]["messages"]) > 0
 
 
 class TestExplainabilityFields:

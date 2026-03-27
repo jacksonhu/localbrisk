@@ -27,7 +27,7 @@
         <component :is="getIcon(item.type)" class="w-4 h-4 flex-shrink-0" :class="getIconColor(item.type)" />
 
         <!-- 名称 -->
-        <span class="truncate flex-1" :class="isSelected(item) ? 'text-primary' : 'text-foreground'">{{ item.name || '(无名称)' }}</span>
+        <span class="truncate flex-1" :class="isSelected(item) ? 'text-primary' : 'text-foreground'">{{ getDisplayName(item) }}</span>
 
         <!-- External 类型标识 -->
         <PlugZap v-if="(item.type === 'schema' || item.type === 'asset_bundle') && item.bundle_type === 'external'" class="w-3 h-3 text-cyan-500 flex-shrink-0" />
@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronRight, Folder, Database, Table, FolderOpen, Bot, FileText, PlugZap, Code, Cpu, Layers } from "lucide-vue-next";
+import { ChevronRight, Folder, Database, Table, FolderOpen, Bot, FileText, PlugZap, Code, Cpu, Layers, File } from "lucide-vue-next";
 import type { BusinessUnitItem } from "@/types/catalog";
 
 const props = defineProps<{
@@ -90,6 +90,8 @@ const getIcon = (type: string) => {
     folder: Folder,
     skill: Code,
     prompt: FileText,
+    output: FolderOpen,
+    output_file: File,
   };
   return iconMap[type] || Folder;
 };
@@ -111,8 +113,28 @@ const getIconColor = (type: string) => {
     folder: "text-yellow-500",
     skill: "text-cyan-500",
     prompt: "text-emerald-500",
+    output: "text-indigo-500",
+    output_file: "text-slate-500",
   };
   return colorMap[type] || "text-gray-500";
+};
+
+const getDisplayName = (item: BusinessUnitItem) => {
+  if (!item.name) return "(Unnamed)";
+
+  if (item.type === "folder") {
+    const normalized = item.name.toLowerCase();
+    if (normalized === "memories" || normalized === "prompts") return "Memories";
+    if (normalized === "skills") return "Skills";
+    if (normalized === "models") return "Models";
+    if (normalized === "mcps") return "MCPs";
+  }
+
+  if (item.type === "output") {
+    return "output";
+  }
+
+  return item.name;
 };
 
 // 判断节点是否可展开
@@ -124,8 +146,8 @@ const canExpand = (item: BusinessUnitItem) => {
   if (item.children && item.children.length > 0) {
     return true;
   }
-  // folder 类型即使没有子节点也显示展开箭头（空文件夹）
-  if (item.type === 'folder') {
+  // folder/output 类型即使没有子节点也显示展开箭头（空文件夹）
+  if (item.type === 'folder' || item.type === 'output') {
     return true;
   }
   return false;
@@ -141,9 +163,6 @@ const handleClick = (item: BusinessUnitItem) => {
     return;
   }
   
-  // 记录点击日志，便于调试
-  console.log("CatalogTree.handleClick:", item.type, item.name);
-  
   // 根据节点类型决定行为
   // 1. 容器类节点（只展开，不选择）：asset_type, folder
   // 2. 可展开+可选择的节点：business_unit, asset_bundle, agent
@@ -153,6 +172,7 @@ const handleClick = (item: BusinessUnitItem) => {
     // 纯容器节点：只切换展开状态
     case "asset_type":
     case "folder":
+    case "output":
       emit("toggle-expand", item);
       break;
     
@@ -176,6 +196,7 @@ const handleClick = (item: BusinessUnitItem) => {
     case "model":
     case "note":
     case "function":
+    case "output_file":
       emit("select", item);
       break;
     
@@ -187,7 +208,13 @@ const handleClick = (item: BusinessUnitItem) => {
 
 const handleContextMenu = (event: MouseEvent, item: BusinessUnitItem) => {
   // 资产类型节点、文件夹节点和占位符节点不显示右键菜单
-  if (item.type !== "placeholder" && item.type !== "asset_type" && item.type !== "folder") {
+  if (
+    item.type !== "placeholder" &&
+    item.type !== "asset_type" &&
+    item.type !== "folder" &&
+    item.type !== "output" &&
+    item.type !== "output_file"
+  ) {
     emit("context-menu", event, item, props.parentId);
   }
 };

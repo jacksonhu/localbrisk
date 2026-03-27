@@ -8,13 +8,13 @@
 │   ├── config.yaml                          # BusinessUnit 配置文件
 │   ├── agents/{agent_name}/                 # Agent 智能体目录
 │   │   ├── agent_spec.yaml                  # Agent 配置文件
-│   │   ├── prompts/                         # 提示词目录
+│   │   ├── memories/                        # 提示词目录
 │   │   ├── skills/                          # 技能目录
 │   │   ├── models/                          # Model 配置目录
 │   │   │   └── {model_name}.yaml
 │   │   ├── mcps/                            # MCP 配置目录
 │   │   │   └── {mcp_name}.yaml
-│   │   └── workroot/                        # 工作记录目录
+│   │   └── output/                        # 工作记录目录
 │   │       └── {session_id}/
 │   └── asset_bundles/{bundle_name}/         # 资源包目录
 │       ├── bundle.yaml                      # 资源包配置
@@ -55,11 +55,11 @@ FUNCTIONS_DIR = "functions"              # 自定义函数目录
 NOTES_DIR = "notes"                      # 笔记目录
 
 # Agent 下的子目录
-AGENT_PROMPTS_DIR = "prompts"            # 提示词目录
+AGENT_MEMORIES_DIR = "memories"          # 提示词目录
 AGENT_SKILLS_DIR = "skills"              # 技能目录
 AGENT_MODELS_DIR = "models"              # Model 配置目录
 AGENT_MCPS_DIR = "mcps"                  # MCP 配置目录
-AGENT_WORKROOT_DIR = "workroot"          # 工作记录目录
+AGENT_OUTPUT_DIR = "output"          # 工作记录目录
 
 
 # ============================================================
@@ -76,11 +76,11 @@ BUNDLE_ASSET_TYPE_TO_DIR = {
 
 # Agent 下的子资源类型 -> 目录名
 AGENT_RESOURCE_TYPE_TO_DIR = {
-    "prompt": AGENT_PROMPTS_DIR,
+    "prompt": AGENT_MEMORIES_DIR,
     "skill": AGENT_SKILLS_DIR,
     "model": AGENT_MODELS_DIR,
     "mcp": AGENT_MCPS_DIR,
-    "workroot": AGENT_WORKROOT_DIR,
+    "output": AGENT_OUTPUT_DIR,
 }
 
 

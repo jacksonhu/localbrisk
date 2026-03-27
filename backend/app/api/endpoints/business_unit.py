@@ -1,12 +1,12 @@
 """
 BusinessUnit API 端点
-提供 BusinessUnit、AssetBundle、Asset、Agent、Model、MCP、Prompt、Skill 的 CRUD 操作
+提供 BusinessUnit、AssetBundle、Asset、Agent、Model、MCP、Memory、Skill 的 CRUD 操作
 """
 
 import logging
 from pathlib import Path
 from typing import List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.models.business_unit import (
@@ -22,8 +22,8 @@ from app.models.business_unit import (
     Model, ModelCreate, ModelUpdate,
     # MCP
     MCP, MCPCreate, MCPUpdate,
-    # Prompt
-    Prompt, PromptCreate, PromptUpdate,
+    # Memory
+    Memory, MemoryCreate, MemoryUpdate,
 )
 from app.models.metadata import SyncResult
 from app.services import business_unit_service
@@ -32,6 +32,13 @@ from app.api.utils import handle_not_found, CRUDRouter
 logger = logging.getLogger(__name__)
 router = APIRouter()
 crud = CRUDRouter()
+
+
+class OutputFileContentResponse(BaseModel):
+    """output 文件内容响应"""
+    path: str
+    relative_path: str
+    content: str
 
 
 # ==================== BusinessUnit ====================
@@ -274,6 +281,24 @@ async def get_agent_config(business_unit_id: str, agent_name: str):
     return crud.config_response(business_unit_service.get_agent_config_content(business_unit_id, agent_name), "Agent")
 
 
+@router.get("/{business_unit_id}/agents/{agent_name}/output/file", response_model=OutputFileContentResponse)
+async def get_agent_output_file_content(
+    business_unit_id: str,
+    agent_name: str,
+    path: str = Query(..., description="output 下的相对路径"),
+):
+    """读取 Agent output 下指定文件内容"""
+    logger.debug(f"读取 Agent output 文件: {business_unit_id}/{agent_name}, path={path}")
+    try:
+        return business_unit_service.get_output_file_content(business_unit_id, agent_name, path)
+    except FileNotFoundError as e:
+        logger.warning(f"output 文件不存在: {business_unit_id}/{agent_name}, path={path}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        logger.warning(f"output 路径非法或文件不可读: {business_unit_id}/{agent_name}, path={path}, error={e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.put("/{business_unit_id}/agents/{agent_name}", response_model=Agent)
 async def update_agent(business_unit_id: str, agent_name: str, update: AgentUpdate):
     """更新 Agent"""
@@ -294,70 +319,70 @@ async def delete_agent(business_unit_id: str, agent_name: str):
     return crud.success_message("deleted", "Agent")
 
 
-# ==================== Prompt ====================
+# ==================== Memory ====================
 
-@router.get("/{business_unit_id}/agents/{agent_name}/prompts", response_model=List[Prompt])
-async def list_agent_prompts(business_unit_id: str, agent_name: str):
-    """获取 Prompt 列表"""
-    logger.debug(f"获取 Prompt 列表: {business_unit_id}/{agent_name}")
-    prompts = handle_not_found(business_unit_service.list_agent_prompts(business_unit_id, agent_name), "Agent not found")
-    logger.debug(f"Agent {agent_name} 包含 {len(prompts) if prompts else 0} 个 Prompt")
-    return prompts
-
-
-@router.get("/{business_unit_id}/agents/{agent_name}/prompts/{prompt_name}", response_model=Prompt)
-async def get_agent_prompt(business_unit_id: str, agent_name: str, prompt_name: str):
-    """获取 Prompt 详情"""
-    logger.debug(f"获取 Prompt 详情: {business_unit_id}/{agent_name}/{prompt_name}")
-    return handle_not_found(business_unit_service.get_agent_prompt_detail(business_unit_id, agent_name, prompt_name), "Prompt not found")
+@router.get("/{business_unit_id}/agents/{agent_name}/memories", response_model=List[Memory])
+async def list_agent_memories(business_unit_id: str, agent_name: str):
+    """获取 Memory 列表"""
+    logger.debug(f"获取 Memory 列表: {business_unit_id}/{agent_name}")
+    memories = handle_not_found(business_unit_service.list_agent_memories(business_unit_id, agent_name), "Agent not found")
+    logger.debug(f"Agent {agent_name} 包含 {len(memories) if memories else 0} 个 Memory")
+    return memories
 
 
-@router.post("/{business_unit_id}/agents/{agent_name}/prompts")
-async def create_agent_prompt(business_unit_id: str, agent_name: str, data: PromptCreate):
-    """创建 Prompt"""
-    logger.info(f"创建 Prompt: {business_unit_id}/{agent_name}/{data.name}")
+@router.get("/{business_unit_id}/agents/{agent_name}/memories/{memory_name}", response_model=Memory)
+async def get_agent_memory(business_unit_id: str, agent_name: str, memory_name: str):
+    """获取 Memory 详情"""
+    logger.debug(f"获取 Memory 详情: {business_unit_id}/{agent_name}/{memory_name}")
+    return handle_not_found(business_unit_service.get_agent_memory_detail(business_unit_id, agent_name, memory_name), "Memory not found")
+
+
+@router.post("/{business_unit_id}/agents/{agent_name}/memories")
+async def create_agent_memory(business_unit_id: str, agent_name: str, data: MemoryCreate):
+    """创建 Memory"""
+    logger.info(f"创建 Memory: {business_unit_id}/{agent_name}/{data.name}")
     try:
-        if not business_unit_service.create_agent_prompt(business_unit_id, agent_name, data):
+        if not business_unit_service.create_agent_memory(business_unit_id, agent_name, data):
             logger.warning(f"Agent 不存在: {business_unit_id}/{agent_name}")
             raise HTTPException(status_code=404, detail="Agent not found")
-        logger.info(f"Prompt 创建成功: {business_unit_id}/{agent_name}/{data.name}")
-        return crud.success_message("created", "Prompt")
+        logger.info(f"Memory 创建成功: {business_unit_id}/{agent_name}/{data.name}")
+        return crud.success_message("created", "Memory")
     except ValueError as e:
-        logger.warning(f"创建 Prompt 失败: {e}")
+        logger.warning(f"创建 Memory 失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.put("/{business_unit_id}/agents/{agent_name}/prompts/{prompt_name}")
-async def update_agent_prompt(business_unit_id: str, agent_name: str, prompt_name: str, update: PromptUpdate):
-    """更新 Prompt"""
-    logger.info(f"更新 Prompt: {business_unit_id}/{agent_name}/{prompt_name}")
-    if not business_unit_service.update_agent_prompt(business_unit_id, agent_name, prompt_name, update):
-        logger.warning(f"Prompt 不存在: {business_unit_id}/{agent_name}/{prompt_name}")
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    logger.info(f"Prompt 更新成功: {business_unit_id}/{agent_name}/{prompt_name}")
-    return crud.success_message("updated", "Prompt")
+@router.put("/{business_unit_id}/agents/{agent_name}/memories/{memory_name}")
+async def update_agent_memory(business_unit_id: str, agent_name: str, memory_name: str, update: MemoryUpdate):
+    """更新 Memory"""
+    logger.info(f"更新 Memory: {business_unit_id}/{agent_name}/{memory_name}")
+    if not business_unit_service.update_agent_memory(business_unit_id, agent_name, memory_name, update):
+        logger.warning(f"Memory 不存在: {business_unit_id}/{agent_name}/{memory_name}")
+        raise HTTPException(status_code=404, detail="Memory not found")
+    logger.info(f"Memory 更新成功: {business_unit_id}/{agent_name}/{memory_name}")
+    return crud.success_message("updated", "Memory")
 
 
-@router.delete("/{business_unit_id}/agents/{agent_name}/prompts/{prompt_name}")
-async def delete_agent_prompt(business_unit_id: str, agent_name: str, prompt_name: str):
-    """删除 Prompt"""
-    logger.info(f"删除 Prompt: {business_unit_id}/{agent_name}/{prompt_name}")
-    if not business_unit_service.delete_agent_prompt(business_unit_id, agent_name, prompt_name):
-        logger.warning(f"Prompt 不存在: {business_unit_id}/{agent_name}/{prompt_name}")
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    logger.info(f"Prompt 删除成功: {business_unit_id}/{agent_name}/{prompt_name}")
-    return crud.success_message("deleted", "Prompt")
+@router.delete("/{business_unit_id}/agents/{agent_name}/memories/{memory_name}")
+async def delete_agent_memory(business_unit_id: str, agent_name: str, memory_name: str):
+    """删除 Memory"""
+    logger.info(f"删除 Memory: {business_unit_id}/{agent_name}/{memory_name}")
+    if not business_unit_service.delete_agent_memory(business_unit_id, agent_name, memory_name):
+        logger.warning(f"Memory 不存在: {business_unit_id}/{agent_name}/{memory_name}")
+        raise HTTPException(status_code=404, detail="Memory not found")
+    logger.info(f"Memory 删除成功: {business_unit_id}/{agent_name}/{memory_name}")
+    return crud.success_message("deleted", "Memory")
 
 
-@router.post("/{business_unit_id}/agents/{agent_name}/prompts/{prompt_name}/toggle")
-async def toggle_agent_prompt_enabled(business_unit_id: str, agent_name: str, prompt_name: str, enabled: bool):
-    """切换 Prompt 启用状态"""
-    logger.info(f"切换 Prompt 启用状态: {business_unit_id}/{agent_name}/{prompt_name} -> {enabled}")
-    if not business_unit_service.toggle_prompt_enabled(business_unit_id, agent_name, prompt_name, enabled):
-        logger.warning(f"Prompt 不存在: {business_unit_id}/{agent_name}/{prompt_name}")
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    logger.info(f"Prompt 启用状态更新成功: {prompt_name}, enabled={enabled}")
-    return {"message": "Prompt enabled status updated successfully", "enabled": enabled}
+@router.post("/{business_unit_id}/agents/{agent_name}/memories/{memory_name}/toggle")
+async def toggle_agent_memory_enabled(business_unit_id: str, agent_name: str, memory_name: str, enabled: bool):
+    """切换 Memory 启用状态"""
+    logger.info(f"切换 Memory 启用状态: {business_unit_id}/{agent_name}/{memory_name} -> {enabled}")
+    if not business_unit_service.toggle_memory_enabled(business_unit_id, agent_name, memory_name, enabled):
+        logger.warning(f"Memory 不存在: {business_unit_id}/{agent_name}/{memory_name}")
+        raise HTTPException(status_code=404, detail="Memory not found")
+    logger.info(f"Memory 启用状态更新成功: {memory_name}, enabled={enabled}")
+    return {"message": "Memory enabled status updated successfully", "enabled": enabled}
 
 
 # ==================== Skill ====================

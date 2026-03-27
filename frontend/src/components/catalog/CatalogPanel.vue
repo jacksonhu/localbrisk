@@ -261,7 +261,7 @@ function handleSelect(item: BusinessUnitItem) {
     }
     
     case 'prompt': {
-      // 选择 Prompt：需要 business_unit_id 和 agent_name
+      // 选择 Memory：需要 business_unit_id 和 agent_name
       const businessUnitId = item.metadata?.business_unit_id as string | undefined;
       const agentName = item.metadata?.agent_name as string | undefined;
       if (businessUnitId && agentName) {
@@ -273,7 +273,7 @@ function handleSelect(item: BusinessUnitItem) {
         const originalFileName = prefixIndex >= 0 
           ? item.id.substring(prefixIndex + prefix.length) 
           : item.name;
-        store.selectPrompt(businessUnitId, agentName, originalFileName);
+        store.selectMemory(businessUnitId, agentName, originalFileName);
       }
       break;
     }
@@ -329,6 +329,18 @@ function handleSelect(item: BusinessUnitItem) {
         store.selectAssetByName(businessUnitId, bundleName, item.name);
       } else {
         console.warn('Asset metadata missing business_unit_id or bundle_name');
+      }
+      break;
+    }
+
+    case 'output_file': {
+      const businessUnitId = item.metadata?.business_unit_id as string | undefined;
+      const agentName = item.metadata?.agent_name as string | undefined;
+      const relativePath = item.metadata?.relative_path as string | undefined;
+      if (businessUnitId && agentName && relativePath) {
+        store.selectOutputFile(businessUnitId, agentName, relativePath);
+      } else {
+        console.warn('Output file metadata missing business_unit_id or agent_name or relative_path');
       }
       break;
     }

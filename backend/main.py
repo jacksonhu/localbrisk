@@ -14,6 +14,7 @@ from app.api import router as api_router
 from app.core.config import settings
 from app.core.middleware import I18nMiddleware
 from app.core.i18n import t, SupportedLocale
+from compute_engine import init_duckdb_service, close_duckdb_service
 
 logger = get_logger(__name__)
 
@@ -40,6 +41,23 @@ app.add_middleware(I18nMiddleware)
 
 # 注册 API 路由
 app.include_router(api_router, prefix="/api")
+
+
+@app.on_event("startup")
+async def _startup_init_compute_engine():
+    """服务启动时初始化持久化 DuckDB 实例。"""
+    try:
+        init_duckdb_service(settings.DUCKDB_PATH)
+        logger.info(f"DuckDB 初始化完成: {settings.DUCKDB_PATH}")
+    except Exception as e:
+        logger.exception(f"DuckDB 初始化失败: {e}")
+        raise
+
+
+@app.on_event("shutdown")
+async def _shutdown_close_compute_engine():
+    """服务关闭时释放 DuckDB 连接。"""
+    close_duckdb_service()
 
 
 @app.get("/")

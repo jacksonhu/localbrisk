@@ -99,7 +99,7 @@ class TestAgentBuildContext:
             model_config={"model_type": "endpoint"},
             prompts=[{"name": "system", "content": "test prompt"}],
             skills=["/path/to/skill1"],  # skills 是路径字符串列表
-            workroot_path="/path/to/workroot"
+            output_path="/path/to/output"
         )
         
         assert context.agent_name == "test_agent"
@@ -193,15 +193,15 @@ class TestLoadAgentContext:
             )
     
     @pytest.mark.asyncio
-    async def test_load_agent_context_workroot_created(self, temp_agent_dir):
-        """测试加载时自动创建 workroot 目录"""
+    async def test_load_agent_context_output_created(self, temp_agent_dir):
+        """测试加载时自动创建 output 目录"""
         from agent_engine.engine.deepagents_engine import get_deepagents_engine
         import shutil
         
-        # 删除 workroot 目录
-        workroot = Path(temp_agent_dir["agent_path"]) / "workroot"
-        if workroot.exists():
-            shutil.rmtree(workroot)
+        # 删除 output 目录
+        output = Path(temp_agent_dir["agent_path"]) / "output"
+        if output.exists():
+            shutil.rmtree(output)
         
         engine = get_deepagents_engine()
         context = await engine._load_agent_context(
@@ -209,8 +209,8 @@ class TestLoadAgentContext:
             "test_unit"
         )
         
-        # 验证 workroot 被创建
-        assert Path(context.workroot_path).exists()
+        # 验证 output 被创建
+        assert Path(context.output_path).exists()
 
 
 class TestBuildAgent:
@@ -273,8 +273,32 @@ class TestRealAgentBuild:
         print(f"\n真实 Agent 上下文:")
         print(f"  - 名称: {context.agent_name}")
         print(f"  - 路径: {context.agent_path}")
-        print(f"  - 工作目录: {context.workroot_path}")
+        print(f"  - 工作目录: {context.output_path}")
         print(f"  - 提示词数量: {len(context.prompts)}")
         print(f"  - 技能数量: {len(context.skills)}")
         if context.model_config:
             print(f"  - 模型 Provider: {context.model_config.get('endpoint_provider')}")
+
+
+class TestBuiltinSubagents:
+    """测试内置子 Agent 定义"""
+
+    def test_create_builtin_subagents_has_three_agents(self):
+        from agent_engine.engine.subagents import create_builtin_subagents
+
+        subagents = create_builtin_subagents(
+            parent_model="mock-model",
+            parent_tools=[],
+            parent_backend=None,
+        )
+
+        assert len(subagents) == 3
+
+        names = [
+            item.get("name") if isinstance(item, dict) else getattr(item, "name", "")
+            for item in subagents
+        ]
+
+        assert "web_crawl_summary_agent" in names
+        assert "text2sql_agent" in names
+        assert "ppt_summary_agent" in names

@@ -25,7 +25,7 @@ baseinfo 标准字段：
 │   │   │   └── {model_name}.yaml
 │   │   ├── mcps/                      # MCP 配置目录
 │   │   │   └── {mcp_name}.yaml
-│   │   └── workroot/                  # 工作记录目录
+│   │   └── output/                  # 工作记录目录
 │   │       └── {session_id}/
 │   └── asset_bundles/{bundle_name}/
 │       ├── bundle.yaml
@@ -55,7 +55,7 @@ class EntityType(str, Enum):
     NOTE = "note"
     FUNCTION = "function"
     MCP = "mcp"
-    WORKROOT = "workroot"
+    OUTPUT = "output"
 
 
 class ConnectionType(str, Enum):
@@ -386,26 +386,31 @@ class Agent(BaseModel):
     llm_config: Optional[AgentLLMConfig] = None
     # 目录扫描结果
     skills: List[str] = Field(default_factory=list)
-    prompts: List[str] = Field(default_factory=list)
+    memories: List[str] = Field(default_factory=list)
     models: List[str] = Field(default_factory=list)
     mcps: List[str] = Field(default_factory=list)
     active_model: Optional[str] = None
 
+    @property
+    def prompts(self) -> List[str]:
+        """兼容旧代码：prompts 等价于 memories（仅内部访问）"""
+        return self.memories
 
-# ==================== Prompt 模型 ====================
 
-class PromptCreate(BaseInfoCreate):
-    """创建 Prompt 请求"""
+# ==================== Memory 模型 ====================
+
+class MemoryCreate(BaseInfoCreate):
+    """创建 Memory 请求"""
     content: str = ""
 
 
-class PromptUpdate(BaseInfoUpdate):
-    """更新 Prompt 请求"""
+class MemoryUpdate(BaseInfoUpdate):
+    """更新 Memory 请求"""
     content: Optional[str] = None
 
 
-class Prompt(BaseModel):
-    """Prompt 数据模型"""
+class Memory(BaseModel):
+    """Memory 数据模型"""
     name: str
     display_name: Optional[str] = None
     description: Optional[str] = None
@@ -483,7 +488,7 @@ class Model(BaseModel):
         use_enum_values = True
 
 
-# ==================== Workroot 模型 ====================
+# ==================== Output 模型 ====================
 
 class WorkSession(BaseModel):
     """工作会话"""

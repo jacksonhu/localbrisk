@@ -3,7 +3,7 @@
 
 使用 LangChain DeepAgents SDK 构建智能代理，支持：
 - 从 agent_spec.yaml 加载配置
-- 加载 skills、prompts、models 目录配置
+- 加载 skills、memories、models 目录配置
 - 支持多个 system prompt 拼接
 - FilesystemBackend 文件系统后端
 
@@ -20,11 +20,14 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
-from langgraph.checkpoint.memory import MemorySaver
 import yaml
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.cache.memory import InMemoryCache
+from app.core.constants import ASSET_BUNDLES_DIR, ASSET_BUNDLE_CONFIG_FILE, VOLUMES_DIR, AGENT_SKILLS_DIR, AGENT_MEMORIES_DIR, \
+    AGENT_OUTPUT_DIR, TABLES_DIR
 
-from app.core.constants import ASSET_BUNDLES_DIR, ASSET_BUNDLE_CONFIG_FILE, VOLUMES_DIR, AGENT_SKILLS_DIR, \
-    AGENT_WORKROOT_DIR, TABLES_DIR
+from .subagents import create_builtin_subagents
 
 # 仅用于类型检查的导入
 if TYPE_CHECKING:
@@ -167,9 +170,9 @@ class AgentBuildContext:
     business_unit_id: str                    # Business Unit ID
     agent_spec: Dict[str, Any]               # agent_spec.yaml 内容
     model_config: Optional[Dict[str, Any]]   # 激活的模型配置
-    prompts: List[Dict[str, Any]]            # 所有启用的 prompt 配置
+    memories: List[Dict[str, Any]]           # 所有启用的 memory 配置
     skills: List[SkillConfig]                # 技能配置列表
-    workroot_path: str                       # 工作目录路径
+    output_path: str                       # 工作目录路径
     asset_bundles: List[AssetBundleBackendConfig] = None  # Asset Bundle 后端配置列表
     
     def __post_init__(self):
@@ -187,6 +190,7 @@ class DeepAgentsEngine:
         logger.info("初始化 DeepAgentsEngine")
         self._llm_factory = None
         self._model_resolver: Optional[callable] = None
+        self._checkpointer_contexts: Dict[int, Any] = {}
     
     def _ensure_llm_factory(self):
         """确保 LLM 工厂已初始化"""
@@ -241,7 +245,8 @@ class DeepAgentsEngine:
         llm_client = await self._create_llm_client(context)
         
         # 3. 构建系统提示（拼接所有启用的 prompt）
-        system_prompt = self._build_system_prompt(context)
+        system_prompt = self._load_base_system_prompt()
+        system_prompt=system_prompt.replace("{{cwd}}", context.agent_path)
         
         # 4. 创建 CompositeBackend 文件系统后端（包含 skills 和 asset bundles 挂载）
         backend = self._create_backend(context)
@@ -254,28 +259,92 @@ class DeepAgentsEngine:
         
         # 6. 合并工具（内置工具 + 外部自定义工具）
         from agent_engine.tools import get_builtin_tools
-        builtin_tools = get_builtin_tools(backend=backend)
+        task_root = str(Path(context.output_path) / ".task")
+        Path(task_root).mkdir(parents=True, exist_ok=True)
+        builtin_tools = get_builtin_tools(backend=backend, task_root=task_root)
         all_tools = builtin_tools + (tools if tools else [])
-        # 7. 初始化 Checkpointer
-        checkpointer = MemorySaver()
-        
-        # 8. 创建 DeepAgent（Markdown 直出）
-        logger.info(f"创建 DeepAgent: model={type(llm_client).__name__}, skills={len(context.skills) if context.skills else 0}, prompts={len(context.prompts)}")
 
-        agent = create_deep_agent(
-            model=llm_client,
-            tools=all_tools if all_tools else None,
-            system_prompt=system_prompt if system_prompt else None,
-            skills=["/skills/"],  # 使用挂载后的相对路径
-            backend=backend,
-            debug=debug,
-            checkpointer=checkpointer,
-            name=context.agent_name,
-            #interrupt_on={"execute": True} #需要在 _stream_agent_execution 中添加 interrupt 检测和恢复（resume）逻辑——检测到 agent 被 interrupt 后，向前端发送审批请求，收到用户确认后用 agent.invoke(Command(resume=value), config=config) 恢复执行
-        )
-        
+        # 7. 初始化 Checkpointer（统一异步）
+
+        checkpoint_root = str(Path(context.output_path) / ".checkpoints")
+        Path(checkpoint_root).mkdir(parents=True, exist_ok=True)
+        checkpoint_db = str(Path(checkpoint_root) / "checkpoints.sqlite")
+        checkpointer_cm = AsyncSqliteSaver.from_conn_string(checkpoint_db)
+        checkpointer = await self._enter_checkpointer_context(checkpointer_cm)
+        checkpointer = InMemorySaver()
+        try:
+            # 8. 创建内置子 Agent（复用父级沙箱 backend / tools / model）
+            subagents = create_builtin_subagents(
+                parent_model=llm_client,
+                parent_tools=all_tools,
+                parent_backend=backend,
+            )
+
+            # 9. 创建 DeepAgent（Markdown 直出）
+            logger.info(
+                f"创建 DeepAgent: model={type(llm_client).__name__}, skills={len(context.skills) if context.skills else 0}, "
+                f"memories={len(context.memories)}, subagents={len(subagents)}"
+            )
+
+            create_kwargs = {
+                "model": llm_client,
+                "tools": all_tools if all_tools else None,
+                "system_prompt": system_prompt if system_prompt else None,
+                "skills": ["./skills/"],
+                "backend": backend,
+                "memory": context.memories,
+                "debug": debug,
+                "checkpointer": checkpointer,
+                "name": context.agent_name,
+                "cache": InMemoryCache(),
+                "subagents": subagents,
+            }
+
+            try:
+                agent = create_deep_agent(**create_kwargs)
+            except TypeError as e:
+                if "subagents" not in str(e):
+                    raise
+                logger.warning("当前 deepagents 版本不支持 subagents 参数，回退为无子 Agent 模式: %s", e)
+                create_kwargs.pop("subagents", None)
+                agent = create_deep_agent(**create_kwargs)
+        except Exception:
+            await self._exit_checkpointer_context(checkpointer_cm)
+            raise
+
+        self._checkpointer_contexts[id(agent)] = checkpointer_cm
         logger.info(f"Agent 构建成功: {context.agent_name}")
         return agent
+
+    async def _enter_checkpointer_context(self, cm: Any) -> Any:
+        """兼容同步/异步 checkpointer context manager。"""
+        aenter = getattr(cm, "__aenter__", None)
+        if callable(aenter):
+            return await aenter()
+        enter = getattr(cm, "__enter__", None)
+        if callable(enter):
+            return enter()
+        return cm
+
+    async def _exit_checkpointer_context(self, cm: Any) -> None:
+        """兼容同步/异步 checkpointer context manager。"""
+        aexit = getattr(cm, "__aexit__", None)
+        if callable(aexit):
+            await aexit(None, None, None)
+            return
+        exit_ = getattr(cm, "__exit__", None)
+        if callable(exit_):
+            exit_(None, None, None)
+
+    async def close_agent_resources(self, agent: Any) -> None:
+        """关闭 Agent 构建阶段创建的资源（如 checkpointer context）"""
+        cm = self._checkpointer_contexts.pop(id(agent), None)
+        if cm is None:
+            return
+        try:
+            await self._exit_checkpointer_context(cm)
+        except Exception as e:
+            logger.warning(f"关闭 checkpointer 失败: {e}")
     
     async def _load_agent_context(
         self,
@@ -313,15 +382,15 @@ class DeepAgentsEngine:
         # 2. 加载激活的模型配置
         model_config = await self._load_active_model(path, agent_spec, business_unit_id, agent_name)
         
-        # 3. 加载所有启用的 prompts
-        prompts = self._load_prompts(path)
+        # 3. 加载所有启用的 memories
+        memories = self._load_memories(path)
         
         # 4. 加载所有技能路径
         skills = self._load_skills(path)
         
-        # 5. 确定 workroot 路径
-        workroot_path = str(path / "workroot")
-        os.makedirs(workroot_path, exist_ok=True)
+        # 5. 确定 output 路径
+        output_path = str(path / "output")
+        os.makedirs(output_path, exist_ok=True)
         
         # 6. 加载 asset bundles 后端配置
         asset_bundles = self._load_asset_bundles(path.parent.parent, business_unit_id)
@@ -333,9 +402,9 @@ class DeepAgentsEngine:
             business_unit_id=business_unit_id,
             agent_spec=agent_spec,
             model_config=model_config,
-            prompts=prompts,
+            memories=memories,
             skills=skills,
-            workroot_path=workroot_path,
+            output_path=output_path,
             asset_bundles=asset_bundles
         )
     
@@ -388,57 +457,47 @@ class DeepAgentsEngine:
         
         return None
     
-    def _load_prompts(self, agent_path: Path) -> List[Dict[str, Any]]:
-        """加载所有启用的 prompts
-        
-        从 prompts 目录加载所有 .md 文件及其元数据
-        
+    def _load_memories(self, agent_path: Path) -> List[Dict[str, Any]]:
+        """加载所有启用的 memories
+
+        从 memories 目录加载所有 .md 文件及其元数据
+
         Args:
             agent_path: Agent 目录路径
-            
+
         Returns:
-            启用的 prompt 配置列表，包含 content
+            启用的 memory 配置列表
         """
-        prompts = []
-        prompts_dir = agent_path / "prompts"
-        
-        if not prompts_dir.exists():
-            logger.debug(f"prompts 目录不存在: {prompts_dir}")
-            return prompts
-        
+        memories = []
+        memories_dir = agent_path / AGENT_MEMORIES_DIR
+
+        if not memories_dir.exists():
+            logger.debug(f"memories 目录不存在: {memories_dir}")
+            return memories
+
         # 遍历所有 .md 文件（排除 . 开头的文件）
-        for md_file in sorted(prompts_dir.glob("*.md")):
+        for md_file in sorted(memories_dir.glob("*.md")):
             if md_file.name.startswith("."):
                 continue
-            
-            prompt_name = md_file.stem
-            logger.debug(f"加载 prompt: {prompt_name}")
-            
-            # 读取 prompt 内容
-            with open(md_file, 'r', encoding='utf-8') as f:
-                content = f.read().strip()
-            
+
+            memory_name = md_file.stem
+            logger.debug(f"加载 memory: {memory_name}")
+
             # 尝试读取元数据文件
-            meta_file = prompts_dir / f".{prompt_name}.meta.yaml"
+            meta_file = memories_dir / f".{memory_name}.meta.yaml"
             meta = {}
             if meta_file.exists():
                 with open(meta_file, 'r', encoding='utf-8') as f:
                     meta = yaml.safe_load(f) or {}
-            
+
             # 检查是否启用（默认启用）
             if not meta.get("enabled", True):
-                logger.debug(f"prompt {prompt_name} 已禁用，跳过")
+                logger.debug(f"memory {memory_name} 已禁用，跳过")
                 continue
-            
-            prompts.append({
-                "name": prompt_name,
-                "content": content,
-                "file_path": str(md_file),
-                "meta": meta
-            })
-        
-        logger.info(f"加载了 {len(prompts)} 个 prompts")
-        return prompts
+
+            memories.append(f"/memories/{memory_name}.md")
+        logger.info(f"加载了 {len(memories)} 个 memories")
+        return memories
     
     def _load_skills(self, agent_path: Path) -> List[SkillConfig]:
         """加载所有技能配置
@@ -537,66 +596,19 @@ class DeepAgentsEngine:
         # AGENTS.md 位于当前文件所在目录
         engine_dir = Path(__file__).parent
         agents_md_path = engine_dir / "AGENTS.md"
-        
-        if not agents_md_path.exists():
-            logger.warning(f"AGENTS.md 文件不存在: {agents_md_path}")
-            return "{user_custom_prompt}"  # 回退到只包含占位符的模板
-        
         try:
             content = agents_md_path.read_text(encoding="utf-8")
             logger.debug(f"加载基础系统提示模板: {agents_md_path}, 长度 {len(content)} 字符")
             return content
         except Exception as e:
             logger.error(f"读取 AGENTS.md 失败: {e}")
-            return "{user_custom_prompt}"
-    
-    def _build_system_prompt(self, context: AgentBuildContext) -> Optional[str]:
-        """构建系统提示
-        
-        1. 从 AGENTS.md 读取基础模板
-        2. 将用户定义的 prompts 拼接成自定义部分
-        3. 用自定义部分替换模板中的 {user_custom_prompt} 变量
-        
-        Args:
-            context: Agent 构建上下文
-            
-        Returns:
-            拼接后的系统提示字符串
-        """
-        # 1. 加载基础模板
-        base_template = self._load_base_system_prompt()
-        
-        # 2. 拼接用户自定义 prompt 内容
-        user_custom_prompt = ""
-        if context.prompts:
-            prompt_parts = []
-            for prompt in context.prompts:
-                content = prompt.get("content", "").strip()
-                if content:
-                    # 添加分隔符和 prompt 名称注释
-                    prompt_parts.append(f"### {prompt['name']}\n\n{content}")
-            
-            if prompt_parts:
-                user_custom_prompt = "\n\n---\n\n".join(prompt_parts)
-                logger.debug(f"用户自定义 prompt: {len(prompt_parts)} 个部分, 长度 {len(user_custom_prompt)} 字符")
-        
-        # 3. 替换模板中的占位符
-        system_prompt = base_template.replace("{user_custom_prompt}", user_custom_prompt)
-        
-        # 如果最终结果为空或只有空白，返回 None
-        if not system_prompt.strip():
-            logger.debug("系统提示为空")
-            return None
-        
-        logger.info(f"构建系统提示: 基础模板 {len(base_template)} 字符 + 用户自定义 {len(user_custom_prompt)} 字符 = 总计 {len(system_prompt)} 字符")
-        
-        return system_prompt
-    
+            raise Exception(f"读取 AGENTS.md 失败: {e}")
+
     def _create_backend(self, context: AgentBuildContext):
         """创建 CompositeBackend 文件系统后端
         
         创建一个组合后端，包含：
-        1. LocalShellBackend - 默认后端，允许在 workroot 下读写文件和执行命令
+        1. LocalShellBackend - 默认后端，允许在 output 下读写文件和执行命令
         2. FilesystemBackend - 挂载 skills 目录（只读）
         3. 多个 FilesystemBackend(virtual_mode=True) - 挂载各个 asset bundle 的文档目录（只读）
         
@@ -606,32 +618,32 @@ class DeepAgentsEngine:
         Returns:
             CompositeBackend 或 FilesystemBackend 实例
         """
-        workroot = context.workroot_path
+        output = context.output_path
+        has_memories = context.memories and len(context.memories) > 0
         # 如果没有 skills 和 asset bundles，或 CompositeBackend 不可用，回退到简单的 FilesystemBackend
         has_skills = context.skills and len(context.skills) > 0
         has_bundles = context.asset_bundles and len(context.asset_bundles) > 0
+
+        if (not has_skills and not has_bundles and not has_memories) or CompositeBackend is None or LocalShellBackend is None:
+            logger.info(f"创建 FilesystemBackend: root_dir={output}")
+            return FilesystemBackend(root_dir=output)
         
-        if (not has_skills and not has_bundles) or CompositeBackend is None or LocalShellBackend is None:
-            logger.info(f"创建 FilesystemBackend: root_dir={workroot}")
-            return FilesystemBackend(root_dir=workroot)
-        
-        logger.info(f"创建 CompositeBackend: workroot={workroot}, skills={len(context.skills) if has_skills else 0}, asset_bundles={len(context.asset_bundles) if has_bundles else 0}")
+        logger.info(f"创建 CompositeBackend: output={output}, skills={len(context.skills) if has_skills else 0}, asset_bundles={len(context.asset_bundles) if has_bundles else 0}")
 
         
         # 2. 构建路由配置
         routes = {}
-        routes["/workroot/output/"] = FilesystemBackend (root_dir=f"{workroot}/output", virtual_mode=True)
-        routes["/workroot/"] = FilesystemBackend (root_dir=f"{workroot}", virtual_mode=True)
-        # 2.1 挂载 skills 目录
-        if has_skills:
-            skills_dir = f"{context.agent_path}/{AGENT_SKILLS_DIR}"
-            if os.path.exists(skills_dir):
-                routes[f"/{AGENT_SKILLS_DIR}/"] = FilesystemBackend(
-                    root_dir=skills_dir,
-                    virtual_mode=True  # skills 只读访问
+        routes["/large_tool_results/"] = FilesystemBackend(root_dir=f"{output}/.large_tool_results", virtual_mode=True)
+        routes["/conversation_history/"] = FilesystemBackend(root_dir=f"{output}/.conversation_history", virtual_mode=True)
+        if has_memories:
+            memories_dir = f"{context.agent_path}/{AGENT_MEMORIES_DIR}"
+            if os.path.exists(memories_dir):
+                routes[f"/memories/"] = FilesystemBackend(
+                    root_dir=memories_dir,
+                    virtual_mode=True
                 )
             else:
-                logger.warning(f"Skill 目录不存在: {skills_dir}")
+                logger.warning(f"Memories 目录不存在: {memories_dir}")
         # 2.2 挂载 asset bundles
         if has_bundles:
             for bundle_config in context.asset_bundles:
@@ -662,7 +674,7 @@ class DeepAgentsEngine:
                                 mount_path = f"{bundle_config.mount_path}_{volume_name}/"
                                 routes[mount_path] = FilesystemBackend(
                                     root_dir=storage_path,
-                                    virtual_mode=True  # 文档目录只读访问
+                                    virtual_mode=True
                                 )
                                 logger.debug(f"挂载 local volume: {mount_path} -> {storage_path}")
                             else:
@@ -673,11 +685,17 @@ class DeepAgentsEngine:
                             logger.debug(f"跳过非 local 类型的 volume: {volume_name} (type={volume_type})")
         
         # 3. 创建 CompositeBackend
+        venv_path = f"{context.agent_path}/venv"
+        env = {
+            "PATH": f"{venv_path}/bin:{os.environ.get('PATH', '')}",
+            "VIRTUAL_ENV": venv_path,
+        }
         if routes:
             composite_backend = CompositeBackend(
-                default=LocalShellBackend (root_dir=workroot, inherit_env=True),
+                default=LocalShellBackend(root_dir=context.agent_path,virtual_mode=False,inherit_env=True,env=env),
                 routes=routes
             )
+            logger.info(f"python location:{composite_backend.execute("which python").output}")
             logger.info(f"CompositeBackend 创建成功: routes={len(routes)} 个挂载点")
 
             return composite_backend
@@ -758,7 +776,7 @@ class DeepAgentsEngine:
                 bundle_name=bundle_name,
                 bundle_type=bundle_type,
                 bundle_path=str(bundle_path),
-                mount_path=f"/{ASSET_BUNDLES_DIR}_{bundle_name}_{VOLUMES_DIR}",
+                mount_path=f"/{bundle_name}",
                 volumes=volumes
             )
         else:
@@ -767,7 +785,7 @@ class DeepAgentsEngine:
                 bundle_name=bundle_name,
                 bundle_type=bundle_type,
                 bundle_path=str(bundle_path),
-                mount_path=f"/{ASSET_BUNDLES_DIR}_{bundle_name}_{TABLES_DIR}",
+                mount_path=f"/{bundle_name}",
                 volumes=volumes
             )
     

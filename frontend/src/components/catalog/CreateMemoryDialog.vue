@@ -1,41 +1,41 @@
 <!-- 
-  CreatePromptDialog - 创建 Prompt 弹窗
+  CreateMemoryDialog - 创建 Memory 弹窗
   使用公共组件重构，减少重复代码
 -->
 <template>
   <BaseDialog
     :is-open="isOpen"
-    :title="t('prompt.create')"
+    :title="t('memory.create')"
     :icon="FileText"
     width="md"
     @close="close"
   >
     <!-- 表单内容 -->
     <form @submit.prevent="handleSubmit" class="space-y-5">
-      <!-- Prompt 名称 -->
+      <!-- Memory 名称 -->
       <FormField
-        :label="t('prompt.name')"
+        :label="t('memory.name')"
         :error="errors.name"
-        :hint="t('prompt.nameHint')"
+        :hint="t('memory.nameHint')"
         required
       >
         <FormInput
           v-model="form.name"
-          :placeholder="t('prompt.nameHint')"
+          :placeholder="t('memory.nameHint')"
           @input="validateName"
         />
       </FormField>
 
       <!-- 初始内容 -->
       <FormField
-        :label="t('prompt.content')"
-        :hint="t('prompt.contentHint')"
+        :label="t('memory.content')"
+        :hint="t('memory.contentHint')"
         optional
       >
         <FormTextarea
           v-model="form.content"
           :rows="6"
-          :placeholder="t('prompt.contentHint')"
+          :placeholder="t('memory.contentHint')"
           class="font-mono"
         />
       </FormField>
@@ -45,7 +45,7 @@
         <div class="flex gap-2">
           <Info class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
           <div class="text-xs text-blue-700 dark:text-blue-300">
-            <p>Prompt 文件将保存为 Markdown 格式（.md），支持标题、列表、代码块等 Markdown 语法。</p>
+            <p>Memory 文件将保存为 Markdown 格式（.md），支持标题、列表、代码块等 Markdown 语法。</p>
           </div>
         </div>
       </div>
@@ -70,7 +70,7 @@ import { useI18n } from 'vue-i18n';
 import { FileText, Info } from 'lucide-vue-next';
 import { BaseDialog, DialogFooter, FormField, FormInput, FormTextarea } from '@/components/common';
 import { NAME_REGEX } from '@/utils/validationUtils';
-import type { PromptCreate } from '@/types/catalog';
+import type { MemoryCreate } from '@/types/catalog';
 
 const { t } = useI18n();
 
@@ -84,11 +84,11 @@ const props = defineProps<{
 // Emits
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'submit', businessUnitId: string, agentName: string, data: PromptCreate): void;
+  (e: 'submit', businessUnitId: string, agentName: string, data: MemoryCreate): void;
 }>();
 
 // 表单状态
-const form = reactive<PromptCreate>({
+const form = reactive<MemoryCreate>({
   name: '',
   content: '',
 });
@@ -104,11 +104,11 @@ const isSubmitting = ref(false);
 // 验证名称
 function validateName() {
   if (!form.name) {
-    errors.name = t('errors.promptNameRequired');
+    errors.name = t('errors.memoryNameRequired');
     return false;
   }
   if (!NAME_REGEX.test(form.name)) {
-    errors.name = t('errors.promptNameInvalid');
+    errors.name = t('errors.memoryNameInvalid');
     return false;
   }
   errors.name = '';
@@ -134,7 +134,7 @@ async function handleSubmit() {
   isSubmitting.value = true;
   
   try {
-    const data: PromptCreate = {
+    const data: MemoryCreate = {
       name: form.name,
       content: form.content || '',
     };

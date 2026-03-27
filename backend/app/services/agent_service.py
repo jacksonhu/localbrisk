@@ -1,11 +1,12 @@
 """
-Agent 服务 - 管理 Agent、Prompt、Skill、Model、MCP
+Agent 服务 - 管理 Agent、Memory、Skill、Model、MCP
 """
 
 import logging
 import re
 import shutil
 import tempfile
+import venv
 import zipfile
 from pathlib import Path
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
@@ -14,14 +15,14 @@ from app.core.constants import (
     AGENT_CONFIG_FILE,
     AGENT_MODELS_DIR,
     AGENT_MCPS_DIR,
-    AGENT_WORKROOT_DIR,
-    AGENT_PROMPTS_DIR,
+    AGENT_OUTPUT_DIR,
+    AGENT_MEMORIES_DIR,
     AGENT_SKILLS_DIR,
 )
 from app.models.business_unit import (
     Agent, AgentCreate, AgentUpdate, EntityType,
     AgentLLMConfig,
-    Prompt, PromptCreate, PromptUpdate,
+    Memory, MemoryCreate, MemoryUpdate,
     Model, ModelCreate, ModelUpdate, ModelType,
     MCP, MCPCreate, MCPUpdate, MCPType,
 )
@@ -31,6 +32,19 @@ if TYPE_CHECKING:
     from app.services.business_unit_service import BusinessUnitService
 
 logger = logging.getLogger(__name__)
+AGENT_BASE_SUBDIRS = (
+    AGENT_SKILLS_DIR,
+    AGENT_MEMORIES_DIR,
+    AGENT_MODELS_DIR,
+    AGENT_MCPS_DIR,
+    AGENT_OUTPUT_DIR,
+)
+AGENT_OUTPUT_SYSTEM_SUBDIRS = (
+    ".task",
+    ".checkpoints",
+    ".large_tool_results",
+    ".conversation_history",
+)
 
 
 class AgentService(BaseService):
@@ -59,9 +73,21 @@ class AgentService(BaseService):
         """获取 Agent 下的 MCPs 目录"""
         return agent_path / AGENT_MCPS_DIR
     
-    def _get_workroot_dir(self, agent_path: Path) -> Path:
-        """获取 Agent 下的 Workroot 目录"""
-        return agent_path / AGENT_WORKROOT_DIR
+    def _get_output_dir(self, agent_path: Path) -> Path:
+        """获取 Agent 下的 Output 目录"""
+        return agent_path / AGENT_OUTPUT_DIR
+
+    def _get_memory_dir_candidates(self, agent_path: Path) -> List[Path]:
+        """获取 Memory 目录候选列表（仅 memories）"""
+        memories_dir = agent_path / AGENT_MEMORIES_DIR
+        return [memories_dir] if memories_dir.exists() else []
+
+    def _get_primary_memory_dir(self, agent_path: Path, create: bool = False) -> Path:
+        """获取主 Memory 目录（统一 memories）"""
+        memories_dir = agent_path / AGENT_MEMORIES_DIR
+        if create:
+            memories_dir.mkdir(parents=True, exist_ok=True)
+        return memories_dir
     
     # ==================== Agent CRUD ====================
     
@@ -77,7 +103,10 @@ class AgentService(BaseService):
         
         # 扫描子目录
         skills = self._scan_dir_names(agent_path / AGENT_SKILLS_DIR, is_dir=True)
-        prompts = self._scan_dir_names(agent_path / AGENT_PROMPTS_DIR, suffixes=[".md", ".markdown"])
+        memories: List[str] = []
+        for memory_dir in self._get_memory_dir_candidates(agent_path):
+            memories.extend(self._scan_dir_names(memory_dir, suffixes=[".md", ".markdown"]))
+        memories = sorted(set(memories))
         models = self._scan_dir_names(agent_path / AGENT_MODELS_DIR, suffixes=[".yaml", ".yml"])
         mcps = self._scan_dir_names(agent_path / AGENT_MCPS_DIR, suffixes=[".yaml", ".yml"])
         
@@ -105,7 +134,7 @@ class AgentService(BaseService):
             updated_at=self._parse_datetime(baseinfo.get("updated_at")),
             llm_config=self._parse_llm_config(config.get("llm_config")),
             skills=skills,
-            prompts=prompts,
+            memories=memories,
             models=models,
             mcps=mcps,
             active_model=active_model,
@@ -156,6 +185,26 @@ class AgentService(BaseService):
         agent_path = self._get_agent_path(business_unit_id, agent_name)
         return self._read_file(self._get_config_path(agent_path))
     
+    def _create_agent_venv(self, agent_path: Path) -> None:
+        """在 Agent 根目录下创建 Python 虚拟环境（venv）"""
+        venv_path = agent_path / "venv"
+        if venv_path.exists():
+            return
+        try:
+            venv.EnvBuilder(with_pip=False).create(str(venv_path))
+        except Exception as e:
+            raise RuntimeError(f"创建 Agent 虚拟环境失败: {e}") from e
+
+    def _initialize_agent_directories(self, agent_path: Path) -> None:
+        """初始化 Agent 目录结构。"""
+        agent_path.mkdir(parents=True, exist_ok=True)
+        for directory in AGENT_BASE_SUBDIRS:
+            (agent_path / directory).mkdir(exist_ok=True)
+
+        output_dir = agent_path / AGENT_OUTPUT_DIR
+        for system_dir in AGENT_OUTPUT_SYSTEM_SUBDIRS:
+            (output_dir / system_dir).mkdir(exist_ok=True)
+
     def create_agent(self, business_unit_id: str, data: AgentCreate) -> Agent:
         """创建 Agent"""
         bu_path = self.business_unit_service.get_business_unit_path(business_unit_id)
@@ -170,12 +219,8 @@ class AgentService(BaseService):
             raise ValueError(f"Agent '{data.name}' 已存在")
         
         # 创建目录结构
-        agent_path.mkdir(parents=True, exist_ok=True)
-        (agent_path / AGENT_SKILLS_DIR).mkdir(exist_ok=True)
-        (agent_path / AGENT_PROMPTS_DIR).mkdir(exist_ok=True)
-        (agent_path / AGENT_MODELS_DIR).mkdir(exist_ok=True)
-        (agent_path / AGENT_MCPS_DIR).mkdir(exist_ok=True)
-        (agent_path / AGENT_WORKROOT_DIR).mkdir(exist_ok=True)
+        self._initialize_agent_directories(agent_path)
+        self._create_agent_venv(agent_path)
         
         # 创建配置（简化版：仅保留 baseinfo 和 llm_config）
         config = {
@@ -522,152 +567,155 @@ class AgentService(BaseService):
         agent_path = self._get_agent_path(business_unit_id, agent_name)
         return self._delete_file(self._get_mcps_dir(agent_path) / f"{mcp_name}.yaml")
     
-    # ==================== Prompt 操作 ====================
+    # ==================== Memory 操作 ====================
     
-    def _get_enabled_prompts(self, business_unit_id: str, agent_name: str) -> List[str]:
-        """获取启用的 prompts"""
+    def _get_enabled_memories(self, business_unit_id: str, agent_name: str) -> List[str]:
+        """获取启用的 Memory 名称"""
         config = self._load_yaml(self._get_config_path(self._get_agent_path(business_unit_id, agent_name))) or {}
         templates = config.get("instruction", {}).get("user_prompt_templates", [])
         return [p.get("name") if isinstance(p, dict) else p for p in templates]
-    
-    def _find_prompt_file(self, prompts_dir: Path, prompt_name: str) -> Optional[Path]:
-        """查找 prompt 文件"""
-        for name in [prompt_name, f"{prompt_name}.md"]:
-            path = prompts_dir / name
-            if path.exists():
-                return path
+
+    def _find_memory_file(self, memory_dirs: List[Path], memory_name: str) -> Optional[Path]:
+        """在多个 Memory 目录中查找文件"""
+        for memory_dir in memory_dirs:
+            for name in [memory_name, f"{memory_name}.md"]:
+                path = memory_dir / name
+                if path.exists():
+                    return path
         return None
-    
-    def list_prompts(self, business_unit_id: str, agent_name: str) -> Optional[List[Prompt]]:
-        """获取 Prompt 列表"""
-        prompts_dir = self._get_agent_path(business_unit_id, agent_name) / AGENT_PROMPTS_DIR
-        if not prompts_dir.exists():
+
+    def list_memories(self, business_unit_id: str, agent_name: str) -> Optional[List[Memory]]:
+        """获取 Memory 列表"""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        memory_dirs = self._get_memory_dir_candidates(agent_path)
+        if not memory_dirs:
+            return []
+
+        enabled = self._get_enabled_memories(business_unit_id, agent_name)
+        memories_map: Dict[str, Memory] = {}
+
+        for memory_dir in memory_dirs:
+            for item in memory_dir.iterdir():
+                if not item.is_file() or item.suffix.lower() not in [".md", ".markdown"] or item.name.startswith("."):
+                    continue
+                if item.name in memories_map:
+                    continue
+
+                content = self._read_file(item) or ""
+                meta = self._load_yaml(memory_dir / f".{item.stem}.meta.yaml") or {}
+
+                memories_map[item.name] = Memory(
+                    name=item.name,
+                    display_name=meta.get("display_name") or item.stem,
+                    description=meta.get("description"),
+                    tags=meta.get("tags", []),
+                    entity_type=EntityType.PROMPT,
+                    content=content,
+                    enabled=item.name in enabled,
+                    path=str(item),
+                    created_at=self._parse_datetime(meta.get("created_at")),
+                    updated_at=self._parse_datetime(meta.get("updated_at")),
+                )
+
+        return [memories_map[name] for name in sorted(memories_map.keys())]
+
+    def get_memory(self, business_unit_id: str, agent_name: str, memory_name: str) -> Optional[Memory]:
+        """获取 Memory 详情"""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        memory_dirs = self._get_memory_dir_candidates(agent_path)
+        memory_path = self._find_memory_file(memory_dirs, memory_name)
+        if not memory_path:
             return None
-        
-        enabled = self._get_enabled_prompts(business_unit_id, agent_name)
-        prompts = []
-        
-        for item in prompts_dir.iterdir():
-            if not item.is_file() or item.suffix.lower() not in [".md", ".markdown"] or item.name.startswith("."):
-                continue
-            
-            content = self._read_file(item) or ""
-            meta = self._load_yaml(prompts_dir / f".{item.stem}.meta.yaml") or {}
-            
-            prompts.append(Prompt(
-                name=item.name,
-                display_name=meta.get("display_name") or item.stem,
-                description=meta.get("description"),
-                tags=meta.get("tags", []),
-                entity_type=EntityType.PROMPT,
-                content=content,
-                enabled=item.name in enabled,
-                path=str(item),
-                created_at=self._parse_datetime(meta.get("created_at")),
-                updated_at=self._parse_datetime(meta.get("updated_at")),
-            ))
-        
-        return prompts
-    
-    def get_prompt(self, business_unit_id: str, agent_name: str, prompt_name: str) -> Optional[Prompt]:
-        """获取 Prompt 详情"""
-        prompts_dir = self._get_agent_path(business_unit_id, agent_name) / AGENT_PROMPTS_DIR
-        prompt_path = self._find_prompt_file(prompts_dir, prompt_name)
-        if not prompt_path:
-            return None
-        
-        content = self._read_file(prompt_path) or ""
-        meta = self._load_yaml(prompts_dir / f".{prompt_path.stem}.meta.yaml") or {}
-        enabled = self._get_enabled_prompts(business_unit_id, agent_name)
-        
-        return Prompt(
-            name=prompt_path.name,
-            display_name=meta.get("display_name") or prompt_path.stem,
+
+        content = self._read_file(memory_path) or ""
+        meta = self._load_yaml(memory_path.parent / f".{memory_path.stem}.meta.yaml") or {}
+        enabled = self._get_enabled_memories(business_unit_id, agent_name)
+
+        return Memory(
+            name=memory_path.name,
+            display_name=meta.get("display_name") or memory_path.stem,
             description=meta.get("description"),
             tags=meta.get("tags", []),
             entity_type=EntityType.PROMPT,
             content=content,
-            enabled=prompt_path.name in enabled,
-            path=str(prompt_path),
+            enabled=memory_path.name in enabled,
+            path=str(memory_path),
             created_at=self._parse_datetime(meta.get("created_at")),
             updated_at=self._parse_datetime(meta.get("updated_at")),
         )
-    
-    def create_prompt(self, business_unit_id: str, agent_name: str, data: PromptCreate) -> bool:
-        """创建 Prompt"""
-        prompts_dir = self._get_agent_path(business_unit_id, agent_name) / AGENT_PROMPTS_DIR
-        if not prompts_dir.exists():
-            return False
-        
+
+    def create_memory(self, business_unit_id: str, agent_name: str, data: MemoryCreate) -> bool:
+        """创建 Memory"""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        memory_dir = self._get_primary_memory_dir(agent_path, create=True)
+
         name = data.name if data.name.endswith(".md") else f"{data.name}.md"
-        prompt_path = prompts_dir / name
-        
-        if prompt_path.exists():
-            raise ValueError(f"Prompt '{data.name}' 已存在")
-        
-        self._write_file(prompt_path, data.content)
-        self._save_yaml(prompts_dir / f".{prompt_path.stem}.meta.yaml", {"created_at": self._now_iso(), "updated_at": self._now_iso()})
+        memory_path = memory_dir / name
+
+        if memory_path.exists():
+            raise ValueError(f"Memory '{data.name}' 已存在")
+
+        self._write_file(memory_path, data.content)
+        self._save_yaml(memory_dir / f".{memory_path.stem}.meta.yaml", {"created_at": self._now_iso(), "updated_at": self._now_iso()})
         return True
-    
-    def update_prompt(self, business_unit_id: str, agent_name: str, prompt_name: str, update: PromptUpdate) -> bool:
-        """更新 Prompt"""
-        prompts_dir = self._get_agent_path(business_unit_id, agent_name) / AGENT_PROMPTS_DIR
-        prompt_path = self._find_prompt_file(prompts_dir, prompt_name)
-        if not prompt_path:
+
+    def update_memory(self, business_unit_id: str, agent_name: str, memory_name: str, update: MemoryUpdate) -> bool:
+        """更新 Memory"""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        memory_dirs = self._get_memory_dir_candidates(agent_path)
+        memory_path = self._find_memory_file(memory_dirs, memory_name)
+        if not memory_path:
             return False
-        
+
         if update.content is not None:
-            self._write_file(prompt_path, update.content)
-        
-        meta_path = prompts_dir / f".{prompt_path.stem}.meta.yaml"
+            self._write_file(memory_path, update.content)
+
+        meta_path = memory_path.parent / f".{memory_path.stem}.meta.yaml"
         meta = self._load_yaml(meta_path) or {}
         meta["updated_at"] = self._now_iso()
         self._save_yaml(meta_path, meta)
         return True
-    
-    def delete_prompt(self, business_unit_id: str, agent_name: str, prompt_name: str) -> bool:
-        """删除 Prompt"""
-        prompts_dir = self._get_agent_path(business_unit_id, agent_name) / AGENT_PROMPTS_DIR
-        prompt_path = self._find_prompt_file(prompts_dir, prompt_name)
-        if not prompt_path:
+
+    def delete_memory(self, business_unit_id: str, agent_name: str, memory_name: str) -> bool:
+        """删除 Memory"""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        memory_dirs = self._get_memory_dir_candidates(agent_path)
+        memory_path = self._find_memory_file(memory_dirs, memory_name)
+        if not memory_path:
             return False
-        
-        prompt_path.unlink()
-        meta_path = prompts_dir / f".{prompt_path.stem}.meta.yaml"
+
+        memory_path.unlink()
+        meta_path = memory_path.parent / f".{memory_path.stem}.meta.yaml"
         if meta_path.exists():
             meta_path.unlink()
         return True
-    
-    def toggle_prompt_enabled(self, business_unit_id: str, agent_name: str, prompt_name: str, enabled: bool) -> bool:
-        """切换 Prompt 启用状态"""
+
+    def toggle_memory_enabled(self, business_unit_id: str, agent_name: str, memory_name: str, enabled: bool) -> bool:
+        """切换 Memory 启用状态"""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
         config_path = self._get_config_path(agent_path)
-        prompts_dir = agent_path / AGENT_PROMPTS_DIR
-        
+
         if not config_path.exists():
             return False
-        
-        actual_name = None
-        for name in [prompt_name, f"{prompt_name}.md"]:
-            if (prompts_dir / name).exists():
-                actual_name = name
-                break
-        if not actual_name:
+
+        memory_path = self._find_memory_file(self._get_memory_dir_candidates(agent_path), memory_name)
+        if not memory_path:
             return False
-        
+        actual_name = memory_path.name
+
         config = self._load_yaml(config_path) or {}
         inst = config.setdefault("instruction", {})
         templates = inst.get("user_prompt_templates", [])
         names = [p.get("name") if isinstance(p, dict) else p for p in templates]
-        
+
         if enabled and actual_name not in names:
             templates.append({"name": actual_name})
         elif not enabled:
             templates = [p for p in templates if (p.get("name") if isinstance(p, dict) else p) != actual_name]
-        
+
         inst["user_prompt_templates"] = templates
         config["baseinfo"] = self._update_baseinfo(self._extract_baseinfo(config, agent_path.name))
-        
+
         self._save_yaml(config_path, config)
         return True
     

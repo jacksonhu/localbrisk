@@ -172,7 +172,7 @@ class AgentConfig:
     skills: List[SkillInfo] = field(default_factory=list)
     
     # 工作目录
-    workroot: Optional[str] = None
+    output: Optional[str] = None
     
     # 原始 spec
     raw_spec: Dict[str, Any] = field(default_factory=dict)
@@ -261,9 +261,9 @@ class AgentConfigLoader:
         # 5. 加载技能
         skills = self._load_skills(path)
         
-        # 6. 确定 workroot
-        workroot = str(path / "workroot")
-        os.makedirs(workroot, exist_ok=True)
+        # 6. 确定 output
+        output = str(path / "output")
+        os.makedirs(output, exist_ok=True)
         
         config = AgentConfig(
             name=name,
@@ -275,7 +275,7 @@ class AgentConfigLoader:
             models=models,
             prompts=prompts,
             skills=skills,
-            workroot=workroot,
+            output=output,
             raw_spec=spec
         )
         

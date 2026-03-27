@@ -48,13 +48,13 @@ from app.models.business_unit import (
     MCPPythonFunctionConfig,
     MCPServerConfig,
     MCPRemoteAPIConfig,
-    # Workroot 相关
+    # Output 相关
     WorkSession,
     WorkOutput,
-    # Prompt 相关
-    Prompt,
-    PromptCreate,
-    PromptUpdate,
+    # Memory 相关
+    Memory,
+    MemoryCreate,
+    MemoryUpdate,
 )
 
 __all__ = [
@@ -102,11 +102,11 @@ __all__ = [
     "MCPPythonFunctionConfig",
     "MCPServerConfig",
     "MCPRemoteAPIConfig",
-    # Workroot 相关
+    # Output 相关
     "WorkSession",
     "WorkOutput",
-    # Prompt 相关
-    "Prompt",
-    "PromptCreate",
-    "PromptUpdate",
+    # Memory 相关
+    "Memory",
+    "MemoryCreate",
+    "MemoryUpdate",
 ]

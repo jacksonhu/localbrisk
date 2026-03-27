@@ -14,6 +14,7 @@ from app.core.constants import (
     ASSET_FILE_SUFFIX, AGENTS_DIR, ASSET_BUNDLES_DIR,
     TABLES_DIR, VOLUMES_DIR, FUNCTIONS_DIR, NOTES_DIR,
     BUNDLE_ASSET_TYPE_TO_DIR, AGENT_MODELS_DIR, AGENT_MCPS_DIR,
+    AGENT_OUTPUT_DIR,
 )
 from app.models.business_unit import (
     BusinessUnit, BusinessUnitCreate, BusinessUnitUpdate,
@@ -24,7 +25,7 @@ from app.models.business_unit import (
     Agent, AgentCreate, AgentUpdate,
     Model, ModelCreate, ModelUpdate,
     MCP, MCPCreate, MCPUpdate,
-    Prompt, PromptCreate, PromptUpdate,
+    Memory, MemoryCreate, MemoryUpdate,
 )
 from app.models.metadata import SyncResult
 from app.services.base_service import BaseService
@@ -151,7 +152,6 @@ class BusinessUnitService(BaseService):
         # 创建配置
         baseinfo = self._create_baseinfo(data.name, data.display_name, data.description, data.tags, data.owner or "admin")
         self._save_yaml(bu_path / BUSINESS_UNIT_CONFIG_FILE, {"baseinfo": baseinfo})
-        
         logger.info(f"BusinessUnit 创建成功: {data.name}")
         return self._load_business_unit(bu_path)
     
@@ -282,25 +282,25 @@ class BusinessUnitService(BaseService):
     def delete_mcp(self, business_unit_id: str, agent_name: str, mcp_name: str) -> bool:
         return self.agent_service.delete_mcp(business_unit_id, agent_name, mcp_name)
     
-    # ==================== Prompt 代理方法 ====================
+    # ==================== Memory 代理方法 ====================
     
-    def list_agent_prompts(self, business_unit_id: str, agent_name: str) -> Optional[List[Prompt]]:
-        return self.agent_service.list_prompts(business_unit_id, agent_name)
+    def list_agent_memories(self, business_unit_id: str, agent_name: str) -> Optional[List[Memory]]:
+        return self.agent_service.list_memories(business_unit_id, agent_name)
     
-    def get_agent_prompt_detail(self, business_unit_id: str, agent_name: str, prompt_name: str) -> Optional[Prompt]:
-        return self.agent_service.get_prompt(business_unit_id, agent_name, prompt_name)
+    def get_agent_memory_detail(self, business_unit_id: str, agent_name: str, memory_name: str) -> Optional[Memory]:
+        return self.agent_service.get_memory(business_unit_id, agent_name, memory_name)
     
-    def create_agent_prompt(self, business_unit_id: str, agent_name: str, data: PromptCreate) -> bool:
-        return self.agent_service.create_prompt(business_unit_id, agent_name, data)
+    def create_agent_memory(self, business_unit_id: str, agent_name: str, data: MemoryCreate) -> bool:
+        return self.agent_service.create_memory(business_unit_id, agent_name, data)
     
-    def update_agent_prompt(self, business_unit_id: str, agent_name: str, prompt_name: str, update: PromptUpdate) -> bool:
-        return self.agent_service.update_prompt(business_unit_id, agent_name, prompt_name, update)
+    def update_agent_memory(self, business_unit_id: str, agent_name: str, memory_name: str, update: MemoryUpdate) -> bool:
+        return self.agent_service.update_memory(business_unit_id, agent_name, memory_name, update)
     
-    def delete_agent_prompt(self, business_unit_id: str, agent_name: str, prompt_name: str) -> bool:
-        return self.agent_service.delete_prompt(business_unit_id, agent_name, prompt_name)
+    def delete_agent_memory(self, business_unit_id: str, agent_name: str, memory_name: str) -> bool:
+        return self.agent_service.delete_memory(business_unit_id, agent_name, memory_name)
     
-    def toggle_prompt_enabled(self, business_unit_id: str, agent_name: str, prompt_name: str, enabled: bool) -> bool:
-        return self.agent_service.toggle_prompt_enabled(business_unit_id, agent_name, prompt_name, enabled)
+    def toggle_memory_enabled(self, business_unit_id: str, agent_name: str, memory_name: str, enabled: bool) -> bool:
+        return self.agent_service.toggle_memory_enabled(business_unit_id, agent_name, memory_name, enabled)
     
     # ==================== Skill 代理方法 ====================
     
@@ -337,11 +337,11 @@ class BusinessUnitService(BaseService):
                     agent.skills, {"business_unit_id": bu.id, "agent_name": agent.name}
                 ))
             
-            # Prompts 文件夹
-            if agent.prompts:
+            # Memories 文件夹
+            if agent.memories:
                 agent_children.append(self._build_folder_node(
-                    f"{agent.id}_prompts", "prompts", "Prompts", "prompt",
-                    agent.prompts, {"business_unit_id": bu.id, "agent_name": agent.name}
+                    f"{agent.id}_memories", "memories", "Memories", "prompt",
+                    agent.memories, {"business_unit_id": bu.id, "agent_name": agent.name}
                 ))
             
             # Models 文件夹
@@ -357,6 +357,11 @@ class BusinessUnitService(BaseService):
                     f"{agent.id}_mcps", "mcps", "MCPs", "mcp",
                     agent.mcps, {"business_unit_id": bu.id, "agent_name": agent.name}
                 ))
+
+            # Output 文件夹
+            output_node = self._build_output_node(bu.id, agent.name, agent.id)
+            if output_node:
+                agent_children.append(output_node)
             
             children.append(BusinessUnitTreeNode(
                 id=agent.id, name=agent.name, display_name=agent.display_name or agent.name,
@@ -398,6 +403,117 @@ class BusinessUnitService(BaseService):
             ],
             metadata=metadata
         )
+
+    def _build_output_node(self, business_unit_id: str, agent_name: str, agent_id: str) -> Optional[BusinessUnitTreeNode]:
+        """构建 Agent output 树节点"""
+        agent_path = self.agent_service._get_agent_path(business_unit_id, agent_name)
+        output_path = agent_path / AGENT_OUTPUT_DIR
+        if not output_path.exists() or not output_path.is_dir():
+            return None
+
+        metadata = {
+            "business_unit_id": business_unit_id,
+            "agent_name": agent_name,
+            "relative_path": "",
+            "is_dir": True,
+            "absolute_path": str(output_path),
+        }
+        return BusinessUnitTreeNode(
+            id=f"{agent_id}_output",
+            name="output",
+            display_name="output",
+            node_type="output",
+            children=self._build_output_tree(output_path, business_unit_id, agent_name, f"{agent_id}_output", ""),
+            metadata=metadata,
+        )
+
+    def _build_output_tree(
+        self,
+        root_path: Path,
+        business_unit_id: str,
+        agent_name: str,
+        parent_id: str,
+        relative_path: str,
+    ) -> List[BusinessUnitTreeNode]:
+        """递归构建 output 下的目录树"""
+        current_path = root_path / relative_path if relative_path else root_path
+        if not current_path.exists() or not current_path.is_dir():
+            return []
+
+        nodes: List[BusinessUnitTreeNode] = []
+        for item in sorted(current_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+            if item.name.startswith('.'):
+                continue
+
+            item_relative = f"{relative_path}/{item.name}" if relative_path else item.name
+            node_id = f"{parent_id}/{item.name}"
+            if item.is_dir():
+                nodes.append(BusinessUnitTreeNode(
+                    id=node_id,
+                    name=item.name,
+                    display_name=item.name,
+                    node_type="folder",
+                    children=self._build_output_tree(root_path, business_unit_id, agent_name, node_id, item_relative),
+                    metadata={
+                        "business_unit_id": business_unit_id,
+                        "agent_name": agent_name,
+                        "relative_path": item_relative,
+                        "is_dir": True,
+                    },
+                ))
+            else:
+                nodes.append(BusinessUnitTreeNode(
+                    id=node_id,
+                    name=item.name,
+                    display_name=item.name,
+                    node_type="output_file",
+                    metadata={
+                        "business_unit_id": business_unit_id,
+                        "agent_name": agent_name,
+                        "relative_path": item_relative,
+                        "is_dir": False,
+                        "size": item.stat().st_size,
+                    },
+                ))
+        return nodes
+
+    def _resolve_output_path(self, business_unit_id: str, agent_name: str, relative_path: str) -> Path:
+        """解析并校验 output 相对路径，防止目录穿越"""
+        agent_path = self.agent_service._get_agent_path(business_unit_id, agent_name)
+        output_path = (agent_path / AGENT_OUTPUT_DIR).resolve()
+        if not output_path.exists() or not output_path.is_dir():
+            raise FileNotFoundError("output not found")
+
+        if relative_path is None:
+            raise ValueError("relative path is required")
+
+        normalized = relative_path.strip().replace('\\', '/')
+        if normalized.startswith('/'):
+            raise ValueError("absolute path is not allowed")
+
+        target_path = (output_path / normalized).resolve()
+        try:
+            target_path.relative_to(output_path)
+        except ValueError as exc:
+            raise ValueError("invalid relative path") from exc
+
+        return target_path
+
+    def get_output_file_content(self, business_unit_id: str, agent_name: str, relative_path: str) -> Dict[str, Any]:
+        """读取 output 下文件内容"""
+        target_path = self._resolve_output_path(business_unit_id, agent_name, relative_path)
+        if not target_path.exists() or not target_path.is_file():
+            raise FileNotFoundError("output file not found")
+
+        content = self._read_file(target_path)
+        if content is None:
+            raise ValueError("file content is not readable as utf-8 text")
+
+        return {
+            "path": str(target_path),
+            "relative_path": relative_path.replace('\\', '/'),
+            "content": content,
+        }
 
 
 # 全局服务实例

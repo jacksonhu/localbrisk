@@ -1,18 +1,18 @@
 """
-Office365 文件读取工具
+Office365 file reading tool.
 
-支持读取以下格式:
-- Excel (.xlsx, .xls) — 使用 openpyxl
-- Word (.docx) — 使用 MarkItDown / docling / python-docx
-- PowerPoint (.pptx) — 使用 MarkItDown / docling / python-pptx
-- PDF (.pdf) — 使用 MarkItDown / docling
+Supported formats:
+- Excel (.xlsx, .xls) — via openpyxl
+- Word (.docx) — via MarkItDown / docling / python-docx
+- PowerPoint (.pptx) — via MarkItDown / docling / python-pptx
+- PDF (.pdf) — via MarkItDown / docling
 
-策略（三级降级）:
-1. Excel 优先使用 openpyxl（结构化数据保留更好）
+Strategy (three-level fallback):
+1. Excel prefers openpyxl (better structured-data fidelity)
 2. Word / PowerPoint / PDF:
-   a. 快速模式（默认）: 使用 MarkItDown 快速提取文字概要
-   b. 详细模式: 使用 docling 进行深度解析（保留复杂表格、公式、布局）
-   c. fallback: docling 不可用时降级到 python-docx / python-pptx
+   a. Fast mode (default): use MarkItDown for quick text summary extraction
+   b. Detailed mode: use docling for deep parsing (preserves complex tables, formulas, and layout)
+   c. Fallback: if docling is unavailable, downgrade to python-docx / python-pptx
 """
 
 import logging
@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-# ──────────────────────── 可选依赖检测 ────────────────────────
+# ──────────────────────── Optional dependency detection ────────────────────────
 
 _OPENPYXL_AVAILABLE = False
 _MARKITDOWN_AVAILABLE = False
@@ -63,7 +63,7 @@ try:
 except ImportError:
     pass
 
-# ──────────────────────── 支持的扩展名 ────────────────────────
+# ──────────────────────── Supported extensions ────────────────────────
 
 EXCEL_EXTENSIONS = {".xlsx", ".xls", ".xlsm", ".xlsb"}
 WORD_EXTENSIONS = {".docx", ".doc"}
@@ -74,14 +74,14 @@ ALL_SUPPORTED = EXCEL_EXTENSIONS | WORD_EXTENSIONS | PPTX_EXTENSIONS | PDF_EXTEN
 
 
 # ══════════════════════════════════════════════════════════════
-# 底层读取函数
+# Low-level reader functions
 # ══════════════════════════════════════════════════════════════
 
 def read_excel(file_path: str, sheet_name: Optional[str] = None,
                max_rows: int = 500) -> str:
-    """使用 openpyxl 读取 Excel 文件，返回 Markdown 表格格式"""
+    """Read an Excel file with openpyxl and return Markdown table output."""
     if not _OPENPYXL_AVAILABLE:
-        raise ImportError("openpyxl 未安装。请执行: pip install openpyxl")
+        raise ImportError("openpyxl is not installed. Run: pip install openpyxl")
 
     wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
     target_sheets = [sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb.sheetnames
@@ -91,15 +91,15 @@ def read_excel(file_path: str, sheet_name: Optional[str] = None,
         ws = wb[sname]
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
-            parts.append(f"## Sheet: {sname}\n\n(空表)")
+            parts.append(f"## Sheet: {sname}\n\n(Empty sheet)")
             continue
 
-        # 取表头
+        # Read header row
         header = rows[0]
         col_names = [str(c) if c is not None else "" for c in header]
         data_rows = rows[1:max_rows + 1]
 
-        # 构建 Markdown 表格
+        # Build Markdown table
         md_lines = [f"## Sheet: {sname}", ""]
         md_lines.append("| " + " | ".join(col_names) + " |")
         md_lines.append("| " + " | ".join(["---"] * len(col_names)) + " |")
@@ -108,66 +108,67 @@ def read_excel(file_path: str, sheet_name: Optional[str] = None,
             md_lines.append("| " + " | ".join(cells) + " |")
 
         if len(rows) - 1 > max_rows:
-            md_lines.append(f"\n> ⚠️ 仅显示前 {max_rows} 行，共 {len(rows) - 1} 行数据")
+            md_lines.append(f"\n> ⚠️ Showing only the first {max_rows} rows out of {len(rows) - 1} total data rows")
 
         parts.append("\n".join(md_lines))
 
     wb.close()
 
-    summary = f"**文件**: `{os.path.basename(file_path)}`\n"
-    summary += f"**Sheet 数量**: {len(target_sheets)}\n\n"
+    summary = f"**File**: `{os.path.basename(file_path)}`\n"
+    summary += f"**Sheet count**: {len(target_sheets)}\n\n"
     return summary + "\n\n---\n\n".join(parts)
 
 
 def read_with_markitdown(file_path: str) -> str:
-    """使用 MarkItDown 快速解析文档（Word / PPT / PDF / Excel），返回 Markdown
-    
-    MarkItDown 是微软开源的轻量级转换工具，速度快、依赖少，
-    适合文字概要提取。对复杂表格和公式的保真度不如 docling。
+    """Quickly parse documents (Word / PPT / PDF / Excel) with MarkItDown and return Markdown.
+
+    MarkItDown is a lightweight open-source converter from Microsoft.
+    It is fast and dependency-light, suitable for quick text summary extraction.
+    Fidelity for complex tables and formulas is lower than docling.
     """
     if not _MARKITDOWN_AVAILABLE:
-        raise ImportError("markitdown 未安装。请执行: pip install markitdown")
+        raise ImportError("markitdown is not installed. Run: pip install markitdown")
 
     md = MarkItDown()
     result = md.convert(file_path)
     content = result.text_content or ""
 
-    summary = f"**文件**: `{os.path.basename(file_path)}`\n"
-    summary += f"**格式**: {Path(file_path).suffix.upper()}\n"
-    summary += f"**解析引擎**: MarkItDown (快速模式)\n\n"
+    summary = f"**File**: `{os.path.basename(file_path)}`\n"
+    summary += f"**Format**: {Path(file_path).suffix.upper()}\n"
+    summary += f"**Parser**: MarkItDown (fast mode)\n\n"
     return summary + content
 
 
 def read_with_docling(file_path: str) -> str:
-    """使用 docling 解析文档（Word / PPT / PDF），返回 Markdown"""
+    """Parse documents (Word / PPT / PDF) with docling and return Markdown."""
     if not _DOCLING_AVAILABLE:
-        raise ImportError("docling 未安装。请执行: pip install docling")
+        raise ImportError("docling is not installed. Run: pip install docling")
 
     converter = DocumentConverter()
     result = converter.convert(file_path)
     md_content = result.document.export_to_markdown()
 
-    summary = f"**文件**: `{os.path.basename(file_path)}`\n"
-    summary += f"**格式**: {Path(file_path).suffix.upper()}\n"
-    summary += f"**解析引擎**: Docling (详细模式)\n\n"
+    summary = f"**File**: `{os.path.basename(file_path)}`\n"
+    summary += f"**Format**: {Path(file_path).suffix.upper()}\n"
+    summary += f"**Parser**: Docling (detailed mode)\n\n"
     return summary + md_content
 
 
 def read_docx_fallback(file_path: str) -> str:
-    """使用 python-docx 读取 Word 文档（docling 不可用时的 fallback）"""
+    """Read Word documents via python-docx (fallback when docling is unavailable)."""
     if not _PYTHON_DOCX_AVAILABLE:
-        raise ImportError("python-docx 未安装。请执行: pip install python-docx")
+        raise ImportError("python-docx is not installed. Run: pip install python-docx")
 
     doc = DocxDocument(file_path)
     parts: list[str] = []
 
-    parts.append(f"**文件**: `{os.path.basename(file_path)}`\n")
+    parts.append(f"**File**: `{os.path.basename(file_path)}`\n")
 
     for para in doc.paragraphs:
         text = para.text.strip()
         if not text:
             continue
-        # 映射标题级别
+        # Map heading levels
         if para.style and para.style.name.startswith("Heading"):
             try:
                 level = int(para.style.name.replace("Heading ", "").replace("Heading", "1"))
@@ -177,9 +178,9 @@ def read_docx_fallback(file_path: str) -> str:
         else:
             parts.append(text)
 
-    # 提取表格
+    # Extract tables
     for i, table in enumerate(doc.tables):
-        parts.append(f"\n### 表格 {i + 1}\n")
+        parts.append(f"\n### Table {i + 1}\n")
         for j, row in enumerate(table.rows):
             cells = [cell.text.strip() for cell in row.cells]
             parts.append("| " + " | ".join(cells) + " |")
@@ -190,14 +191,14 @@ def read_docx_fallback(file_path: str) -> str:
 
 
 def read_pptx_fallback(file_path: str) -> str:
-    """使用 python-pptx 读取 PPT（docling 不可用时的 fallback）"""
+    """Read PPT files via python-pptx (fallback when docling is unavailable)."""
     if not _PYTHON_PPTX_AVAILABLE:
-        raise ImportError("python-pptx 未安装。请执行: pip install python-pptx")
+        raise ImportError("python-pptx is not installed. Run: pip install python-pptx")
 
     prs = Presentation(file_path)
     parts: list[str] = []
-    parts.append(f"**文件**: `{os.path.basename(file_path)}`\n")
-    parts.append(f"**幻灯片数量**: {len(prs.slides)}\n")
+    parts.append(f"**File**: `{os.path.basename(file_path)}`\n")
+    parts.append(f"**Slide count**: {len(prs.slides)}\n")
 
     for idx, slide in enumerate(prs.slides, 1):
         slide_texts: list[str] = []
@@ -217,63 +218,63 @@ def read_pptx_fallback(file_path: str) -> str:
         if slide_texts:
             parts.append("\n".join(slide_texts))
         else:
-            parts.append("(空白幻灯片)")
+            parts.append("(Blank slide)")
 
     return "\n\n".join(parts)
 
 
 # ══════════════════════════════════════════════════════════════
-# LangChain Tool 定义
+# LangChain tool definitions
 # ══════════════════════════════════════════════════════════════
 
 class OfficeReaderInput(BaseModel):
-    """Office 文件读取工具的输入参数"""
+    """Input parameters for the Office file reader tool."""
     file_path: str = Field(
-        description="要读取的 Office 文件路径（支持 .xlsx/.xls/.docx/.pptx/.pdf）"
+        description="Path to the Office file to read (supports .xlsx/.xls/.docx/.pptx/.pdf)"
     )
     sheet_name: Optional[str] = Field(
         default=None,
-        description="（仅 Excel）指定要读取的 Sheet 名称，不指定则读取全部 Sheet"
+        description="(Excel only) Sheet name to read; if omitted, all sheets are read"
     )
     max_rows: int = Field(
         default=500,
-        description="（仅 Excel）最多读取的数据行数，默认 500 行"
+        description="(Excel only) Maximum number of data rows to read; default is 500"
     )
     mode: str = Field(
         default="fast",
         description=(
-            "解析模式: "
-            "'fast' = 使用 MarkItDown 快速提取文字概要（默认，速度快）；"
-            "'detailed' = 使用 Docling 深度解析（保留复杂表格、公式、布局，速度较慢）"
+            "Parsing mode: "
+            "'fast' = use MarkItDown for quick text summary extraction (default, faster); "
+            "'detailed' = use Docling for deep parsing (preserves complex tables, formulas, and layout, slower)"
         )
     )
 
 
 class OfficeReaderTool(BaseTool):
-    """读取 Office365 文件内容（Excel / Word / PowerPoint / PDF）
+    """Read Office365 file content (Excel / Word / PowerPoint / PDF).
 
-    支持格式:
-    - Excel (.xlsx, .xls): 以 Markdown 表格形式返回数据
-    - Word (.docx): 以 Markdown 形式返回文档内容
-    - PowerPoint (.pptx): 以 Markdown 形式返回幻灯片内容
-    - PDF (.pdf): 以 Markdown 形式返回文档内容
+    Supported formats:
+    - Excel (.xlsx, .xls): returns data in Markdown table format
+    - Word (.docx): returns document content in Markdown
+    - PowerPoint (.pptx): returns slide content in Markdown
+    - PDF (.pdf): returns document content in Markdown
 
-    支持两种解析模式:
-    - fast (默认): 使用 MarkItDown 快速提取文字概要，速度快
-    - detailed: 使用 Docling 深度解析，保留复杂表格、公式和布局
+    Supported parsing modes:
+    - fast (default): use MarkItDown for quick text summary extraction
+    - detailed: use Docling for deep parsing while preserving complex tables, formulas, and layout
     """
 
     name: str = "office_reader"
     description: str = (
-        "读取 Office 文件内容。支持 Excel(.xlsx/.xls)、Word(.docx)、"
-        "PowerPoint(.pptx)、PDF(.pdf)。返回 Markdown 格式的文件内容。"
-        "支持 mode 参数：'fast'(默认) 使用 MarkItDown 快速提取文字概要；"
-        "'detailed' 使用 Docling 深度解析复杂表格和公式。"
-        "文件路径可以是虚拟路径（如 /asset_bundles_xxx/file.xlsx）或真实 OS 路径。"
+        "Read Office file content. Supports Excel (.xlsx/.xls), Word (.docx), "
+        "PowerPoint (.pptx), and PDF (.pdf). Returns Markdown-formatted file content. "
+        "Supports mode parameter: 'fast' (default) uses MarkItDown for quick text summary extraction; "
+        "'detailed' uses Docling for deep parsing of complex tables and formulas. "
+        "File path can be a virtual path or a real OS path."
     )
     args_schema: Type[BaseModel] = OfficeReaderInput
 
-    # 运行时注入的 CompositeBackend 实例，用于虚拟路径解析
+    # Runtime-injected CompositeBackend instance for virtual path resolving
     _backend: Any = None
 
     def _run(
@@ -283,7 +284,7 @@ class OfficeReaderTool(BaseTool):
         max_rows: int = 500,
         mode: str = "fast",
     ) -> str:
-        """同步执行"""
+        """Synchronous execution."""
         return self._read_file(file_path, sheet_name, max_rows, mode)
 
     async def _arun(
@@ -293,7 +294,7 @@ class OfficeReaderTool(BaseTool):
         max_rows: int = 500,
         mode: str = "fast",
     ) -> str:
-        """异步执行（在线程池中运行同步 IO）"""
+        """Asynchronous execution (runs sync I/O in a thread pool)."""
         import asyncio
         return await asyncio.to_thread(self._read_file, file_path, sheet_name, max_rows, mode)
 
@@ -304,89 +305,89 @@ class OfficeReaderTool(BaseTool):
         max_rows: int = 500,
         mode: str = "fast",
     ) -> str:
-        """核心读取逻辑
-        
+        """Core read logic.
+
         mode:
-          - "fast": 优先 MarkItDown（快速文字概要提取）
-          - "detailed": 优先 Docling（深度解析，保留表格/公式/布局）
+          - "fast": prefer MarkItDown (quick text summary extraction)
+          - "detailed": prefer Docling (deep parsing, preserves table/formula/layout)
         """
-        # 如果有 backend 实例，尝试将虚拟路径解析为真实 OS 路径
+        # If backend is available, try resolving virtual path to real OS path
         resolved_path = file_path
         if self._backend is not None:
             try:
                 from agent_engine.utils.path_resolver import resolve_virtual_path
                 resolved_path = resolve_virtual_path(self._backend, file_path)
                 if resolved_path != file_path:
-                    logger.info(f"虚拟路径解析: {file_path} -> {resolved_path}")
+                    logger.info(f"Virtual path resolved: {file_path} -> {resolved_path}")
             except Exception as e:
-                logger.warning(f"虚拟路径解析失败，使用原路径: {file_path}, error={e}")
+                logger.warning(f"Virtual path resolution failed, fallback to original path: {file_path}, error={e}")
                 resolved_path = file_path
 
         path = Path(resolved_path)
-        # 验证文件存在
+        # Verify file exists
         if not path.exists():
-            return f"❌ 文件不存在: {file_path}" + (
-                f"\n(解析后路径: {resolved_path})" if resolved_path != file_path else ""
+            return f"❌ File not found: {file_path}" + (
+                f"\n(Resolved path: {resolved_path})" if resolved_path != file_path else ""
             )
 
         if not path.is_file():
-            return f"❌ 路径不是文件: {file_path}"
+            return f"❌ Path is not a file: {file_path}"
 
         ext = path.suffix.lower()
 
         if ext not in ALL_SUPPORTED:
             return (
-                f"❌ 不支持的文件格式: {ext}\n"
-                f"支持的格式: {', '.join(sorted(ALL_SUPPORTED))}"
+                f"❌ Unsupported file type: {ext}\n"
+                f"Supported types: {', '.join(sorted(ALL_SUPPORTED))}"
             )
 
         use_detailed = (mode == "detailed")
 
         try:
-            # ─── Excel: 始终使用 openpyxl（结构化数据保真最好） ───
+            # ─── Excel: always use openpyxl (best structured-data fidelity) ───
             if ext in EXCEL_EXTENSIONS:
                 if _OPENPYXL_AVAILABLE:
                     return read_excel(resolved_path, sheet_name, max_rows)
-                # Excel 的 fallback: MarkItDown 也能处理 xlsx
+                # Excel fallback: MarkItDown can also handle xlsx
                 if _MARKITDOWN_AVAILABLE:
                     return read_with_markitdown(resolved_path)
                 return self._missing_deps_message("Excel", ["openpyxl", "markitdown"])
 
-            # ─── Word / PowerPoint / PDF: 三级降级策略 ───
+            # ─── Word / PowerPoint / PDF: three-level fallback strategy ───
             return self._read_document(resolved_path, ext, use_detailed)
 
         except Exception as e:
-            logger.error(f"读取文件失败: {file_path}, error={e}", exc_info=True)
-            return f"❌ 读取文件失败: {file_path}\n错误: {str(e)}"
+            logger.error(f"Failed to read file: {file_path}, error={e}", exc_info=True)
+            return f"❌ Failed to read file: {file_path}\nError: {str(e)}"
 
     def _read_document(self, resolved_path: str, ext: str, use_detailed: bool) -> str:
-        """读取文档类文件（Word / PPT / PDF）的三级降级策略
-        
-        详细模式: Docling → MarkItDown → python-docx/pptx
-        快速模式: MarkItDown → Docling → python-docx/pptx
+        """Read document-type files (Word / PPT / PDF) with a three-level fallback strategy.
+
+        Detailed mode: Docling → MarkItDown → python-docx/pptx
+        Fast mode: MarkItDown → Docling → python-docx/pptx
         """
         if use_detailed:
-            # 详细模式: 优先 Docling
+            # Detailed mode: prefer Docling
             if _DOCLING_AVAILABLE:
                 return read_with_docling(resolved_path)
             if _MARKITDOWN_AVAILABLE:
-                logger.info(f"Docling 不可用，降级到 MarkItDown: {resolved_path}")
+                logger.info(f"Docling unavailable, downgrade to MarkItDown: {resolved_path}")
                 return read_with_markitdown(resolved_path)
         else:
-            # 快速模式: 优先 MarkItDown
+            # Fast mode: prefer MarkItDown
             if _MARKITDOWN_AVAILABLE:
                 return read_with_markitdown(resolved_path)
             if _DOCLING_AVAILABLE:
-                logger.info(f"MarkItDown 不可用，降级到 Docling: {resolved_path}")
+                logger.info(f"MarkItDown unavailable, downgrade to Docling: {resolved_path}")
                 return read_with_docling(resolved_path)
 
-        # 最终 fallback: python-docx / python-pptx
+        # Final fallback: python-docx / python-pptx
         if ext in WORD_EXTENSIONS and _PYTHON_DOCX_AVAILABLE and ext == ".docx":
             return read_docx_fallback(resolved_path)
         if ext in PPTX_EXTENSIONS and _PYTHON_PPTX_AVAILABLE and ext == ".pptx":
             return read_pptx_fallback(resolved_path)
 
-        # 都不可用
+        # No available parser
         deps = ["markitdown", "docling"]
         if ext in WORD_EXTENSIONS:
             deps.append("python-docx")
@@ -403,18 +404,18 @@ class OfficeReaderTool(BaseTool):
     def _missing_deps_message(file_type: str, packages: list[str]) -> str:
         cmds = " ".join(f"pip install {p}" for p in packages)
         return (
-            f"❌ 无法读取 {file_type} 文件，缺少必要依赖。\n"
-            f"请安装: {cmds}"
+            f"❌ Unable to read {file_type} file because required dependencies are missing.\n"
+            f"Please install: {cmds}"
         )
 
 
 def create_office_reader_tool() -> OfficeReaderTool:
-    """工厂函数：创建 OfficeReaderTool 实例"""
+    """Factory function: create an OfficeReaderTool instance."""
     return OfficeReaderTool()
 
 
 def get_available_formats() -> dict[str, bool]:
-    """返回当前环境中各格式的可用状态"""
+    """Return availability status for each supported format in the current environment."""
     return {
         "Excel (.xlsx/.xls)": _OPENPYXL_AVAILABLE,
         "Word/PPT/PDF [markitdown]": _MARKITDOWN_AVAILABLE,

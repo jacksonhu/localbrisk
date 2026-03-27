@@ -36,7 +36,7 @@
             <ul class="list-disc list-inside space-y-0.5 text-blue-600 dark:text-blue-400">
               <li><code class="text-xs">agent_spec.yaml</code> - {{ t('businessUnit.agentSpecDesc') }}</li>
               <li><code class="text-xs">skills/</code> - {{ t('businessUnit.skillsDesc') }}</li>
-              <li><code class="text-xs">prompts/</code> - {{ t('businessUnit.promptsDesc') }}</li>
+              <li><code class="text-xs">memories/</code> - {{ t('businessUnit.memoriesDesc') }}</li>
             </ul>
             <p class="mt-2 text-blue-500 dark:text-blue-400">
               {{ t('businessUnit.agentConfigHint') }}

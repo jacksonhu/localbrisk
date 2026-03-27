@@ -1,27 +1,5 @@
 <template>
   <div class="app-container h-screen flex flex-col overflow-hidden">
-    <!-- 顶部标题栏 (Tauri 可拖拽区域) -->
-    <header class="app-header h-12 bg-card border-b border-border flex items-center px-4" data-tauri-drag-region>
-      <div class="flex items-center gap-2">
-        <img :src="logoUrl" alt="LocalBrisk" class="w-6 h-6" />
-        <span class="font-semibold text-foreground">{{ t('header.appName') }}</span>
-      </div>
-      <div class="flex-1" data-tauri-drag-region></div>
-      <div class="flex items-center gap-3">
-        <!-- 后端状态指示器 -->
-        <div class="flex items-center gap-2 text-sm">
-          <div
-            class="w-2 h-2 rounded-full"
-            :class="backendStatus === 'connected' ? 'bg-green-500' : backendStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'"
-          ></div>
-          <span class="text-muted-foreground">
-            {{ backendStatusText }}
-          </span>
-        </div>
-        <span class="text-sm text-muted-foreground">v{{ appInfo?.version || '0.1.0' }}</span>
-      </div>
-    </header>
-
     <!-- 主体内容区域 -->
     <main class="flex-1 overflow-hidden">
       <router-view v-if="backendStatus === 'connected'" />
@@ -101,18 +79,6 @@ const isAboutOpen = ref(false);
 // Tauri 事件取消订阅函数
 let unlistenSettings: UnlistenFn | null = null;
 let unlistenAbout: UnlistenFn | null = null;
-
-// 状态文本
-const backendStatusText = computed(() => {
-  switch (backendStatus.value) {
-    case "connected":
-      return t('header.connected');
-    case "connecting":
-      return t('header.connecting');
-    default:
-      return t('header.disconnected');
-  }
-});
 
 // 处理设置保存
 function handleSettingsSave(settings: any) {

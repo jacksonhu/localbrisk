@@ -1,11 +1,11 @@
 <template>
-  <div class="prompt-detail-panel h-full flex flex-col p-6">
+  <div class="memory-detail-panel h-full flex flex-col p-6">
     <!-- 面包屑导航 -->
     <Breadcrumb
       :items="[
         { label: selectedBusinessUnit?.display_name || selectedBusinessUnit?.name || '', onClick: goToBusinessUnit },
         { label: selectedAgent?.name || '', onClick: goToAgent },
-        { label: selectedPrompt?.name || '' }
+        { label: selectedMemory?.name || '' }
       ]"
       @back="goBack"
       class="mb-4"
@@ -15,11 +15,11 @@
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <FileText class="w-6 h-6 text-blue-500" />
-        <h1 class="text-2xl font-semibold">{{ selectedPrompt?.name }}</h1>
+        <h1 class="text-2xl font-semibold">{{ selectedMemory?.name }}</h1>
         <!-- 操作图标 -->
         <div class="flex items-center gap-1 ml-2">
           <button
-            @click="confirmDeletePrompt"
+            @click="confirmDeleteMemory"
             class="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
             :title="t('common.delete')"
           >
@@ -30,7 +30,7 @@
       
       <!-- 启用开关 -->
       <div class="flex items-center gap-3">
-        <span class="text-sm text-muted-foreground">{{ t('prompt.enabled') }}</span>
+        <span class="text-sm text-muted-foreground">{{ t('memory.enabled') }}</span>
         <label class="relative inline-flex items-center cursor-pointer" @click.stop>
           <input
             type="checkbox"
@@ -71,16 +71,16 @@
     <div class="flex-1 overflow-hidden">
       <!-- 概览 Tab -->
       <div v-if="activeTab === 'overview'" class="space-y-6 overflow-y-auto h-full">
-        <!-- Prompt 基本信息 -->
+        <!-- Memory 基本信息 -->
         <div class="card-float p-4">
-          <h3 class="font-medium mb-4">{{ t('prompt.info') }}</h3>
+          <h3 class="font-medium mb-4">{{ t('memory.info') }}</h3>
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <label class="text-muted-foreground">{{ t('common.name') }}</label>
-              <p class="font-medium">{{ selectedPrompt?.name }}</p>
+              <p class="font-medium">{{ selectedMemory?.name }}</p>
             </div>
             <div>
-              <label class="text-muted-foreground">{{ t('prompt.enabled') }}</label>
+              <label class="text-muted-foreground">{{ t('memory.enabled') }}</label>
               <p class="font-medium">
                 <span 
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
@@ -96,28 +96,28 @@
                 </span>
               </p>
             </div>
-            <div v-if="selectedPrompt?.path" class="col-span-2">
-              <label class="text-muted-foreground">{{ t('prompt.filePath') }}</label>
+            <div v-if="selectedMemory?.path" class="col-span-2">
+              <label class="text-muted-foreground">{{ t('memory.filePath') }}</label>
               <p class="font-medium font-mono text-xs bg-muted px-2 py-1 rounded mt-1 break-all">
-                {{ selectedPrompt.path }}
+                {{ selectedMemory.path }}
               </p>
             </div>
-            <div v-if="selectedPrompt?.created_at">
+            <div v-if="selectedMemory?.created_at">
               <label class="text-muted-foreground">{{ t('common.createdAt') }}</label>
-              <p class="font-medium">{{ formatDate(selectedPrompt.created_at) }}</p>
+              <p class="font-medium">{{ formatDate(selectedMemory.created_at) }}</p>
             </div>
-            <div v-if="selectedPrompt?.updated_at">
+            <div v-if="selectedMemory?.updated_at">
               <label class="text-muted-foreground">{{ t('common.updatedAt') }}</label>
-              <p class="font-medium">{{ formatDate(selectedPrompt.updated_at) }}</p>
+              <p class="font-medium">{{ formatDate(selectedMemory.updated_at) }}</p>
             </div>
           </div>
         </div>
 
         <!-- 内容预览 -->
         <div class="card-float p-4">
-          <h3 class="font-medium mb-3">{{ t('prompt.content') }}</h3>
+          <h3 class="font-medium mb-3">{{ t('memory.content') }}</h3>
           <div class="bg-muted/50 rounded-lg p-4 text-sm font-mono whitespace-pre-wrap max-h-64 overflow-y-auto">
-            {{ selectedPrompt?.content || t('prompt.noContent') }}
+            {{ selectedMemory?.content || t('memory.noContent') }}
           </div>
         </div>
       </div>
@@ -127,7 +127,7 @@
         <div class="card-float h-full overflow-hidden">
           <MarkdownEditor
             ref="editorRef"
-            :content="promptContent"
+            :content="memoryContent"
             @save="handleSaveContent"
             @error="handleError"
           />
@@ -158,7 +158,7 @@ import MarkdownEditor from "@/components/viewer/MarkdownEditor.vue";
 import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { agentApi } from "@/services/api";
 import { formatDate } from "@/utils/formatUtils";
-import type { Prompt } from "@/types/catalog";
+import type { Memory } from "@/types/catalog";
 
 const { t } = useI18n();
 const store = useBusinessUnitStore();
@@ -167,7 +167,7 @@ const store = useBusinessUnitStore();
 const props = defineProps<{
   businessUnitId: string;
   agentName: string;
-  promptName: string;
+  memoryName: string;
 }>();
 
 // Emits
@@ -180,15 +180,15 @@ const emit = defineEmits<{
 const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
 
-// Prompt 数据
-const selectedPrompt = ref<Prompt | null>(null);
-const promptContent = ref('');
+// Memory 数据
+const selectedMemory = ref<Memory | null>(null);
+const memoryContent = ref('');
 const isLoading = ref(false);
 
 // 启用状态从 agent 的 instruction.user_prompt_templates 中计算得出
 const isEnabled = computed(() => {
   const promptTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
-  return promptTemplates.some(p => p.name === props.promptName);
+  return promptTemplates.some(p => p.name === props.memoryName);
 });
 
 // Editor 引用
@@ -198,8 +198,8 @@ const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
 const activeTab = ref<'overview' | 'content'>('overview');
 
 const tabs = computed(() => [
-  { id: 'overview' as const, label: t('prompt.overview'), icon: Info },
-  { id: 'content' as const, label: t('prompt.contentTab'), icon: FileCode },
+  { id: 'overview' as const, label: t('memory.overview'), icon: Info },
+  { id: 'content' as const, label: t('memory.contentTab'), icon: FileCode },
 ]);
 
 // 弹窗状态
@@ -207,19 +207,19 @@ const showDeleteDialog = ref(false);
 const deleteMessage = ref('');
 const deleteDescription = ref('');
 
-// 加载 Prompt 详情
-async function loadPrompt() {
-  if (!props.businessUnitId || !props.agentName || !props.promptName) return;
+// 加载 Memory 详情
+async function loadMemory() {
+  if (!props.businessUnitId || !props.agentName || !props.memoryName) return;
   
   isLoading.value = true;
   try {
-    const prompt = await agentApi.getPrompt(props.businessUnitId, props.agentName, props.promptName);
-    selectedPrompt.value = prompt;
-    promptContent.value = prompt.content || '';
+    const prompt = await agentApi.getMemory(props.businessUnitId, props.agentName, props.memoryName);
+    selectedMemory.value = prompt;
+    memoryContent.value = prompt.content || '';
     // 启用状态通过 computed 从 agent.instruction.user_prompt_templates 中获取，无需手动设置
   } catch (e) {
     console.error('Failed to load prompt:', e);
-    handleError(t('errors.loadPromptFailed'));
+    handleError(t('errors.loadMemoryFailed'));
   } finally {
     isLoading.value = false;
   }
@@ -227,35 +227,35 @@ async function loadPrompt() {
 
 // 切换启用状态
 async function toggleEnabled() {
-  if (!selectedPrompt.value) return;
+  if (!selectedMemory.value) return;
   
   const newEnabled = !isEnabled.value;
   try {
-    await agentApi.togglePromptEnabled(props.businessUnitId, props.agentName, props.promptName, newEnabled);
+    await agentApi.toggleMemoryEnabled(props.businessUnitId, props.agentName, props.memoryName, newEnabled);
     // 刷新 Agent 数据以更新 instruction.user_prompt_templates 列表，但不改变选中状态
-    // 使用 refreshSelectedAgent 而不是 selectAgent，避免清除 Prompt 选中状态
+    // 使用 refreshSelectedAgent 而不是 selectAgent，避免清除 Memory 选中状态
     await store.refreshSelectedAgent();
   } catch (e) {
     console.error('Failed to toggle enabled:', e);
-    handleError(t('errors.updatePromptFailed'));
+    handleError(t('errors.updateMemoryFailed'));
   }
 }
 
 // 保存内容
 async function handleSaveContent(content: string) {
   try {
-    await agentApi.updatePrompt(props.businessUnitId, props.agentName, props.promptName, {
+    await agentApi.updateMemory(props.businessUnitId, props.agentName, props.memoryName, {
       content,
     });
-    promptContent.value = content;
-    if (selectedPrompt.value) {
-      selectedPrompt.value.content = content;
+    memoryContent.value = content;
+    if (selectedMemory.value) {
+      selectedMemory.value.content = content;
     }
     // 通知编辑器更新原始内容
     editorRef.value?.updateOriginalContent();
   } catch (e) {
     console.error('Failed to save content:', e);
-    handleError(t('errors.updatePromptFailed'));
+    handleError(t('errors.updateMemoryFailed'));
   }
 }
 
@@ -281,35 +281,35 @@ function goToAgent() {
   emit('back');
 }
 
-// 确认删除 Prompt
-function confirmDeletePrompt() {
-  if (!selectedPrompt.value) return;
-  deleteMessage.value = t('prompt.confirmDelete', { name: selectedPrompt.value.name });
-  deleteDescription.value = t('prompt.confirmDeleteDesc');
+// 确认删除 Memory
+function confirmDeleteMemory() {
+  if (!selectedMemory.value) return;
+  deleteMessage.value = t('memory.confirmDelete', { name: selectedMemory.value.name });
+  deleteDescription.value = t('memory.confirmDeleteDesc');
   showDeleteDialog.value = true;
 }
 
 // 执行删除
 async function handleConfirmDelete() {
-  if (!selectedPrompt.value) return;
+  if (!selectedMemory.value) return;
   
   try {
-    await agentApi.deletePrompt(props.businessUnitId, props.agentName, props.promptName);
+    await agentApi.deleteMemory(props.businessUnitId, props.agentName, props.memoryName);
     showDeleteDialog.value = false;
     emit('deleted');
   } catch (e) {
     console.error('Failed to delete prompt:', e);
-    handleError(t('errors.deletePromptFailed'));
+    handleError(t('errors.deleteMemoryFailed'));
   }
 }
 
 // 监听 props 变化，重新加载
 // 使用 immediate: true 会在组件初始化时立即执行一次
-watch([() => props.businessUnitId, () => props.agentName, () => props.promptName], () => {
-  loadPrompt();
+watch([() => props.businessUnitId, () => props.agentName, () => props.memoryName], () => {
+  loadMemory();
 }, { immediate: true });
 
-// 注意：不需要在 onMounted 中再次调用 loadPrompt()
+// 注意：不需要在 onMounted 中再次调用 loadMemory()
 // 因为 watch 的 immediate: true 已经会在组件挂载时执行
 </script>
 

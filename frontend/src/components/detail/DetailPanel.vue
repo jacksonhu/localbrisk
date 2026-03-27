@@ -1,10 +1,51 @@
 <template>
   <div class="detail-panel h-full flex flex-col">
     <!-- 未选中状态 -->
-    <div v-if="!selectedBusinessUnit && !selectedAssetBundle && !selectedAsset && !selectedAgent && !selectedModel" class="h-full flex items-center justify-center p-6">
+    <div v-if="!selectedBusinessUnit && !selectedAssetBundle && !selectedAsset && !selectedAgent && !selectedModel && !selectedOutputFile" class="h-full flex items-center justify-center p-6">
       <div class="text-center">
         <Folder class="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
         <p class="text-muted-foreground">{{ t('detail.selectBusinessUnit') }}</p>
+      </div>
+    </div>
+
+    <!-- Output 文件详情页 -->
+    <div v-else-if="selectedOutputFile" class="h-full flex flex-col p-6 overflow-hidden">
+      <div class="flex items-center justify-between gap-3 text-sm text-muted-foreground mb-4">
+        <div class="flex items-center gap-2 min-w-0">
+          <Folder class="w-4 h-4 text-indigo-500" />
+          <span>output</span>
+          <ChevronRight class="w-3 h-3" />
+          <span class="truncate">{{ selectedOutputFile.relative_path }}</span>
+        </div>
+
+        <div v-if="isMarkdownOutput" class="flex items-center gap-1">
+          <button
+            class="px-2.5 py-1.5 text-xs rounded-md border border-border transition-colors flex items-center gap-1"
+            :class="outputViewMode === 'render' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted text-foreground'"
+            @click="outputViewMode = 'render'"
+          >
+            <FileText class="w-3.5 h-3.5" />
+            {{ t('viewer.preview') }}
+          </button>
+          <button
+            class="px-2.5 py-1.5 text-xs rounded-md border border-border transition-colors flex items-center gap-1"
+            :class="outputViewMode === 'source' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted text-foreground'"
+            @click="outputViewMode = 'source'"
+          >
+            <FileCode class="w-3.5 h-3.5" />
+            {{ t('viewer.source') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 border border-border rounded-lg overflow-hidden bg-background">
+        <div
+          v-if="isMarkdownOutput && outputViewMode === 'render'"
+          class="h-full overflow-auto p-4"
+        >
+          <div class="prose prose-sm dark:prose-invert max-w-none output-markdown-body" v-html="renderedOutputHtml"></div>
+        </div>
+        <pre v-else class="h-full overflow-auto p-4 text-sm leading-6 whitespace-pre-wrap break-words">{{ selectedOutputFile.content }}</pre>
       </div>
     </div>
 
@@ -325,7 +366,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, ChevronDown, Folder, Pencil, Search, Plus, 
@@ -342,6 +383,9 @@ import VolumeDetailPanel from "@/components/detail/VolumeDetailPanel.vue";
 import AgentDetailPanel from "@/components/detail/AgentDetailPanel.vue";
 import ModelDetailPanel from "@/components/detail/ModelDetailPanel.vue";
 import { useBusinessUnitStore } from "@/stores/businessUnitStore";
+import MarkdownIt from "markdown-it";
+import mermaid from "mermaid";
+import * as echarts from "echarts";
 import { useConfigManager } from "@/composables/useConfigManager";
 import { businessUnitApi } from "@/services/api";
 import type { AssetBundle, AssetBundleCreate, BusinessUnitUpdate, AgentCreate } from "@/types/catalog";
@@ -355,6 +399,143 @@ const selectedAssetBundle = computed(() => store.selectedAssetBundle.value);
 const selectedAsset = computed(() => store.selectedAsset.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
 const selectedModel = computed(() => store.selectedModel.value);
+const selectedOutputFile = computed(() => store.selectedOutputFile.value);
+
+const outputViewMode = ref<'render' | 'source'>('source');
+
+function isMarkdownPath(path?: string): boolean {
+  return !!path && /\.(md|markdown)$/i.test(path);
+}
+
+const isMarkdownOutput = computed(() => isMarkdownPath(selectedOutputFile.value?.relative_path));
+
+watch(selectedOutputFile, (file) => {
+  outputViewMode.value = isMarkdownPath(file?.relative_path) ? 'render' : 'source';
+}, { immediate: true });
+
+type MermaidBlock = { id: string; code: string };
+type EchartsBlock = { id: string; optionText: string };
+
+const mermaidBlocks = ref<MermaidBlock[]>([]);
+const echartsBlocks = ref<EchartsBlock[]>([]);
+const echartsInstances = new Map<string, echarts.ECharts>();
+let chartRenderSeed = 0;
+
+const md = new MarkdownIt({ html: true, linkify: true, breaks: true });
+
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  token.attrSet("target", "_blank");
+  token.attrSet("rel", "noopener noreferrer nofollow");
+  token.attrJoin("class", "output-link");
+  return self.renderToken(tokens, idx, options);
+};
+
+md.renderer.rules.fence = (tokens, idx) => {
+  const token = tokens[idx];
+  const lang = (token.info || "").trim().split(/\s+/)[0].toLowerCase() || "text";
+  const code = token.content || "";
+
+  if (lang === "mermaid") {
+    const id = `output-mermaid-${chartRenderSeed++}`;
+    mermaidBlocks.value.push({ id, code });
+    return `<div class="md-chart-card"><div class="md-chart-head">Mermaid</div><div id="${id}" class="md-mermaid-stage"></div></div>`;
+  }
+
+  if (lang === "echarts") {
+    const id = `output-echarts-${chartRenderSeed++}`;
+    echartsBlocks.value.push({ id, optionText: code });
+    return `<div class="md-chart-card"><div class="md-chart-head">ECharts</div><div id="${id}" class="md-echarts-stage"></div></div>`;
+  }
+
+  const safe = md.utils.escapeHtml(code);
+  return `<div class="md-code-card"><div class="md-code-head">${lang}</div><pre class="code-block"><code class="language-${lang}">${safe}</code></pre></div>`;
+};
+
+function sanitizeUnsafeMarkup(input: string): string {
+  return input
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/javascript:/gi, "");
+}
+
+function renderOutputMarkdown(markdown: string): string {
+  if (!markdown) return "";
+  chartRenderSeed = 0;
+  mermaidBlocks.value = [];
+  echartsBlocks.value = [];
+  return md.render(sanitizeUnsafeMarkup(markdown));
+}
+
+function disposeEchartsInstances() {
+  for (const instance of echartsInstances.values()) {
+    instance.dispose();
+  }
+  echartsInstances.clear();
+}
+
+function resizeEchartsInstances() {
+  for (const instance of echartsInstances.values()) {
+    instance.resize();
+  }
+}
+
+async function renderSpecialBlocks() {
+  if (!isMarkdownOutput.value || outputViewMode.value !== "render") {
+    disposeEchartsInstances();
+    return;
+  }
+
+  disposeEchartsInstances();
+
+  for (const block of mermaidBlocks.value) {
+    const target = document.getElementById(block.id);
+    if (!target) continue;
+
+    try {
+      const uniqueId = `${block.id}-${Date.now()}`;
+      const { svg } = await mermaid.render(uniqueId, block.code);
+      target.innerHTML = svg;
+    } catch (err: any) {
+      target.innerHTML = `<pre class="md-render-error">Mermaid 解析失败: ${String(err?.message || err)}</pre>`;
+    }
+  }
+
+  for (const block of echartsBlocks.value) {
+    const target = document.getElementById(block.id);
+    if (!target) continue;
+
+    try {
+      const option = JSON.parse(block.optionText);
+      const instance = echarts.init(target, undefined, { renderer: "svg" });
+      instance.setOption(option);
+      echartsInstances.set(block.id, instance);
+    } catch (err: any) {
+      target.innerHTML = `<pre class="md-render-error">ECharts 配置解析失败，请使用 JSON: ${String(err?.message || err)}</pre>`;
+    }
+  }
+}
+
+const renderedOutputHtml = computed(() => renderOutputMarkdown(selectedOutputFile.value?.content || ""));
+
+watch([renderedOutputHtml, outputViewMode], async () => {
+  await nextTick();
+  await renderSpecialBlocks();
+}, { flush: "post" });
+
+onMounted(() => {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
+    securityLevel: "strict",
+  });
+  window.addEventListener("resize", resizeEchartsInstances);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", resizeEchartsInstances);
+  disposeEchartsInstances();
+});
 
 // Business Unit Tab 状态
 const activeBusinessUnitTab = ref<'overview' | 'config'>('overview');
@@ -555,4 +736,23 @@ watch(selectedBusinessUnit, () => {
   opacity: 0;
   transform: translateY(-8px);
 }
+.output-markdown-body :deep(h1) { @apply text-xl font-bold mb-3 mt-4 first:mt-0; }
+.output-markdown-body :deep(h2) { @apply text-lg font-bold mb-2 mt-3 first:mt-0; }
+.output-markdown-body :deep(h3) { @apply text-base font-semibold mb-2 mt-2 first:mt-0; }
+.output-markdown-body :deep(p) { @apply mb-2 last:mb-0 leading-7; }
+.output-markdown-body :deep(ul) { @apply my-2 pl-5 list-disc; }
+.output-markdown-body :deep(li) { @apply mb-1; }
+.output-markdown-body :deep(code:not(pre code)) { @apply px-1.5 py-0.5 bg-muted-foreground/10 rounded text-primary font-mono text-xs; }
+.output-markdown-body :deep(.output-link) { @apply text-primary underline underline-offset-2; }
+.output-markdown-body :deep(.md-code-card) { @apply my-3 rounded-xl overflow-hidden border border-border/60 shadow-sm; }
+.output-markdown-body :deep(.md-code-head) { @apply px-3 py-2 text-[11px] font-medium uppercase tracking-wide bg-muted/70 text-muted-foreground; }
+.output-markdown-body :deep(.code-block) { @apply m-0 p-3 bg-gray-900 dark:bg-gray-950 rounded-none overflow-x-auto; }
+.output-markdown-body :deep(.code-block code) { @apply text-green-400 font-mono text-xs whitespace-pre; }
+.output-markdown-body :deep(.md-chart-card) { @apply my-4 rounded-xl border border-border/60 overflow-hidden bg-gradient-to-br from-background via-background to-muted/20 shadow-sm; }
+.output-markdown-body :deep(.md-chart-head) { @apply px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border/60 bg-muted/40; }
+.output-markdown-body :deep(.md-mermaid-stage) { @apply p-3 overflow-auto flex justify-center; }
+.output-markdown-body :deep(.md-mermaid-stage svg) { @apply max-w-full h-auto; }
+.output-markdown-body :deep(.md-echarts-stage) { height: 360px; }
+.output-markdown-body :deep(.md-render-error) { @apply m-0 p-3 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-b-xl whitespace-pre-wrap; }
+
 </style>
