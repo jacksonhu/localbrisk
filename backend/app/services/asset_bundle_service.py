@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# 默认 Output 资源
+DEFAULT_OUTPUT_BUNDLE_NAME = "output"
+
 # Asset 类型目录映射
 ASSET_TYPE_DIRS = {
     AssetType.TABLE: TABLES_DIR,
@@ -214,7 +217,6 @@ class AssetBundleService(BaseService):
             logger.warning(f"元数据同步失败: {result.errors}")
         
         return result
-    
     # ==================== Asset 操作 ====================
     
     def scan_assets(self, business_unit_id: str, bundle_name: str) -> List[Asset]:

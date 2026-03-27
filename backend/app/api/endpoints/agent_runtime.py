@@ -8,7 +8,7 @@ Agent 运行时 API
 import logging
 import json
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -60,6 +60,20 @@ class UnloadResponse(BaseModel):
     """卸载响应"""
     message: str
     success: bool
+
+
+class ClearContextResponse(BaseModel):
+    """清理上下文响应"""
+    message: str
+    success: bool
+
+
+class ConversationHistoryResponse(BaseModel):
+    """会话历史响应"""
+    agent_name: str
+    thread_id: str
+    history_file: str
+    turns: list[dict[str, Any]]
 
 
 # ==================== API 端点 ====================
@@ -217,6 +231,50 @@ async def cancel_agent(business_unit_id: str, agent_name: str):
     except Exception as e:
         logger.exception(f"取消执行失败: {e}")
         raise HTTPException(status_code=500, detail=f"取消执行失败: {e}")
+
+
+@router.get("/{business_unit_id}/agents/{agent_name}/history", response_model=ConversationHistoryResponse)
+async def get_conversation_history(
+    business_unit_id: str,
+    agent_name: str,
+    thread_id: Optional[str] = Query(default=None, description="会话线程ID，不传则使用 agent_name"),
+):
+    """获取 Agent 本地会话历史。"""
+    logger.info(f"获取 Agent 会话历史: {business_unit_id}/{agent_name}, thread_id={thread_id or agent_name}")
+
+    try:
+        service = get_agent_runtime_service()
+        history = await service.get_conversation_history(
+            business_unit_id=business_unit_id,
+            agent_name=agent_name,
+            thread_id=thread_id,
+        )
+        return ConversationHistoryResponse(**history)
+    except Exception as e:
+        logger.exception(f"获取 Agent 会话历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取 Agent 会话历史失败: {e}")
+
+
+@router.delete("/{business_unit_id}/agents/{agent_name}/context", response_model=ClearContextResponse)
+async def clear_agent_context(
+    business_unit_id: str,
+    agent_name: str,
+    thread_id: Optional[str] = Query(default=None, description="会话线程ID，不传则使用 agent_name"),
+):
+    """清理 Agent 对话上下文与本地历史。"""
+    logger.info(f"清理 Agent 对话上下文: {business_unit_id}/{agent_name}, thread_id={thread_id or agent_name}")
+
+    try:
+        service = get_agent_runtime_service()
+        success = await service.clear_agent_context(business_unit_id, agent_name, thread_id)
+
+        return ClearContextResponse(
+            message="对话上下文已清理" if success else "未找到可清理的上下文",
+            success=success,
+        )
+    except Exception as e:
+        logger.exception(f"清理 Agent 对话上下文失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清理 Agent 对话上下文失败: {e}")
 
 
 @router.delete("/{business_unit_id}/agents/{agent_name}/unload", response_model=UnloadResponse)

@@ -60,17 +60,17 @@
                     <div class="space-y-1.5">
                       <div v-for="task in item.tasks" :key="task.id"
                         class="flex items-start gap-2 py-1.5 px-2 rounded-lg transition-colors"
-                        :class="{ 'bg-blue-50 dark:bg-blue-900/20': task.status === 'running', 'opacity-60': task.status === 'completed' }"
+                        :class="{ 'bg-blue-50 dark:bg-blue-900/20': taskStatus(task) === 'running', 'opacity-60': taskStatus(task) === 'completed' }"
                       >
                         <div class="flex-shrink-0 mt-0.5">
-                          <CheckCircle2 v-if="task.status === 'completed'" class="w-4 h-4 text-green-500" />
-                          <Loader2 v-else-if="task.status === 'running'" class="w-4 h-4 text-blue-500 animate-spin" />
-                          <Circle v-else-if="task.status === 'pending'" class="w-4 h-4 text-muted-foreground" />
-                          <XCircle v-else-if="task.status === 'failed'" class="w-4 h-4 text-red-500" />
+                          <CheckCircle2 v-if="taskStatus(task) === 'completed'" class="w-4 h-4 text-green-500" />
+                          <Loader2 v-else-if="taskStatus(task) === 'running'" class="w-4 h-4 text-blue-500 animate-spin" />
+                          <Circle v-else-if="taskStatus(task) === 'pending'" class="w-4 h-4 text-muted-foreground" />
+                          <XCircle v-else-if="taskStatus(task) === 'failed'" class="w-4 h-4 text-red-500" />
                           <AlertCircle v-else class="w-4 h-4 text-yellow-500" />
                         </div>
                         <div class="flex-1 min-w-0">
-                          <span class="text-sm" :class="{ 'line-through text-muted-foreground': task.status === 'completed', 'font-medium': task.status === 'running' }">{{ task.title }}</span>
+                          <span class="text-sm" :class="{ 'line-through text-muted-foreground': taskStatus(task) === 'completed', 'font-medium': taskStatus(task) === 'running' }">{{ taskTitle(task) }}</span>
                           <p v-if="task.error" class="text-xs text-red-500 mt-0.5">{{ task.error }}</p>
                         </div>
                       </div>
@@ -80,34 +80,45 @@
               </div>
             </div>
 
-            <!-- 工具调用列表 -->
-            <div v-if="item.toolCalls && item.toolCalls.length > 0" class="tool-calls-section mb-3 space-y-1.5">
-              <div v-for="(tc, tcIdx) in item.toolCalls" :key="tcIdx" class="tool-call-entry rounded-lg border border-border/50 overflow-hidden">
-                <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" @click="toggleTc(item.id, tcIdx)">
-                  <component :is="toolIcon(tc.icon)" class="w-3.5 h-3.5 flex-shrink-0" :class="toolIconClass(tc.status)" />
-                  <span class="text-xs font-mono text-foreground/80 font-medium">{{ tc.tool_name }}</span>
-                  <span v-if="tc.tool_args" class="text-xs text-muted-foreground truncate max-w-[200px]">{{ briefArgs(tc.tool_args) }}</span>
-                  <Loader2 v-if="tc.status === 'running'" class="w-3 h-3 animate-spin text-blue-500 ml-auto flex-shrink-0" />
-                  <CheckCircle2 v-else-if="tc.status === 'completed'" class="w-3 h-3 text-green-500 ml-auto flex-shrink-0" />
-                  <XCircle v-else-if="tc.status === 'failed'" class="w-3 h-3 text-red-500 ml-auto flex-shrink-0" />
-                  <ChevronDown class="w-3 h-3 text-muted-foreground transition-transform duration-200 flex-shrink-0" :class="{ 'rotate-180': !isTcOpen(item.id, tcIdx) }" />
+            <!-- 工具调用列表（默认收起） -->
+            <div v-if="item.toolCalls && item.toolCalls.length > 0" class="tool-calls-section mb-3">
+              <div class="tool-call-entry rounded-lg border border-border/50 overflow-hidden">
+                <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" @click="toggle(item.id, 'toolCalls')">
+                  <Wrench class="w-3.5 h-3.5 text-muted-foreground" />
+                  <span class="text-xs font-medium text-muted-foreground">工具调用 {{ item.toolCalls.length }} 条</span>
+                  <ChevronDown class="w-3 h-3 text-muted-foreground transition-transform duration-200 ml-auto" :class="{ 'rotate-180': isOpen(item.id, 'toolCalls') }" />
                 </div>
                 <Transition name="expand">
-                  <div v-if="isTcOpen(item.id, tcIdx)" class="tool-call-detail border-t border-border/30 bg-muted/20">
-                    <div v-if="tc.tool_args && Object.keys(tc.tool_args).length > 0" class="px-3 py-2">
-                      <div class="text-xs text-muted-foreground mb-1 font-medium">参数</div>
-                      <pre class="text-xs font-mono bg-gray-900 dark:bg-gray-950 text-green-400 rounded p-2 overflow-x-auto max-h-40 overflow-y-auto">{{ fmtJson(tc.tool_args) }}</pre>
-                    </div>
-                    <div v-if="tc.reason || tc.expected_outcome" class="px-3 py-2 border-t border-border/20 space-y-1">
-                      <p v-if="tc.reason" class="text-xs text-muted-foreground"><span class="font-medium">为什么做：</span>{{ tc.reason }}</p>
-                      <p v-if="tc.expected_outcome" class="text-xs text-muted-foreground"><span class="font-medium">预期结果：</span>{{ tc.expected_outcome }}</p>
-                    </div>
-                    <div v-if="tc.tool_result || tc.reflection" class="px-3 py-2 border-t border-border/20">
-                      <div v-if="tc.tool_result" class="mb-2">
-                        <div class="text-xs text-muted-foreground mb-1 font-medium">结果</div>
-                        <pre class="text-xs font-mono bg-gray-900 dark:bg-gray-950 text-gray-300 rounded p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">{{ tc.tool_result }}</pre>
+                  <div v-if="isOpen(item.id, 'toolCalls')" class="space-y-1.5 p-2 border-t border-border/30 bg-muted/20">
+                    <div v-for="(tc, tcIdx) in item.toolCalls" :key="tcIdx" class="tool-call-entry rounded-lg border border-border/50 overflow-hidden">
+                      <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" @click="toggleTc(item.id, tcIdx)">
+                        <component :is="toolIcon(tc.icon)" class="w-3.5 h-3.5 flex-shrink-0" :class="toolIconClass(tc.status)" />
+                        <span class="text-xs font-mono text-foreground/80 font-medium">{{ tc.tool_name }}</span>
+                        <span v-if="tc.tool_args" class="text-xs text-muted-foreground truncate max-w-[200px]">{{ briefArgs(tc.tool_args) }}</span>
+                        <Loader2 v-if="tc.status === 'running'" class="w-3 h-3 animate-spin text-blue-500 ml-auto flex-shrink-0" />
+                        <CheckCircle2 v-else-if="tc.status === 'completed'" class="w-3 h-3 text-green-500 ml-auto flex-shrink-0" />
+                        <XCircle v-else-if="tc.status === 'failed'" class="w-3 h-3 text-red-500 ml-auto flex-shrink-0" />
+                        <ChevronDown class="w-3 h-3 text-muted-foreground transition-transform duration-200 flex-shrink-0" :class="{ 'rotate-180': !isTcOpen(item.id, tcIdx) }" />
                       </div>
-                      <p v-if="tc.reflection" class="text-xs text-muted-foreground"><span class="font-medium">反思：</span>{{ tc.reflection }}</p>
+                      <Transition name="expand">
+                        <div v-if="isTcOpen(item.id, tcIdx)" class="tool-call-detail border-t border-border/30 bg-muted/20">
+                          <div v-if="tc.tool_args && Object.keys(tc.tool_args).length > 0" class="px-3 py-2">
+                            <div class="text-xs text-muted-foreground mb-1 font-medium">参数</div>
+                            <pre class="text-xs font-mono bg-gray-900 dark:bg-gray-950 text-green-400 rounded p-2 overflow-x-auto max-h-40 overflow-y-auto">{{ fmtJson(tc.tool_args) }}</pre>
+                          </div>
+                          <div v-if="tc.reason || tc.expected_outcome" class="px-3 py-2 border-t border-border/20 space-y-1">
+                            <p v-if="tc.reason" class="text-xs text-muted-foreground"><span class="font-medium">为什么做：</span>{{ tc.reason }}</p>
+                            <p v-if="tc.expected_outcome" class="text-xs text-muted-foreground"><span class="font-medium">预期结果：</span>{{ tc.expected_outcome }}</p>
+                          </div>
+                          <div v-if="tc.tool_result || tc.reflection" class="px-3 py-2 border-t border-border/20">
+                            <div v-if="tc.tool_result" class="mb-2">
+                              <div class="text-xs text-muted-foreground mb-1 font-medium">结果</div>
+                              <pre class="text-xs font-mono bg-gray-900 dark:bg-gray-950 text-gray-300 rounded p-2 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">{{ tc.tool_result }}</pre>
+                            </div>
+                            <p v-if="tc.reflection" class="text-xs text-muted-foreground"><span class="font-medium">反思：</span>{{ tc.reflection }}</p>
+                          </div>
+                        </div>
+                      </Transition>
                     </div>
                   </div>
                 </Transition>
@@ -119,8 +130,7 @@
               <div class="text-xs font-medium text-muted-foreground px-3 mb-1.5">文件变更</div>
               <div class="space-y-1">
                 <div v-for="(file, fIdx) in item.fileChanges" :key="fIdx"
-                  class="file-entry flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                  @click="file.artifactId && $emit('open-artifact', file.artifactId)"
+                  class="file-entry flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   <component :is="fileIcon(file.operation)" class="w-3.5 h-3.5" :class="fileIconClass(file.operation)" />
                   <span class="text-sm font-mono truncate">{{ file.filepath }}</span>
@@ -221,8 +231,10 @@ interface ToolCallEntry {
 interface FileChangeEntry {
   filepath: string;
   operation: string;
-  artifactId?: string;
 }
+
+type TaskUiStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+type UiTaskItem = Omit<TaskItem, "status"> & { status: TaskUiStatus; content?: string };
 
 interface ChatItem {
   id: string;
@@ -233,7 +245,7 @@ interface ChatItem {
   thoughtReason?: string;
   thoughtExpectedOutcome?: string;
   isThinking?: boolean;
-  tasks?: TaskItem[];
+  tasks?: UiTaskItem[];
   toolCalls?: ToolCallEntry[];
   fileChanges?: FileChangeEntry[];
   doneSummary?: string;
@@ -265,6 +277,34 @@ const expandedToolCalls = ref<Set<string>>(new Set());
 const canSend = computed(() => inputText.value.trim().length > 0 && !props.isExecuting);
 const inputRows = computed(() => Math.min(Math.max(inputText.value.split("\n").length, 1), 5));
 
+function normalizeTaskStatus(status?: string): TaskUiStatus {
+  const s = (status || "pending").toLowerCase();
+  if (s === "completed" || s === "done" || s === "success" || s === "succeeded") return "completed";
+  if (s === "running" || s === "in_progress" || s === "in-progress") return "running";
+  if (s === "failed" || s === "error") return "failed";
+  if (s === "cancelled" || s === "canceled") return "cancelled";
+  return "pending";
+}
+
+function normalizeTask(task: Partial<UiTaskItem> & Record<string, any>): UiTaskItem {
+  const id = String(task.id ?? task.task_id ?? "");
+  const title = String(task.title || task.content || `任务 ${id || "-"}`);
+  return {
+    ...(task as UiTaskItem),
+    id,
+    title,
+    status: normalizeTaskStatus(String(task.status || "pending")),
+  };
+}
+
+function taskStatus(task: Partial<UiTaskItem>): TaskUiStatus {
+  return normalizeTaskStatus(task.status);
+}
+
+function taskTitle(task: Partial<UiTaskItem>): string {
+  return task.title || (task as any).content || `任务 ${task.id || "-"}`;
+}
+
 // ============ 公开方法 ============
 
 function addUserMessage(content: string) {
@@ -292,14 +332,61 @@ function appendThought(blockId: string, payload: ThoughtPayload) {
   if (payload.phase) block.currentPhase = payload.phase;
   if (payload.reason) block.thoughtReason = payload.reason;
   if (payload.expected_outcome) block.thoughtExpectedOutcome = payload.expected_outcome;
-  block.thoughtText = payload.mode === "replace" ? payload.content : (block.thoughtText || "") + payload.content;
+
+  const incoming = payload.content || "";
+  if (payload.mode === "replace") {
+    if (incoming.length <= 120) {
+      block.thoughtText = incoming;
+      scrollToBottom();
+      return;
+    }
+
+    block.thoughtText = "";
+    const chunks = incoming.match(/[\s\S]{1,40}/g) || [];
+    let idx = 0;
+    const pushChunk = () => {
+      const current = findBlock(blockId);
+      if (!current) return;
+      current.thoughtText = (current.thoughtText || "") + (chunks[idx] || "");
+      idx += 1;
+      scrollToBottom();
+      if (idx < chunks.length) {
+        window.setTimeout(pushChunk, 12);
+      }
+    };
+    pushChunk();
+    return;
+  }
+
+  block.thoughtText = (block.thoughtText || "") + incoming;
   scrollToBottom();
 }
 
 function updateTasks(blockId: string, tasks: TaskItem[]) {
   const block = findBlock(blockId);
   if (!block) return;
-  block.tasks = tasks.map(t => ({ ...t }));
+
+  const prev = block.tasks || [];
+  const prevMap = new Map(prev.map(task => [String(task.id), task]));
+  const next: UiTaskItem[] = [];
+  const incomingIds = new Set<string>();
+
+  for (const raw of tasks as any[]) {
+    const normalized = normalizeTask({ ...prevMap.get(String(raw?.id ?? raw?.task_id ?? "")), ...raw });
+    if (!normalized.id) continue;
+    incomingIds.add(normalized.id);
+    next.push(normalized);
+  }
+
+  if (next.length > 0 && next.length < prev.length) {
+    for (const oldTask of prev) {
+      if (!incomingIds.has(String(oldTask.id))) {
+        next.push(oldTask);
+      }
+    }
+  }
+
+  block.tasks = next;
   scrollToBottom();
 }
 
@@ -342,11 +429,40 @@ function addToolCall(blockId: string, payload: ToolCallPayload) {
           if (payload.reason) block.toolCalls[i].reason = payload.reason;
           if (payload.expected_outcome) block.toolCalls[i].expected_outcome = payload.expected_outcome;
           if (payload.reflection) block.toolCalls[i].reflection = payload.reflection;
+          matched = true;
           break;
         }
       }
     }
+
+    // 兼容后端仅发 completed/failed（未先发 running）的场景
+    if (!matched) {
+      block.toolCalls.push({
+        tool_call_id: payload.tool_call_id,
+        tool_name: payload.tool_name,
+        tool_args: payload.tool_args,
+        tool_result: payload.tool_result,
+        status: payload.status,
+        icon: payload.icon,
+        reason: payload.reason,
+        expected_outcome: payload.expected_outcome,
+        reflection: payload.reflection,
+      });
+    }
   }
+
+  if (payload.status === "completed" && payload.tool_name === "task_update" && block.tasks?.length) {
+    const taskId = String(payload.tool_args?.task_id ?? payload.tool_args?.id ?? "");
+    const status = String(payload.tool_args?.status || "");
+    if (taskId) {
+      block.tasks = block.tasks.map(task =>
+        String(task.id) === taskId
+          ? { ...task, status: normalizeTaskStatus(status || task.status) }
+          : task
+      );
+    }
+  }
+
   scrollToBottom();
 }
 
@@ -373,6 +489,8 @@ function setDone(blockId: string, summary?: string, nextSteps?: string[]) {
   if (!block) return;
   block.isActive = false;
   block.isThinking = false;
+  block.currentPhase = "done";
+  block.statusText = "";
   block.doneSummary = summary;
   block.doneNextSteps = nextSteps;
   scrollToBottom();
@@ -437,13 +555,27 @@ function isTcOpen(blockId: string, idx: number): boolean {
 
 // ============ 辅助函数 ============
 
-function completedCount(tasks: TaskItem[]): number { return tasks.filter(t => t.status === "completed").length; }
-function allDone(tasks: TaskItem[]): boolean { return tasks.length > 0 && tasks.every(t => t.status === "completed"); }
-function hasRunning(tasks: TaskItem[]): boolean { return tasks.some(t => t.status === "running"); }
-function progressPct(tasks: TaskItem[]): number { return tasks.length === 0 ? 0 : Math.round((completedCount(tasks) / tasks.length) * 100); }
+function completedCount(tasks: UiTaskItem[]): number {
+  return tasks.filter(t => taskStatus(t) === "completed").length;
+}
+
+function allDone(tasks: UiTaskItem[]): boolean {
+  return tasks.length > 0 && tasks.every(t => {
+    const status = taskStatus(t);
+    return status === "completed" || status === "cancelled";
+  });
+}
+
+function hasRunning(tasks: UiTaskItem[]): boolean {
+  return tasks.some(t => taskStatus(t) === "running");
+}
+
+function progressPct(tasks: UiTaskItem[]): number {
+  return tasks.length === 0 ? 0 : Math.round((completedCount(tasks) / tasks.length) * 100);
+}
 
 function getPhaseLabel(phase?: string): string {
-  return ({ planning: "规划中", analyzing: "分析中", reflecting: "反思中", searching: "搜索中", coding: "编码中" } as Record<string, string>)[phase || ""] || "思考中";
+  return ({ planning: "规划中", analyzing: "分析中", reflecting: "反思中", searching: "搜索中", coding: "编码中", done: "已完成" } as Record<string, string>)[phase || ""] || "思考中";
 }
 
 function toolIcon(icon?: string) {

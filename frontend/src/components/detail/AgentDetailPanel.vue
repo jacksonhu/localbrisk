@@ -1,13 +1,13 @@
 <template>
   <div class="agent-detail-panel h-full flex flex-col">
-    <!-- 当查看 Prompt 详情时显示 PromptDetailPanel -->
-    <PromptDetailPanel
-      v-if="selectedPromptName"
+    <!-- 当查看 Memory 详情时显示 MemoryDetailPanel -->
+    <MemoryDetailPanel
+      v-if="selectedMemoryName"
       :business-unit-id="selectedBusinessUnit?.id || ''"
       :agent-name="selectedAgent?.name || ''"
-      :prompt-name="selectedPromptName"
-      @back="store.clearSelectedPrompt()"
-      @deleted="handlePromptDeleted"
+      :memory-name="selectedMemoryName"
+      @back="store.clearSelectedMemory()"
+      @deleted="handleMemoryDeleted"
     />
     
     <!-- 当查看 Skill 详情时显示 SkillDetailPanel -->
@@ -74,11 +74,11 @@
                 {{ t('agent.createSkill') }}
               </button>
               <button
-                @click="handleCreatePrompt"
+                @click="handleCreateMemory"
                 class="w-full px-4 py-3 text-left text-sm hover:bg-muted transition-colors flex items-center gap-3"
               >
                 <FileText class="w-4 h-4 text-blue-500" />
-                {{ t('agent.createPrompt') }}
+                {{ t('agent.createMemory') }}
               </button>
               <button
                 @click="handleCreateModel"
@@ -118,7 +118,7 @@
       <!-- Tab 内容 -->
       <div class="flex-1 overflow-y-auto">
         <!-- 概览 Tab -->
-        <div v-if="activeTab === 'overview'" class="space-y-6">
+        <div v-show="activeTab === 'overview'" class="space-y-6">
           <!-- 描述卡片 -->
           <div class="card-float p-4">
             <div class="flex items-center justify-between mb-2">
@@ -181,19 +181,19 @@
             @toggle="handleSkillToggleEvent"
           />
 
-          <!-- Prompts 列表 -->
+          <!-- Memories 列表 -->
           <ItemListCard
-            title="Prompts"
+            title="Memories"
             :title-icon="FileText"
-            :items="selectedAgent?.prompts || []"
-            :columns="promptColumns"
+            :items="selectedAgent?.memories || []"
+            :columns="memoryColumns"
             key-field="name"
             show-count
             :count-label="t('agent.items')"
-            :empty-text="t('agent.noPrompts')"
+            :empty-text="t('agent.noMemories')"
             row-clickable
-            @row-click="handlePromptRowClick"
-            @toggle="handlePromptToggleEvent"
+            @row-click="handleMemoryRowClick"
+            @toggle="handleMemoryToggleEvent"
           />
 
           <!-- Models 列表 -->
@@ -213,7 +213,7 @@
         </div>
 
         <!-- 配置 Tab -->
-        <div v-if="activeTab === 'config'" class="h-full">
+        <div v-show="activeTab === 'config'" class="h-full">
           <ConfigEditor
             v-model="configContent"
             :title="`${t('detail.configFile')} (agent_spec.yaml)`"
@@ -225,7 +225,7 @@
         </div>
 
         <!-- Chat Tab -->
-        <div v-if="activeTab === 'chat'" class="h-full">
+        <div v-show="activeTab === 'chat'" class="h-full">
           <AgentWorkspace
             v-if="selectedBusinessUnit && selectedAgent"
             :business-unit-id="selectedBusinessUnit.id"
@@ -243,13 +243,13 @@
         @confirm="handleConfirmDelete"
       />
       
-      <!-- 创建 Prompt 弹窗 -->
-      <CreatePromptDialog
-        :is-open="showCreatePromptDialog"
+      <!-- 创建 Memory 弹窗 -->
+      <CreateMemoryDialog
+        :is-open="showCreateMemoryDialog"
         :business-unit-id="selectedBusinessUnit?.id || ''"
         :agent-name="selectedAgent?.name || ''"
-        @close="showCreatePromptDialog = false"
-        @submit="handleSubmitPrompt"
+        @close="showCreateMemoryDialog = false"
+        @submit="handleSubmitMemory"
       />
 
       <!-- 创建 Skill 弹窗 -->
@@ -282,10 +282,10 @@ import {
 } from "lucide-vue-next";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import Breadcrumb from "@/components/common/Breadcrumb.vue";
-import CreatePromptDialog from "@/components/catalog/CreatePromptDialog.vue";
+import CreateMemoryDialog from "@/components/catalog/CreateMemoryDialog.vue";
 import CreateSkillDialog from "@/components/catalog/CreateSkillDialog.vue";
 import CreateModelDialog from "@/components/catalog/CreateModelDialog.vue";
-import PromptDetailPanel from "@/components/detail/PromptDetailPanel.vue";
+import MemoryDetailPanel from "@/components/detail/MemoryDetailPanel.vue";
 import SkillDetailPanel from "@/components/detail/SkillDetailPanel.vue";
 import AgentWorkspace from "@/components/detail/AgentWorkspace.vue";
 import ItemListCard from "@/components/common/ItemListCard.vue";
@@ -295,7 +295,7 @@ import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { useConfigManager } from "@/composables/useConfigManager";
 import { agentApi, modelApi } from "@/services/api";
 import { formatDate } from "@/utils/formatUtils";
-import type { PromptCreate, ModelCreate } from "@/types/catalog";
+import type { MemoryCreate, ModelCreate } from "@/types/catalog";
 
 const { t } = useI18n();
 const store = useBusinessUnitStore();
@@ -303,9 +303,9 @@ const store = useBusinessUnitStore();
 // 使用 computed 保持响应式
 const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
-const selectedPromptName = computed({
-  get: () => store.selectedPromptName.value,
-  set: (val) => { store.selectedPromptName.value = val; }
+const selectedMemoryName = computed({
+  get: () => store.selectedMemoryName.value,
+  set: (val) => { store.selectedMemoryName.value = val; }
 });
 const selectedSkillName = computed({
   get: () => store.selectedSkillName.value,
@@ -358,7 +358,7 @@ const {
 
 // 弹窗状态
 const showDeleteDialog = ref(false);
-const showCreatePromptDialog = ref(false);
+const showCreateMemoryDialog = ref(false);
 const showCreateSkillDialog = ref(false);
 const showCreateModelDialog = ref(false);
 const deleteMessage = ref('');
@@ -379,10 +379,10 @@ const skillColumns: ColumnConfig[] = [
 ];
 
 // Prompts 列配置
-const promptColumns: ColumnConfig[] = [
+const memoryColumns: ColumnConfig[] = [
   { key: 'icon', type: 'icon', icon: FileText, class: 'text-blue-500' },
   { key: 'name', type: 'text', field: 'name', flex: true, class: 'font-medium' },
-  { key: 'enabled', type: 'toggle', isEnabled: isPromptEnabled },
+  { key: 'enabled', type: 'toggle', isEnabled: isMemoryEnabled },
 ];
 
 // Models 列配置
@@ -418,10 +418,10 @@ async function handleSubmitSkill(businessUnitId: string, agentName: string, zipF
   await store.fetchTree();
 }
 
-// 创建 Prompt
-function handleCreatePrompt() {
+// 创建 Memory
+function handleCreateMemory() {
   showCreateDropdown.value = false;
-  showCreatePromptDialog.value = true;
+  showCreateMemoryDialog.value = true;
 }
 
 // 创建 Model
@@ -444,11 +444,11 @@ async function handleSubmitModel(businessUnitId: string, agentName: string, data
   }
 }
 
-// 提交创建 Prompt
-async function handleSubmitPrompt(businessUnitId: string, agentName: string, data: PromptCreate) {
+// 提交创建 Memory
+async function handleSubmitMemory(businessUnitId: string, agentName: string, data: MemoryCreate) {
   try {
-    await agentApi.createPrompt(businessUnitId, agentName, data);
-    showCreatePromptDialog.value = false;
+    await agentApi.createMemory(businessUnitId, agentName, data);
+    showCreateMemoryDialog.value = false;
     // 刷新 Agent 详情以更新 prompts 列表
     if (selectedBusinessUnit.value && selectedAgent.value) {
       await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
@@ -458,10 +458,10 @@ async function handleSubmitPrompt(businessUnitId: string, agentName: string, dat
   }
 }
 
-// 打开 Prompt 详情
-function openPromptDetail(promptName: string | Record<string, unknown>) {
-  const name = typeof promptName === 'string' ? promptName : String(promptName.name || '');
-  store.selectedPromptName.value = name;
+// 打开 Memory 详情
+function openMemoryDetail(memoryName: string | Record<string, unknown>) {
+  const name = typeof memoryName === 'string' ? memoryName : String(memoryName.name || '');
+  store.selectedMemoryName.value = name;
 }
 
 // 打开 Skill 详情
@@ -475,9 +475,9 @@ function handleSkillRowClick(payload: { item: ItemType; index: number }) {
   openSkillDetail(payload.item as string | Record<string, unknown>);
 }
 
-// 处理 Prompt 行点击
-function handlePromptRowClick(payload: { item: ItemType; index: number }) {
-  openPromptDetail(payload.item as string | Record<string, unknown>);
+// 处理 Memory 行点击
+function handleMemoryRowClick(payload: { item: ItemType; index: number }) {
+  openMemoryDetail(payload.item as string | Record<string, unknown>);
 }
 
 // 检查 Skill 是否启用（从 capabilities.native_skills）
@@ -487,11 +487,11 @@ function isSkillEnabled(item: ItemType): boolean {
   return nativeSkills.some(s => s.name === skillName);
 }
 
-// 检查 Prompt 是否启用（从 instruction.user_prompt_templates）
-function isPromptEnabled(item: ItemType): boolean {
-  const promptName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
-  const promptTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
-  return promptTemplates.some(p => p.name === promptName);
+// 检查 Memory 是否启用（从 instruction.user_prompt_templates）
+function isMemoryEnabled(item: ItemType): boolean {
+  const memoryName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
+  const memoryTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
+  return memoryTemplates.some(p => p.name === memoryName);
 }
 
 // 检查 Model 是否启用（从 active_model 或 llm_config.llm_model）
@@ -525,16 +525,16 @@ async function handleSkillToggleEvent(payload: { column: ColumnConfig; item: Ite
   }
 }
 
-// 处理 Prompt 开关切换事件
-async function handlePromptToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
+// 处理 Memory 开关切换事件
+async function handleMemoryToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
   if (!selectedBusinessUnit.value || !selectedAgent.value) return;
   
-  const promptName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
+  const memoryName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
   try {
-    await agentApi.togglePromptEnabled(
+    await agentApi.toggleMemoryEnabled(
       selectedBusinessUnit.value.id,
       selectedAgent.value.name,
-      promptName,
+      memoryName,
       payload.enabled
     );
     // 刷新 Agent 详情以更新状态
@@ -591,9 +591,9 @@ async function handleModelToggleEvent(payload: { column: ColumnConfig; item: Ite
   }
 }
 
-// Prompt 被删除后的处理
-async function handlePromptDeleted() {
-  store.clearSelectedPrompt();
+// Memory 被删除后的处理
+async function handleMemoryDeleted() {
+  store.clearSelectedMemory();
   // 刷新 Agent 详情以更新 prompts 列表
   if (selectedBusinessUnit.value && selectedAgent.value) {
     await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
@@ -648,13 +648,13 @@ const previousAgentName = ref<string | null>(null);
 
 // 监听 Agent 变化，重新加载配置
 watch(selectedAgent, (newAgent, oldAgent) => {
-  // 只有切换到不同的 Agent 时才清除 Prompt 选中状态
+  // 只有切换到不同的 Agent 时才清除 Memory 选中状态
   const newName = newAgent?.name || null;
   const oldName = oldAgent?.name || previousAgentName.value;
   
   if (newName !== oldName) {
     activeTab.value = 'overview';
-    store.clearSelectedPrompt();
+    store.clearSelectedMemory();
   }
   
   previousAgentName.value = newName;

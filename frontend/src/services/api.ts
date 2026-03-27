@@ -36,12 +36,13 @@ import type {
   MCP,
   MCPCreate,
   MCPUpdate,
-  // Prompt
-  Prompt,
-  PromptCreate,
-  PromptUpdate,
+  // Memory
+  Memory,
+  MemoryCreate,
+  MemoryUpdate,
   // Other
   DeleteResponse,
+  OutputFileContent,
 } from "@/types/catalog";
 
 const API_BASE_URL = "http://127.0.0.1:8765";
@@ -167,6 +168,14 @@ export const businessUnitApi = {
    */
   getTree: (): Promise<BusinessUnitTreeNode[]> =>
     request<BusinessUnitTreeNode[]>("/api/business_units/tree"),
+
+  /**
+   * 读取 Agent output 文件内容
+   */
+  getOutputFileContent: (businessUnitId: string, agentName: string, relativePath: string): Promise<OutputFileContent> =>
+    request<OutputFileContent>(
+      `/api/business_units/${businessUnitId}/agents/${agentName}/output/file?path=${encodeURIComponent(relativePath)}`
+    ),
 };
 
 // ============ AssetBundle API ============
@@ -329,40 +338,40 @@ export const agentApi = {
     }),
 
   /**
-   * 获取 Agent Prompt 内容
+   * 获取 Agent Memory 内容
    */
-  getPrompt: (businessUnitId: string, agentName: string, promptName: string): Promise<Prompt> =>
-    request<Prompt>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}`),
+  getMemory: (businessUnitId: string, agentName: string, memoryName: string): Promise<Memory> =>
+    request<Memory>(`/api/business_units/${businessUnitId}/agents/${agentName}/memories/${memoryName}`),
 
   /**
    * 获取 Agent 所有 Prompts
    */
-  listPrompts: (businessUnitId: string, agentName: string): Promise<Prompt[]> =>
-    request<Prompt[]>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts`),
+  listMemories: (businessUnitId: string, agentName: string): Promise<Memory[]> =>
+    request<Memory[]>(`/api/business_units/${businessUnitId}/agents/${agentName}/memories`),
 
   /**
-   * 创建 Agent Prompt
+   * 创建 Agent Memory
    */
-  createPrompt: (businessUnitId: string, agentName: string, data: PromptCreate): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts`, {
+  createMemory: (businessUnitId: string, agentName: string, data: MemoryCreate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/memories`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   /**
-   * 更新 Agent Prompt
+   * 更新 Agent Memory
    */
-  updatePrompt: (businessUnitId: string, agentName: string, promptName: string, data: PromptUpdate): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}`, {
+  updateMemory: (businessUnitId: string, agentName: string, memoryName: string, data: MemoryUpdate): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/memories/${memoryName}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
 
   /**
-   * 删除 Agent Prompt
+   * 删除 Agent Memory
    */
-  deletePrompt: (businessUnitId: string, agentName: string, promptName: string): Promise<{ message: string }> =>
-    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}`, {
+  deleteMemory: (businessUnitId: string, agentName: string, memoryName: string): Promise<{ message: string }> =>
+    request<{ message: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/memories/${memoryName}`, {
       method: "DELETE",
     }),
 
@@ -390,10 +399,10 @@ export const agentApi = {
     }),
 
   /**
-   * 切换 Prompt 启用状态
+   * 切换 Memory 启用状态
    */
-  togglePromptEnabled: (businessUnitId: string, agentName: string, promptName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
-    request<{ message: string; enabled: boolean }>(`/api/business_units/${businessUnitId}/agents/${agentName}/prompts/${promptName}/toggle?enabled=${enabled}`, {
+  toggleMemoryEnabled: (businessUnitId: string, agentName: string, memoryName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
+    request<{ message: string; enabled: boolean }>(`/api/business_units/${businessUnitId}/agents/${agentName}/memories/${memoryName}/toggle?enabled=${enabled}`, {
       method: "POST",
     }),
 
@@ -531,6 +540,19 @@ import type {
   ServiceStatusResponse,
 } from "@/types/agent-runtime";
 
+export interface ConversationHistoryTurn {
+  created_at: string;
+  user_input: string;
+  messages: Array<Record<string, any>>;
+}
+
+export interface ConversationHistoryResponse {
+  agent_name: string;
+  thread_id: string;
+  history_file: string;
+  turns: ConversationHistoryTurn[];
+}
+
 export const agentRuntimeApi = {
   /**
    * 加载 Agent
@@ -558,6 +580,22 @@ export const agentRuntimeApi = {
   cancel: (businessUnitId: string, agentName: string): Promise<{ message: string; success: boolean }> =>
     request(`/api/runtime/${businessUnitId}/agents/${agentName}/cancel`, {
       method: "POST",
+    }),
+
+  /**
+   * 获取 Agent 会话历史
+   */
+  getConversationHistory: (businessUnitId: string, agentName: string, threadId?: string): Promise<ConversationHistoryResponse> =>
+    request(
+      `/api/runtime/${businessUnitId}/agents/${agentName}/history${threadId ? `?thread_id=${encodeURIComponent(threadId)}` : ""}`
+    ),
+
+  /**
+   * 清理 Agent 对话上下文
+   */
+  clearContext: (businessUnitId: string, agentName: string, threadId?: string): Promise<{ message: string; success: boolean }> =>
+    request(`/api/runtime/${businessUnitId}/agents/${agentName}/context${threadId ? `?thread_id=${encodeURIComponent(threadId)}` : ""}`, {
+      method: "DELETE",
     }),
 
   /**

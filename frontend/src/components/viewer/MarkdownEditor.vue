@@ -46,7 +46,7 @@
             v-model="editContent"
             class="w-full h-full p-4 font-mono text-sm leading-relaxed bg-background resize-none focus:outline-none"
             spellcheck="false"
-            :placeholder="t('prompt.contentHint')"
+            :placeholder="t('memory.contentHint')"
           ></textarea>
         </div>
       </div>

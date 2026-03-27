@@ -17,7 +17,7 @@ export type EntityType =
   | "note" 
   | "function"
   | "mcp"
-  | "workroot";
+  | "output";
 
 /** 数据库连接类型 */
 export type ConnectionType = "mysql" | "postgresql" | "sqlite" | "duckdb";
@@ -47,7 +47,8 @@ export type NodeType =
   | "skill" 
   | "prompt"
   | "mcp"
-  | "workroot";
+  | "output"
+  | "output_file";
 
 /** MCP 类型 */
 export type MCPType = "python_function" | "mcp_server" | "remote_api";
@@ -379,7 +380,7 @@ export interface Agent extends BaseEntity {
   
   // 目录扫描结果
   skills: string[];
-  prompts: string[];
+  memories: string[];
   models: string[];
   mcps: string[];
   active_model?: string;
@@ -479,7 +480,7 @@ export interface ModelUpdate extends BaseEntityUpdate {
   temperature?: number;
 }
 
-// ============ Workroot 相关 ============
+// ============ Output 相关 ============
 
 /** 工作会话 */
 export interface WorkSession {
@@ -505,22 +506,29 @@ export interface WorkOutput {
   metadata?: Record<string, any>;
 }
 
-// ============ Prompt 相关 ============
+/** output 文件内容 */
+export interface OutputFileContent {
+  path: string;
+  relative_path: string;
+  content: string;
+}
 
-/** Prompt 信息 */
-export interface Prompt extends BaseEntity {
+// ============ Memory 相关 ============
+
+/** Memory 信息 */
+export interface Memory extends BaseEntity {
   entity_type?: "prompt";
   content: string;
   enabled: boolean;
 }
 
-/** 创建 Prompt 请求 */
-export interface PromptCreate extends BaseEntityCreate {
+/** 创建 Memory 请求 */
+export interface MemoryCreate extends BaseEntityCreate {
   content: string;
 }
 
-/** 更新 Prompt 请求 */
-export interface PromptUpdate extends BaseEntityUpdate {
+/** 更新 Memory 请求 */
+export interface MemoryUpdate extends BaseEntityUpdate {
   content?: string;
 }
 

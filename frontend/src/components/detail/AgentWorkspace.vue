@@ -30,44 +30,24 @@
       </div>
     </div>
 
-    <!-- 双栏主区域 -->
-    <div class="workspace-body flex-1 flex overflow-hidden">
-      <!-- 左栏：对话面板 -->
-      <div
-        class="left-panel flex flex-col border-r border-border"
-        :style="{ width: leftPanelWidth + 'px' }"
-      >
-        <AgentChatPanel
-          ref="chatPanelRef"
-          :is-executing="isExecuting"
-          @send="handleSend"
-          @retry="handleRetry"
-          @open-artifact="handleOpenArtifact"
-        />
-      </div>
-
-      <!-- 拖拽分割线 -->
-      <div
-        class="splitter w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors flex-shrink-0"
-        @mousedown="startResize"
+    <!-- 单栏主区域：仅对话 -->
+    <div class="workspace-body flex-1 overflow-hidden">
+      <AgentChatPanel
+        ref="chatPanelRef"
+        :is-executing="isExecuting"
+        @send="handleSend"
+        @retry="handleRetry"
       />
-
-      <!-- 右栏：制品面板 -->
-      <div class="right-panel flex-1 min-w-0">
-        <ArtifactPanel />
-      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onUnmounted } from "vue";
 import { Bot, Trash2 } from "lucide-vue-next";
 import AgentChatPanel from "./AgentChatPanel.vue";
-import ArtifactPanel from "./ArtifactPanel.vue";
 import { useSSEClient } from "@/composables/useSSEClient";
-import { useArtifactStore } from "@/stores/artifactStore";
-import { agentRuntimeApi } from "@/services/api";
+import { agentRuntimeApi, type ConversationHistoryTurn } from "@/services/api";
 import type {
   StreamMessage, ThoughtPayload, TaskListPayload,
   ArtifactPayload, StatusPayload, ErrorPayload, DonePayload, ToolCallPayload,
@@ -85,10 +65,8 @@ const chatPanelRef = ref<InstanceType<typeof AgentChatPanel> | null>(null);
 const isExecuting = ref(false);
 const isAgentLoaded = ref(false);
 const lastUserInput = ref("");
-const leftPanelWidth = ref(480);
 const currentBlockId = ref<string>("");
-
-const artifactStore = useArtifactStore();
+const currentThreadId = ref<string>("");
 
 // ============ SSE 客户端 ============
 
@@ -114,38 +92,35 @@ const sseClient = useSSEClient({
 
 // ============ 流消息处理 ============
 
-function handleStreamMessage(msg: StreamMessage) {
+function applyStreamMessageToBlock(blockId: string, msg: StreamMessage) {
   const panel = chatPanelRef.value;
-  if (!panel || !currentBlockId.value) return;
+  if (!panel || !blockId) return;
 
   switch (msg.type) {
     case "THOUGHT": {
       const payload = msg.payload as unknown as ThoughtPayload;
-      panel.appendThought(currentBlockId.value, payload);
+      panel.appendThought(blockId, payload);
       break;
     }
 
     case "TASK_LIST": {
       const payload = msg.payload as unknown as TaskListPayload;
-      panel.updateTasks(currentBlockId.value, payload.tasks);
+      panel.updateTasks(blockId, payload.tasks);
       break;
     }
 
     case "TOOL_CALL": {
       const payload = msg.payload as unknown as ToolCallPayload;
-      panel.addToolCall(currentBlockId.value, payload);
+      panel.addToolCall(blockId, payload);
       break;
     }
 
     case "ARTIFACT": {
       const payload = msg.payload as unknown as ArtifactPayload;
-      artifactStore.handleArtifact(payload);
-      // 如果是代码/文件类型，在左栏显示文件变更预览
       if (payload.filepath || payload.artifact_type === "code") {
-        panel.addFileChange(currentBlockId.value, {
+        panel.addFileChange(blockId, {
           filepath: payload.filepath || payload.title || payload.artifact_id,
           operation: payload.operation || "create",
-          artifactId: payload.artifact_id,
         });
       }
       break;
@@ -153,7 +128,7 @@ function handleStreamMessage(msg: StreamMessage) {
 
     case "STATUS": {
       const payload = msg.payload as unknown as StatusPayload;
-      panel.addLog(currentBlockId.value, {
+      panel.addLog(blockId, {
         text: payload.text,
         icon: payload.icon,
         isActive: true,
@@ -163,18 +138,23 @@ function handleStreamMessage(msg: StreamMessage) {
 
     case "ERROR": {
       const payload = msg.payload as unknown as ErrorPayload;
-      panel.setError(currentBlockId.value, payload);
+      panel.setError(blockId, payload);
       isExecuting.value = false;
       break;
     }
 
     case "DONE": {
       const payload = msg.payload as unknown as DonePayload;
-      panel.setDone(currentBlockId.value, payload.summary, payload.next_steps);
+      panel.setDone(blockId, payload.summary, payload.next_steps);
       isExecuting.value = false;
       break;
     }
   }
+}
+
+function handleStreamMessage(msg: StreamMessage) {
+  if (!currentBlockId.value) return;
+  applyStreamMessageToBlock(currentBlockId.value, msg);
 }
 
 // ============ 计算属性 ============
@@ -226,14 +206,12 @@ async function handleSend(userInput: string) {
     }
   }
 
-  // 重置制品
-  artifactStore.reset();
-
   // 启动流式请求
   await sseClient.executeStreamV2(
     props.businessUnitId,
     props.agentName || "",
-    userInput
+    userInput,
+    { thread_id: ensureThreadId() }
   );
 }
 
@@ -248,49 +226,159 @@ function handleCancel() {
   isExecuting.value = false;
 }
 
-function handleReset() {
+function resetLocalSessionState(resetPanel = true) {
   sseClient.disconnect();
-  chatPanelRef.value?.reset();
-  artifactStore.reset();
+  if (resetPanel) {
+    chatPanelRef.value?.reset();
+  }
   isExecuting.value = false;
   lastUserInput.value = "";
   currentBlockId.value = "";
 }
 
+function threadStorageKey(): string {
+  return `agent-chat-thread:${props.businessUnitId}:${props.agentName || ""}`;
+}
+
+function generateThreadId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function ensureThreadId(): string {
+  const key = threadStorageKey();
+  const cached = localStorage.getItem(key);
+  if (cached && cached.trim()) {
+    currentThreadId.value = cached.trim();
+    return currentThreadId.value;
+  }
+  const threadId = generateThreadId();
+  localStorage.setItem(key, threadId);
+  currentThreadId.value = threadId;
+  return threadId;
+}
+
+function extractTextFromAny(content: any): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const text = (item as Record<string, any>).text ?? (item as Record<string, any>).content;
+          return typeof text === "string" ? text : "";
+        }
+        return "";
+      })
+      .join("");
+  }
+  if (content && typeof content === "object") {
+    const text = (content as Record<string, any>).text ?? (content as Record<string, any>).content;
+    if (typeof text === "string") return text;
+  }
+  return content == null ? "" : String(content);
+}
+
+function isStreamEventMessage(raw: any): raw is StreamMessage {
+  const msgType = raw?.type;
+  return ["THOUGHT", "TASK_LIST", "TOOL_CALL", "ARTIFACT", "STATUS", "ERROR", "DONE"].includes(msgType);
+}
+
+async function replayHistory(turns: ConversationHistoryTurn[]) {
+  const panel = chatPanelRef.value;
+  if (!panel) return;
+
+  panel.reset();
+  for (const turn of turns || []) {
+    if (turn?.user_input) {
+      panel.addUserMessage(turn.user_input);
+    }
+
+    const messages = Array.isArray(turn?.messages) ? turn.messages : [];
+    if (messages.length === 0) {
+      continue;
+    }
+
+    const blockId = panel.createAgentBlock();
+    let hasTerminalEvent = false;
+
+    for (const raw of messages) {
+      if (isStreamEventMessage(raw)) {
+        applyStreamMessageToBlock(blockId, raw as StreamMessage);
+        if (raw.type === "DONE" || raw.type === "ERROR") {
+          hasTerminalEvent = true;
+        }
+        continue;
+      }
+
+      const rawType = raw?.type;
+      if (rawType === "ai") {
+        const content = extractTextFromAny(raw?.content);
+        if (content) {
+          panel.appendThought(blockId, {
+            content,
+            mode: "append",
+            phase: "analyzing",
+          } as ThoughtPayload);
+        }
+      }
+
+      if (rawType === "tool") {
+        panel.addToolCall(blockId, {
+          tool_name: raw?.name || "unknown",
+          tool_call_id: raw?.tool_call_id,
+          status: "completed",
+          tool_result: extractTextFromAny(raw?.content) || undefined,
+          icon: "check",
+        });
+      }
+    }
+
+    if (!hasTerminalEvent) {
+      panel.setDone(blockId);
+    }
+  }
+  currentBlockId.value = "";
+}
+
+async function loadConversationHistory() {
+  if (!props.businessUnitId || !props.agentName) return;
+  const threadId = ensureThreadId();
+  try {
+    const history = await agentRuntimeApi.getConversationHistory(props.businessUnitId, props.agentName, threadId);
+    await replayHistory(history.turns || []);
+  } catch (err) {
+    console.warn("[AgentWorkspace] Load history failed:", err);
+  }
+}
+
+async function handleReset(needConfirm = true) {
+  if (needConfirm) {
+    const confirmed = window.confirm("确认清空当前会话历史吗？该操作会删除上下文且不可恢复。");
+    if (!confirmed) return;
+  }
+
+  if (props.businessUnitId && props.agentName) {
+    try {
+      const threadId = ensureThreadId();
+      await agentRuntimeApi.clearContext(props.businessUnitId, props.agentName, threadId);
+    } catch (err) {
+      console.warn("[AgentWorkspace] Clear context failed:", err);
+    }
+  }
+
+  const newThreadId = generateThreadId();
+  localStorage.setItem(threadStorageKey(), newThreadId);
+  currentThreadId.value = newThreadId;
+  resetLocalSessionState(true);
+}
+
 function handleRetry() {
   if (lastUserInput.value) {
-    handleSend(lastUserInput.value);
+    void handleSend(lastUserInput.value);
   }
-}
-
-function handleOpenArtifact(artifactId: string) {
-  artifactStore.selectArtifact(artifactId);
-}
-
-// ============ 拖拽分割线 ============
-
-let isResizing = false;
-
-function startResize(e: MouseEvent) {
-  isResizing = true;
-  const startX = e.clientX;
-  const startWidth = leftPanelWidth.value;
-
-  function onMouseMove(ev: MouseEvent) {
-    if (!isResizing) return;
-    const diff = ev.clientX - startX;
-    const newWidth = Math.max(320, Math.min(startWidth + diff, 800));
-    leftPanelWidth.value = newWidth;
-  }
-
-  function onMouseUp() {
-    isResizing = false;
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
-  }
-
-  document.addEventListener("mousemove", onMouseMove);
-  document.addEventListener("mouseup", onMouseUp);
 }
 
 // ============ 生命周期 ============
@@ -298,9 +386,13 @@ function startResize(e: MouseEvent) {
 watch(
   () => [props.businessUnitId, props.agentName],
   () => {
-    handleReset();
+    resetLocalSessionState(true);
     isAgentLoaded.value = false;
-  }
+    if (props.businessUnitId && props.agentName) {
+      void loadConversationHistory();
+    }
+  },
+  { immediate: true }
 );
 
 onUnmounted(() => {
@@ -313,12 +405,4 @@ onUnmounted(() => {
   min-height: 400px;
 }
 
-.left-panel {
-  min-width: 320px;
-  max-width: 800px;
-}
-
-.splitter:hover {
-  transition-delay: 100ms;
-}
 </style>

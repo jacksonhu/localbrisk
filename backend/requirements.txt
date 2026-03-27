@@ -7,13 +7,15 @@ polars>=0.20.0
 duckdb>=0.9.0
 httpx>=0.26.0
 pyyaml>=6.0.0
-
+aiosqlite>=0.22.1
 # Agent 引擎依赖
 langgraph>=0.2.0
 langchain>=0.2.0
 langchain-core>=0.2.0
 langchain-openai>=0.1.0
-deepagents>=0.4.3
+deepagents>=0.4.5
+langgraph-checkpoint-sqlite>=3.0.0
+langgraph-checkpoint>=2.1.0
 
 # 数据库驱动
 pymysql>=1.1.0

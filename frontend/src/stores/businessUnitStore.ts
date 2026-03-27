@@ -22,6 +22,7 @@ import type {
   ModelCreate,
   MCP,
   MCPCreate,
+  OutputFileContent,
 } from "@/types/catalog";
 
 // ============ 状态 ============
@@ -53,8 +54,8 @@ const selectedAgent = ref<Agent | null>(null);
 /** 当前选中的 Model */
 const selectedModel = ref<Model | null>(null);
 
-/** 当前选中的 Prompt 名称（用于显示 Prompt 详情页） */
-const selectedPromptName = ref<string>('');
+/** 当前选中的 Memory 名称（用于显示 Memory 详情页） */
+const selectedMemoryName = ref<string>('');
 
 /** 当前选中的 Skill 名称（用于显示 Skill 详情页） */
 const selectedSkillName = ref<string>('');
@@ -86,6 +87,9 @@ const selectedMCP = ref<MCP | null>(null);
 /** 当前选中的 MCP 名称（用于显示 MCP 详情页） */
 const selectedMCPName = ref<string>('');
 
+/** 当前选中的 output 文件 */
+const selectedOutputFile = ref<OutputFileContent | null>(null);
+
 /**
  * 计算当前选中节点在树中的 ID
  * 
@@ -93,20 +97,20 @@ const selectedMCPName = ref<string>('');
  * - BusinessUnit: businessUnitId (如 "market_analysis")
  * - AssetBundle: bundleId (如 "market_analysis_default")
  * - Agent: agentId (如 "market_analysis_agent_dd")
- * - Prompt: {agentId}_prompt_{promptName} (如 "market_analysis_agent_dd_prompt_ddd.md")
+ * - Memory: {agentId}_prompt_{memoryName} (如 "market_analysis_agent_dd_prompt_ddd.md")
  * - Skill: {agentId}_skill_{skillName} (如 "market_analysis_agent_dd_skill_xxx")
  * - Model: modelId (如 "market_analysis_agent_dd_model_xxx")
  * - MCP: {agentId}_mcp_{mcpName}
  * - Asset: assetId
  * 
- * 优先级（从高到低）：Prompt/Skill/MCP > Model > Asset > AssetBundle > Agent > BusinessUnit
+ * 优先级（从高到低）：Memory/Skill/MCP > Model > Asset > AssetBundle > Agent > BusinessUnit
  */
 const selectedNodeId = computed<string | undefined>(() => {
-  // 1. Prompt 选中时（必须同时有 Agent 和 PromptName）
-  if (selectedPromptName.value && selectedAgent.value) {
-    // Prompt 节点 ID 格式: {agent.id}_prompt_{promptName}
-    // 注意：promptName 包含文件扩展名（如 ddd.md）
-    return `${selectedAgent.value.id}_prompt_${selectedPromptName.value}`;
+  // 1. Memory 选中时（必须同时有 Agent 和 PromptName）
+  if (selectedMemoryName.value && selectedAgent.value) {
+    // Memory 节点 ID 格式: {agent.id}_prompt_{memoryName}
+    // 注意：memoryName 包含文件扩展名（如 ddd.md）
+    return `${selectedAgent.value.id}_prompt_${selectedMemoryName.value}`;
   }
   
   // 1.5 Skill 选中时（必须同时有 Agent 和 SkillName）
@@ -121,7 +125,12 @@ const selectedNodeId = computed<string | undefined>(() => {
     return `${selectedAgent.value.id}_mcp_${selectedMCPName.value}`;
   }
   
-  // 2. Model 选中时
+  // 2. Output 文件选中时
+  if (selectedOutputFile.value && selectedAgent.value) {
+    return `${selectedAgent.value.id}_output/${selectedOutputFile.value.relative_path}`;
+  }
+
+  // 3. Model 选中时
   if (selectedModel.value) {
     return selectedModel.value.id;
   }
@@ -162,6 +171,141 @@ const ASSET_TYPE_CONFIG: Record<string, { label: string; icon: string }> = {
 };
 
 /**
+ * 归一化 Agent 子节点：兼容 prompts/memories 命名，并确保始终展示 Memories 目录
+ */
+function normalizeAgentChildren(agentNode: BusinessUnitTreeNode): BusinessUnitTreeNode[] {
+  const originalChildren = agentNode.children || [];
+  const agentMemoryNames = selectedAgent.value?.name === agentNode.name
+    ? (selectedAgent.value.memories || [])
+    : [];
+
+  const buildMemoryChildren = (names: string[]): BusinessUnitTreeNode[] => {
+    const metadata = {
+      business_unit_id: agentNode.metadata?.business_unit_id,
+      agent_name: agentNode.name,
+    };
+    return names.map((memoryName) => ({
+      id: `${agentNode.id}_prompt_${memoryName}`,
+      name: memoryName,
+      display_name: memoryName,
+      node_type: 'prompt',
+      children: [],
+      metadata,
+    }));
+  };
+
+  const normalizedChildren = originalChildren.map((child) => {
+    if (child.node_type !== 'folder') {
+      return child;
+    }
+
+    const folderName = (child.name || '').toLowerCase();
+
+    if (folderName === 'prompts' || folderName === 'memories') {
+      const folderChildren = (child.children || []).map((memoryChild) => ({
+        ...memoryChild,
+        id: `${agentNode.id}_prompt_${(memoryChild.name || memoryChild.display_name || '').trim()}`,
+        metadata: {
+          business_unit_id: agentNode.metadata?.business_unit_id,
+          agent_name: agentNode.name,
+          ...(memoryChild.metadata || {}),
+        },
+      }));
+
+      const fallbackChildren = folderChildren.length > 0 ? folderChildren : buildMemoryChildren(agentMemoryNames);
+
+      return {
+        ...child,
+        id: `${agentNode.id}_memories`,
+        name: 'memories',
+        display_name: 'Memories',
+        children: fallbackChildren,
+        metadata: {
+          business_unit_id: agentNode.metadata?.business_unit_id,
+          agent_name: agentNode.name,
+          ...(child.metadata || {}),
+        },
+      };
+    }
+
+    if (folderName === 'skills' || folderName === 'models' || folderName === 'mcps') {
+      const displayMap: Record<string, string> = {
+        skills: 'Skills',
+        models: 'Models',
+        mcps: 'MCPs',
+      };
+      return {
+        ...child,
+        id: `${agentNode.id}_${folderName}`,
+        name: folderName,
+        display_name: displayMap[folderName],
+        children: child.children || [],
+        metadata: {
+          business_unit_id: agentNode.metadata?.business_unit_id,
+          agent_name: agentNode.name,
+          ...(child.metadata || {}),
+        },
+      };
+    }
+
+    return child;
+  });
+
+  const ensureFolderSpecs: Array<{ key: 'skills' | 'memories' | 'models' | 'mcps'; displayName: string }> = [
+    { key: 'skills', displayName: 'Skills' },
+    { key: 'memories', displayName: 'Memories' },
+    { key: 'models', displayName: 'Models' },
+    { key: 'mcps', displayName: 'MCPs' },
+  ];
+
+  for (const folderSpec of ensureFolderSpecs) {
+    const exists = normalizedChildren.some((child) => {
+      if (child.node_type !== 'folder') return false;
+      const name = (child.name || '').toLowerCase();
+      if (folderSpec.key === 'memories') {
+        return name === 'memories' || name === 'prompts';
+      }
+      return name === folderSpec.key;
+    });
+
+    if (exists) continue;
+
+    normalizedChildren.push({
+      id: `${agentNode.id}_${folderSpec.key}`,
+      name: folderSpec.key,
+      display_name: folderSpec.displayName,
+      node_type: 'folder',
+      children: folderSpec.key === 'memories' ? buildMemoryChildren(agentMemoryNames) : [],
+      metadata: {
+        business_unit_id: agentNode.metadata?.business_unit_id,
+        agent_name: agentNode.name,
+      },
+    });
+  }
+
+  const orderMap: Record<string, number> = {
+    skills: 1,
+    memories: 2,
+    models: 3,
+    mcps: 4,
+    output: 5,
+  };
+
+  return normalizedChildren.sort((a, b) => {
+    const getOrder = (node: BusinessUnitTreeNode): number => {
+      if (node.node_type === 'output') return orderMap.output;
+      if (node.node_type === 'folder') {
+        const name = (node.name || '').toLowerCase();
+        const normalizedName = name === 'prompts' ? 'memories' : name;
+        return orderMap[normalizedName] || 999;
+      }
+      return 999;
+    };
+    return getOrder(a) - getOrder(b);
+  });
+}
+
+/**
  * 将 BusinessUnitTreeNode 转换为 BusinessUnitItem
  * 对于 AssetBundle 节点，将其子节点按资产类型分组
  * @param nodes 原始树节点
@@ -173,18 +317,19 @@ function convertTreeToItems(nodes: BusinessUnitTreeNode[], _parentType?: string)
   }
   return nodes.map((node) => {
     let children: BusinessUnitItem[] | undefined;
-    
+    const normalizedNodeChildren = node.node_type === 'agent' ? normalizeAgentChildren(node) : node.children;
+
     // 如果是 AssetBundle 节点且有子节点，按资产类型分组
-    if (node.node_type === 'asset_bundle' && node.children && node.children.length > 0) {
-      children = groupAssetsByType(node.children, node.id || '');
-    } else if (node.children && node.children.length > 0) {
+    if (node.node_type === 'asset_bundle' && normalizedNodeChildren && normalizedNodeChildren.length > 0) {
+      children = groupAssetsByType(normalizedNodeChildren, node.id || '');
+    } else if (normalizedNodeChildren && normalizedNodeChildren.length > 0) {
       // 递归转换子节点
-      children = convertTreeToItems(node.children, node.node_type);
+      children = convertTreeToItems(normalizedNodeChildren, node.node_type);
     } else if (node.node_type === 'folder' && node.children) {
       // folder 类型即使没有子节点也保持 children 为空数组（用于正确显示展开状态）
       children = [];
     }
-    
+
     const item: BusinessUnitItem = {
       id: node.id || '',
       name: node.display_name || node.name || '',
@@ -323,7 +468,7 @@ function getIconForType(type: string): string {
  * 选择类型枚举
  * 定义了所有可选择的节点类型，用于统一的状态清除逻辑
  */
-type SelectionType = 'business_unit' | 'asset_bundle' | 'asset' | 'model' | 'agent' | 'prompt' | 'skill' | 'mcp';
+type SelectionType = 'business_unit' | 'asset_bundle' | 'asset' | 'model' | 'agent' | 'prompt' | 'skill' | 'mcp' | 'output_file';
 
 /**
  * 准备选择某个类型的节点
@@ -336,7 +481,7 @@ type SelectionType = 'business_unit' | 'asset_bundle' | 'asset' | 'model' | 'age
  * │   └── Asset (table/volume)
  * └── Agent 分支
  *     ├── Agent
- *     ├── Prompt/Skill
+ *     ├── Memory/Skill
  *     ├── Model
  *     └── MCP
  * 
@@ -348,16 +493,17 @@ function prepareForSelection(targetType: SelectionType): void {
   // AssetBundle 分支类型
   const assetBundleBranch: SelectionType[] = ['asset_bundle', 'asset'];
   // Agent 分支类型
-  const agentBranch: SelectionType[] = ['agent', 'prompt', 'skill', 'model', 'mcp'];
+  const agentBranch: SelectionType[] = ['agent', 'prompt', 'skill', 'model', 'mcp', 'output_file'];
   
   if (assetBundleBranch.includes(targetType)) {
     // 选择 AssetBundle 分支，清除 Agent 分支
     selectedAgent.value = null;
-    selectedPromptName.value = '';
+    selectedMemoryName.value = '';
     selectedSkillName.value = '';
     selectedModel.value = null;
     selectedMCP.value = null;
     selectedMCPName.value = '';
+    selectedOutputFile.value = null;
     
     // 如果选择 AssetBundle，清除 Asset（选择父级清除子级）
     if (targetType === 'asset_bundle') {
@@ -370,40 +516,53 @@ function prepareForSelection(targetType: SelectionType): void {
     selectedAsset.value = null;
     currentAssets.value = [];
     
-    // 如果选择 Agent，清除所有子级（Prompt、Skill、Model、MCP）
+    // 如果选择 Agent，清除所有子级（Memory、Skill、Model、MCP）
     if (targetType === 'agent') {
-      selectedPromptName.value = '';
+      selectedMemoryName.value = '';
       selectedSkillName.value = '';
       selectedModel.value = null;
       selectedMCP.value = null;
       selectedMCPName.value = '';
+      selectedOutputFile.value = null;
     }
-    // 如果选择 Prompt，清除其他同级
+    // 如果选择 Memory，清除其他同级
     if (targetType === 'prompt') {
       selectedSkillName.value = '';
       selectedModel.value = null;
       selectedMCP.value = null;
       selectedMCPName.value = '';
+      selectedOutputFile.value = null;
     }
     // 如果选择 Skill，清除其他同级
     if (targetType === 'skill') {
-      selectedPromptName.value = '';
+      selectedMemoryName.value = '';
       selectedModel.value = null;
       selectedMCP.value = null;
       selectedMCPName.value = '';
+      selectedOutputFile.value = null;
     }
     // 如果选择 Model，清除其他同级
     if (targetType === 'model') {
-      selectedPromptName.value = '';
+      selectedMemoryName.value = '';
       selectedSkillName.value = '';
       selectedMCP.value = null;
       selectedMCPName.value = '';
+      selectedOutputFile.value = null;
     }
     // 如果选择 MCP，清除其他同级
     if (targetType === 'mcp') {
-      selectedPromptName.value = '';
+      selectedMemoryName.value = '';
       selectedSkillName.value = '';
       selectedModel.value = null;
+      selectedOutputFile.value = null;
+    }
+    // 如果选择 output 文件，清除其他同级
+    if (targetType === 'output_file') {
+      selectedMemoryName.value = '';
+      selectedSkillName.value = '';
+      selectedModel.value = null;
+      selectedMCP.value = null;
+      selectedMCPName.value = '';
     }
   }
 }
@@ -889,7 +1048,12 @@ async function selectAgent(businessUnitId: string, agentName: string): Promise<v
  */
 function clearSelectedAgent(): void {
   selectedAgent.value = null;
-  selectedPromptName.value = '';
+  selectedMemoryName.value = '';
+  selectedSkillName.value = '';
+  selectedMCPName.value = '';
+  selectedMCP.value = null;
+  selectedModel.value = null;
+  selectedOutputFile.value = null;
 }
 
 /**
@@ -908,16 +1072,16 @@ async function refreshSelectedAgent(): Promise<void> {
   }
 }
 
-// ============ Prompt 操作 ============
+// ============ Memory 操作 ============
 
 /**
- * 选择 Prompt
+ * 选择 Memory
  * @param businessUnitId BusinessUnit ID
  * @param agentName Agent 名称
- * @param promptName Prompt 名称
+ * @param memoryName Memory 名称
  */
-async function selectPrompt(businessUnitId: string, agentName: string, promptName: string): Promise<void> {
-  // 准备选择 Prompt
+async function selectMemory(businessUnitId: string, agentName: string, memoryName: string): Promise<void> {
+  // 准备选择 Memory
   prepareForSelection('prompt');
   
   // 确保 Agent 已选中（selectAgent 会处理 BusinessUnit 加载和状态清除）
@@ -929,15 +1093,15 @@ async function selectPrompt(businessUnitId: string, agentName: string, promptNam
     await selectAgent(businessUnitId, agentName);
   }
   
-  // 设置选中的 Prompt 名称
-  selectedPromptName.value = promptName;
+  // 设置选中的 Memory 名称
+  selectedMemoryName.value = memoryName;
 }
 
 /**
- * 清除 Prompt 选中状态
+ * 清除 Memory 选中状态
  */
-function clearSelectedPrompt(): void {
-  selectedPromptName.value = '';
+function clearSelectedMemory(): void {
+  selectedMemoryName.value = '';
 }
 
 // ============ Skill 操作 ============
@@ -1152,6 +1316,35 @@ function clearSelectedMCP(): void {
 }
 
 /**
+ * 选择 output 文件
+ */
+async function selectOutputFile(businessUnitId: string, agentName: string, relativePath: string): Promise<void> {
+  prepareForSelection('output_file');
+
+  const needLoadAgent = !selectedAgent.value || 
+                        selectedAgent.value.name !== agentName || 
+                        selectedBusinessUnit.value?.id !== businessUnitId;
+
+  if (needLoadAgent) {
+    await selectAgent(businessUnitId, agentName);
+  }
+
+  try {
+    selectedOutputFile.value = await businessUnitApi.getOutputFileContent(businessUnitId, agentName, relativePath);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "读取 output 文件失败";
+    console.error("selectOutputFile error:", e);
+  }
+}
+
+/**
+ * 清除 output 文件选中状态
+ */
+function clearSelectedOutputFile(): void {
+  selectedOutputFile.value = null;
+}
+
+/**
  * 清除错误
  */
 function clearError(): void {
@@ -1172,6 +1365,7 @@ function reset(): void {
   selectedModel.value = null;
   selectedMCP.value = null;
   selectedMCPName.value = '';
+  selectedOutputFile.value = null;
   currentAssets.value = [];
   error.value = null;
 }
@@ -1192,7 +1386,8 @@ export function useBusinessUnitStore() {
     selectedModel,
     selectedMCP,
     selectedMCPName,
-    selectedPromptName,
+    selectedOutputFile,
+    selectedMemoryName,
     selectedSkillName,
     selectedNodeId,  // 统一的选中节点 ID 计算
     currentAssetBundles,
@@ -1227,8 +1422,8 @@ export function useBusinessUnitStore() {
     selectAgent,
     refreshSelectedAgent,  // 刷新 Agent 数据但不改变选中状态
     clearSelectedAgent,
-    selectPrompt,
-    clearSelectedPrompt,
+    selectMemory,
+    clearSelectedMemory,
     selectSkill,
     clearSelectedSkill,
     createModel,
@@ -1240,6 +1435,8 @@ export function useBusinessUnitStore() {
     deleteMCP,
     selectMCP,
     clearSelectedMCP,
+    selectOutputFile,
+    clearSelectedOutputFile,
     clearError,
     reset,
   };

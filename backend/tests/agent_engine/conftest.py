@@ -92,9 +92,9 @@ def _create_agent_directory(agent_dir: Path, data: Dict[str, Any]) -> None:
     with open(test_skill_dir / "SKILL.md", "w", encoding="utf-8") as f:
         f.write("# Test Skill\n\nThis is a test skill.")
     
-    # 5. 创建 workroot 目录
-    workroot_dir = agent_dir / "workroot"
-    workroot_dir.mkdir(exist_ok=True)
+    # 5. 创建 output 目录
+    output_dir = agent_dir / "output"
+    output_dir.mkdir(exist_ok=True)
 
 
 # ============================================================================
@@ -119,7 +119,7 @@ def temp_agent_dir():
         │   └── test_skill/
         │       ├── test_skill.yaml
         │       └── SKILL.md
-        └── workroot/
+        └── output/
     """
     temp_dir = tempfile.mkdtemp(prefix="agent_test_")
     agent_dir = Path(temp_dir) / "test_data_analyst"

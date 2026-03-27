@@ -81,7 +81,7 @@ async def debug_raw_stream(
     config = {"configurable": {"thread_id": execution_id}}
 
     print("=== RAW STREAM OUTPUT ===")
-    for chunk in agent.stream(input_data, config=config, stream_mode="messages"):
+    async for chunk in agent.astream(input_data, config=config, stream_mode="messages"):
         if isinstance(chunk, tuple) and len(chunk) == 2:
             msg, meta = chunk
             print(f"\n--- chunk type={type(msg).__name__} ---")
@@ -114,6 +114,8 @@ async def debug_raw_stream(
 if __name__ == '__main__':
     logger.info("Starting test")
     import asyncio
+    #asyncio.run(execute_agent_streaming("myunit", "Data_analyst", "分析一下腾讯股价？"))
     asyncio.run(execute_agent_streaming("myunit", "Data_analyst", "帮我总结一下让DataAgent更可信的统一语义层.pdf的内容"))
+    #asyncio.run(execute_agent_streaming("myunit", "Data_analyst","https://docs.wechatpy.org/zh-cn/master/quickstart.html,帮我总结一下这个网页的内容"))
     #asyncio.run(execute_agent_streaming("myunit", "Data_analyst", "你好"))
     #asyncio.run(debug_raw_stream("myunit", "Data_analyst", "你好"))

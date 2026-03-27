@@ -5,6 +5,7 @@ LLM 客户端工厂
 """
 
 import logging
+import os
 from typing import Any, Optional, Dict
 
 from langchain_openai import ChatOpenAI
@@ -141,20 +142,34 @@ class LLMClientFactory:
             LangChain ChatModel 实例
         """
         provider = model_config.get("endpoint_provider", "openai")
-        api_key = model_config.get("api_key")
+        api_key_raw = model_config.get("api_key")
+        api_key = str(api_key_raw).strip() if api_key_raw is not None else ""
         api_base_url = model_config.get("api_base_url")
         model_id = model_config.get("model_id", "gpt-4o-mini")
+
+        # 兼容“无鉴权本地网关”场景：OpenAI SDK 仍要求 api_key/auth_token 至少存在其一
+        # 若未配置 key，则尝试环境变量，再回退到占位 key。
+        if not api_key:
+            api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        if not api_key:
+            api_key = "EMPTY"
+            logger.warning(
+                "模型未配置 api_key，已使用占位值 'EMPTY' 初始化客户端。"
+                "若目标端点需要鉴权，请在模型配置中填写真实 api_key。"
+            )
         
         # 从 runtime_config 获取 LLM 参数
         llm_config = runtime_config.llm_config
         temperature = llm_config.temperature if llm_config else 0.2
-        max_tokens = llm_config.max_tokens if llm_config else 4096
+        max_tokens = llm_config.max_tokens if llm_config else 40960
         
         logger.info(f"创建 API 客户端: provider={provider}, model={model_id}, temperature={temperature}, max_tokens={max_tokens}")
         logger.debug(f"API 配置: base_url={api_base_url}, api_key={'*' * 8 + api_key[-4:] if api_key and len(api_key) > 4 else '***'}")
         
         # 使用 ChatOpenAI 作为统一接口（大多数 API 兼容 OpenAI 格式）
         # 根据不同提供商调整配置
+        # 注意：这里使用 LangChain 的 `streaming=True`，避免将底层 SDK `stream=True`
+        # 传给非流式调用路径导致返回 AsyncStream。
         client_kwargs = {
             "model": model_id,
             "temperature": temperature,
@@ -162,8 +177,7 @@ class LLMClientFactory:
             "streaming": True,
         }
         
-        if api_key:
-            client_kwargs["api_key"] = api_key
+        client_kwargs["api_key"] = api_key
         
         if api_base_url:
             client_kwargs["base_url"] = api_base_url
@@ -180,6 +194,7 @@ class LLMClientFactory:
                     api_key=api_key,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    streaming=True,
                 )
             except ImportError:
                 logger.warning("langchain_anthropic 未安装，使用 OpenAI 兼容模式")

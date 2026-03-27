@@ -16,8 +16,8 @@ import type {
   AgentCreate,
   AgentUpdate,
   DeleteResponse,
-  Prompt,
-  PromptCreate,
+  Memory,
+  MemoryCreate,
 } from "@/types/catalog";
 
 // 应用设置类型定义（与 Rust 后端保持一致）
@@ -345,15 +345,15 @@ export const tauriAgentApi = {
   /**
    * 获取 Agent 所有 Prompts
    */
-  listPrompts: async (businessUnitId: string, agentName: string): Promise<Prompt[]> => {
+  listMemories: async (businessUnitId: string, agentName: string): Promise<Memory[]> => {
     const invoke = await getTauriInvoke();
     return invoke("agent_list_prompts", { businessUnitId, agentName });
   },
 
   /**
-   * 创建 Agent Prompt
+   * 创建 Agent Memory
    */
-  createPrompt: async (businessUnitId: string, agentName: string, data: PromptCreate): Promise<{ message: string }> => {
+  createMemory: async (businessUnitId: string, agentName: string, data: MemoryCreate): Promise<{ message: string }> => {
     const invoke = await getTauriInvoke();
     return invoke("agent_create_prompt", { businessUnitId, agentName, data });
   },
