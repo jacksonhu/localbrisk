@@ -5,7 +5,7 @@
 > **Local-First, Privacy-Safe, All-in-One AI Agent Workstation.**
 
 LocalBrisk is a cross-platform desktop AI assistant focused on **local security**, **ontology modeling**, and **blazing-fast experience**. It integrates agents, data assets, large language models, and local compute into a single application — enabling data analysis, knowledge management, and intelligent conversations without any cloud dependency.
-
+![img.png](img.png)
 ### Why LocalBrisk?
 
 - **Local Agent Sandbox**: Every Agent runs inside an isolated local sandbox with its own virtual environment, file system backend, and tool permissions — your code execution and data processing never leave your machine.
