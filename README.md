@@ -629,4 +629,6 @@ Each message from Agent execution is a `StreamMessage` with a type field for fro
 
 ## License
 
-Copyright © 2026 LocalBrisk Team. All rights reserved.
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+Copyright © 2026 LocalBrisk Contributors.
