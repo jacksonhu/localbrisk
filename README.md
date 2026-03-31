@@ -616,14 +616,9 @@ Each message from Agent execution is a `StreamMessage` with a type field for fro
 
 ## Roadmap
 
-| Phase | Goal |
-|-------|------|
-| Phase 1 | Framework setup, YAML config & i18n integration |
-| Phase 2 | Three-tier recursive discovery (BusinessUnit → Agent/AssetBundle → Assets) |
-| Phase 3 | Polars + LangGraph unified asset access, Agent streaming execution |
-| Phase 4 | Visual polish, local model support, i18n refinement |
-| Phase 5 | Ontology Modeling — semantic data relationships, Action engine, Agent auto-orchestration |
-| Phase 6 | Local Agent Company — multi-Agent collaboration within a BusinessUnit, role-based task delegation, cross-Agent workflow orchestration |
+We are currently in **Phase 5 — Ontology Modeling**. See the full roadmap with detailed task breakdowns and progress tracking:
+
+👉 **[ROADMAP.md](ROADMAP.md)**
 
 ---
 
