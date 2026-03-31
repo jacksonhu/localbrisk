@@ -98,7 +98,11 @@ class AgentService(BaseService):
     
     def _load_agent(self, business_unit_id: str, agent_path: Path) -> Optional[Agent]:
         """加载 Agent"""
-        config = self._load_yaml(self._get_config_path(agent_path)) or {}
+        config_path = self._get_config_path(agent_path)
+        if not config_path.exists():
+            logger.debug(f"Agent 配置文件不存在，跳过: {agent_path.name}")
+            return None
+        config = self._load_yaml(config_path) or {}
         baseinfo = self._extract_baseinfo(config, agent_path.name)
         
         # 扫描子目录

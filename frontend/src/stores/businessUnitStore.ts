@@ -175,7 +175,10 @@ const ASSET_TYPE_CONFIG: Record<string, { label: string; icon: string }> = {
  */
 function normalizeAgentChildren(agentNode: BusinessUnitTreeNode): BusinessUnitTreeNode[] {
   const originalChildren = agentNode.children || [];
-  const agentMemoryNames = selectedAgent.value?.name === agentNode.name
+  const agentMemoryNames = (
+    selectedAgent.value?.name === agentNode.name &&
+    selectedAgent.value?.business_unit_id === agentNode.metadata?.business_unit_id
+  )
     ? (selectedAgent.value.memories || [])
     : [];
 
