@@ -1,7 +1,7 @@
 """
-Model 执行服务
+Model Execution Service
 
-提供 LLM 模型的加载、执行和管理功能
+Provides LLM model loading, execution, and management
 """
 
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ModelExecutionResult:
-    """模型执行结果"""
+    """Model execution result"""
     execution_id: str
     model_name: str
     status: str
@@ -28,7 +28,7 @@ class ModelExecutionResult:
 
 @dataclass
 class LoadedModel:
-    """已加载的模型信息"""
+    """Loaded model info"""
     business_unit_id: str
     agent_name: str
     model_name: str
@@ -39,23 +39,23 @@ class LoadedModel:
     api_key: Optional[str] = None
     loaded_at: datetime = field(default_factory=datetime.now)
     
-    # 执行状态
+    # Execution status
     current_execution_id: Optional[str] = None
     is_executing: bool = False
 
 
 class ModelExecutorService:
-    """Model 执行器服务
+    """Model executor service
     
-    管理 LLM 模型的加载和执行
+    Manages LLM model loading and execution
     """
     
     def __init__(self):
         self._loaded_models: Dict[str, LoadedModel] = {}
-        self._lock = None  # asyncio.Lock 将在需要时创建
+        self._lock = None  # asyncio.Lock will be created when needed
     
     def _get_model_key(self, business_unit_id: str, agent_name: str, model_name: str) -> str:
-        """生成模型的唯一键"""
+        """Generate unique key for a model"""
         return f"{business_unit_id}:{agent_name}:{model_name}"
     
     async def load_model(
@@ -65,25 +65,25 @@ class ModelExecutorService:
         model_name: str,
         model_config: Any
     ) -> LoadedModel:
-        """加载模型
+        """Load model
         
         Args:
             business_unit_id: Business Unit ID
-            agent_name: Agent 名称
-            model_name: Model 名称
-            model_config: 模型配置对象
+            agent_name: Agent name
+            model_name: Model name
+            model_config: Model config object
         
         Returns:
-            LoadedModel: 已加载的模型信息
+            LoadedModel: 已Load的model info
         """
         key = self._get_model_key(business_unit_id, agent_name, model_name)
         
-        # 如果已加载，直接返回
+        # 如果已Load, 直接返回
         if key in self._loaded_models:
             logger.info(f"Model {model_name} already loaded")
             return self._loaded_models[key]
         
-        # 创建 LoadedModel
+        # Create LoadedModel
         loaded_model = LoadedModel(
             business_unit_id=business_unit_id,
             agent_name=agent_name,
@@ -111,20 +111,20 @@ class ModelExecutorService:
         max_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None
     ) -> ModelExecutionResult:
-        """同步执行模型
+        """Sync Execute模型
         
         Args:
             business_unit_id: Business Unit ID
-            agent_name: Agent 名称
-            model_name: Model 名称
-            input_text: 用户输入
-            context: 上下文
-            temperature: 温度参数
-            max_tokens: 最大生成长度
-            system_prompt: 系统提示词
+            agent_name: Agent name
+            model_name: Model name
+            input_text: User input
+            context: Context
+            temperature: Temperature parameter
+            max_tokens: Max generation length
+            system_prompt: System prompt
         
         Returns:
-            ModelExecutionResult: 执行结果
+            ModelExecutionResult: Execute结果
         """
         key = self._get_model_key(business_unit_id, agent_name, model_name)
         
@@ -187,20 +187,20 @@ class ModelExecutorService:
         max_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """流式执行模型
+        """Stream execution of模型
         
         Args:
             business_unit_id: Business Unit ID
-            agent_name: Agent 名称
-            model_name: Model 名称
-            input_text: 用户输入
-            context: 上下文
-            temperature: 温度参数
-            max_tokens: 最大生成长度
-            system_prompt: 系统提示词
+            agent_name: Agent name
+            model_name: Model name
+            input_text: User input
+            context: Context
+            temperature: Temperature parameter
+            max_tokens: Max generation length
+            system_prompt: System prompt
         
         Yields:
-            执行事件
+            Execute事件
         """
         key = self._get_model_key(business_unit_id, agent_name, model_name)
         
@@ -217,7 +217,7 @@ class ModelExecutorService:
         model.is_executing = True
         
         try:
-            # 发送开始事件
+            # Send start event
             yield {
                 "event_type": "state_change",
                 "execution_id": execution_id,
@@ -225,13 +225,13 @@ class ModelExecutorService:
                 "message": f"Starting execution with model {model_name}"
             }
             
-            # 发送思考事件
+            # Send thinking event
             yield {
                 "event_type": "thinking",
                 "thinking": f"Processing with {model.provider or 'model'}..."
             }
             
-            # 根据模型类型执行
+            # 根据模型类型Execute
             if model.model_type == 'endpoint':
                 async for event in self._stream_endpoint_model(
                     model, input_text, temperature, max_tokens, system_prompt
@@ -243,7 +243,7 @@ class ModelExecutorService:
                 ):
                     yield event
             
-            # 发送完成事件
+            # Send completion event
             yield {
                 "event_type": "state_change",
                 "execution_id": execution_id,
@@ -268,16 +268,16 @@ class ModelExecutorService:
         max_tokens: Optional[int],
         system_prompt: Optional[str]
     ) -> tuple[str, Optional[Dict[str, int]]]:
-        """调用 API 端点模型"""
+        """Call API endpoint model"""
         import httpx
         
-        # 构建消息
+        # Build消息
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": input_text})
         
-        # 构建请求体
+        # Buildrequest体
         request_body: Dict[str, Any] = {
             "model": model.model_id,
             "messages": messages,
@@ -287,12 +287,12 @@ class ModelExecutorService:
         if max_tokens is not None:
             request_body["max_tokens"] = max_tokens
         
-        # 确定 API URL
+        # Determine API URL
         api_url = model.api_base_url or "https://api.openai.com/v1"
         if not api_url.endswith("/chat/completions"):
             api_url = f"{api_url.rstrip('/')}/chat/completions"
         
-        # 发送请求
+        # 发送request
         headers = {
             "Content-Type": "application/json",
         }
@@ -304,7 +304,7 @@ class ModelExecutorService:
             response.raise_for_status()
             result = response.json()
         
-        # 解析响应
+        # Parseresponse
         output = result.get("choices", [{}])[0].get("message", {}).get("content", "")
         usage = result.get("usage")
         
@@ -318,8 +318,8 @@ class ModelExecutorService:
         max_tokens: Optional[int],
         system_prompt: Optional[str]
     ) -> tuple[str, Optional[Dict[str, int]]]:
-        """调用本地模型（暂时返回模拟响应）"""
-        # TODO: 集成本地模型运行时（如 llama.cpp, Ollama 等）
+        """调用本地模型 (暂时返回模拟response)"""
+        # TODO: 集成本地模型运行时 (如 llama.cpp, Ollama 等)
         return f"[Local Model Response] This is a placeholder response for: {input_text}", None
     
     async def _stream_endpoint_model(
@@ -330,16 +330,16 @@ class ModelExecutorService:
         max_tokens: Optional[int],
         system_prompt: Optional[str]
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """流式调用 API 端点模型"""
+        """流式Call API endpoint model"""
         import httpx
         
-        # 构建消息
+        # Build消息
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": input_text})
         
-        # 构建请求体
+        # Buildrequest体
         request_body: Dict[str, Any] = {
             "model": model.model_id,
             "messages": messages,
@@ -350,12 +350,12 @@ class ModelExecutorService:
         if max_tokens is not None:
             request_body["max_tokens"] = max_tokens
         
-        # 确定 API URL
+        # Determine API URL
         api_url = model.api_base_url or "https://api.openai.com/v1"
         if not api_url.endswith("/chat/completions"):
             api_url = f"{api_url.rstrip('/')}/chat/completions"
         
-        # 发送请求
+        # 发送request
         headers = {
             "Content-Type": "application/json",
         }
@@ -392,7 +392,7 @@ class ModelExecutorService:
                         except:
                             continue
         
-        # 发送最终消息
+        # Send final message
         yield {
             "event_type": "message_received",
             "message": full_content
@@ -406,13 +406,13 @@ class ModelExecutorService:
         max_tokens: Optional[int],
         system_prompt: Optional[str]
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """流式调用本地模型（暂时返回模拟响应）"""
+        """流式调用本地模型 (暂时返回模拟response)"""
         import asyncio
         
         # TODO: 集成本地模型运行时
         response = f"[Local Model Response] This is a placeholder streaming response for: {input_text}"
         
-        # 模拟流式输出
+        # Simulate streaming output
         words = response.split()
         full_content = ""
         
@@ -438,7 +438,7 @@ class ModelExecutorService:
         agent_name: str,
         model_name: str
     ) -> Optional[Dict[str, Any]]:
-        """获取模型执行状态"""
+        """Get model execution状态"""
         key = self._get_model_key(business_unit_id, agent_name, model_name)
         
         if key not in self._loaded_models:
@@ -458,7 +458,7 @@ class ModelExecutorService:
         agent_name: str,
         model_name: str
     ) -> bool:
-        """取消模型执行"""
+        """Cancel model execution"""
         key = self._get_model_key(business_unit_id, agent_name, model_name)
         
         if key not in self._loaded_models:
@@ -480,7 +480,7 @@ class ModelExecutorService:
         agent_name: str,
         model_name: str
     ) -> bool:
-        """清理模型资源"""
+        """Clean up model resources"""
         key = self._get_model_key(business_unit_id, agent_name, model_name)
         
         if key not in self._loaded_models:
@@ -492,7 +492,7 @@ class ModelExecutorService:
         return True
     
     def list_loaded_models(self) -> list:
-        """列出已加载的模型"""
+        """List loaded models"""
         return [
             {
                 "business_unit_id": m.business_unit_id,
@@ -507,12 +507,12 @@ class ModelExecutorService:
         ]
 
 
-# 全局单例
+# Global singleton
 _model_executor_service: Optional[ModelExecutorService] = None
 
 
 def get_model_executor_service() -> ModelExecutorService:
-    """获取 Model 执行器服务单例"""
+    """Get Model executor service单例"""
     global _model_executor_service
     if _model_executor_service is None:
         _model_executor_service = ModelExecutorService()

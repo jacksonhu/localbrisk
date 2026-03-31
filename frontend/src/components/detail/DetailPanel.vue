@@ -18,15 +18,18 @@
           <span class="truncate">{{ selectedOutputFile.relative_path }}</span>
         </div>
 
-        <div v-if="isMarkdownOutput" class="flex items-center gap-1">
-          <button
-            class="px-2.5 py-1.5 text-xs rounded-md border border-border transition-colors flex items-center gap-1"
-            :class="outputViewMode === 'render' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted text-foreground'"
-            @click="outputViewMode = 'render'"
-          >
-            <FileText class="w-3.5 h-3.5" />
-            {{ t('viewer.preview') }}
-          </button>
+        <div class="flex items-center gap-1">
+          <!-- Edit / Preview toggle (for markdown) -->
+          <template v-if="isMarkdownOutput">
+            <button
+              class="px-2.5 py-1.5 text-xs rounded-md border border-border transition-colors flex items-center gap-1"
+              :class="outputViewMode === 'render' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted text-foreground'"
+              @click="outputViewMode = 'render'"
+            >
+              <FileText class="w-3.5 h-3.5" />
+              {{ t('viewer.preview') }}
+            </button>
+          </template>
           <button
             class="px-2.5 py-1.5 text-xs rounded-md border border-border transition-colors flex items-center gap-1"
             :class="outputViewMode === 'source' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted text-foreground'"
@@ -35,16 +38,46 @@
             <FileCode class="w-3.5 h-3.5" />
             {{ t('viewer.source') }}
           </button>
+          <button
+            class="px-2.5 py-1.5 text-xs rounded-md border border-border transition-colors flex items-center gap-1"
+            :class="outputViewMode === 'edit' ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted text-foreground'"
+            @click="enterEditMode"
+          >
+            <Pencil class="w-3.5 h-3.5" />
+            {{ t('common.edit') || 'Edit' }}
+          </button>
+
+          <!-- Save button (visible in edit mode) -->
+          <button
+            v-if="outputViewMode === 'edit' && outputEditModified"
+            class="px-2.5 py-1.5 text-xs rounded-md border transition-colors flex items-center gap-1 bg-green-600 text-white border-green-600 hover:bg-green-700"
+            :disabled="savingOutputFile"
+            @click="saveOutputFile"
+          >
+            <Save class="w-3.5 h-3.5" />
+            {{ savingOutputFile ? '...' : (t('common.save') || 'Save') }}
+          </button>
         </div>
       </div>
 
       <div class="flex-1 border border-border rounded-lg overflow-hidden bg-background">
+        <!-- Preview mode (rendered markdown) -->
         <div
           v-if="isMarkdownOutput && outputViewMode === 'render'"
           class="h-full overflow-auto p-4"
         >
           <div class="prose prose-sm dark:prose-invert max-w-none output-markdown-body" v-html="renderedOutputHtml"></div>
         </div>
+
+        <!-- Edit mode -->
+        <textarea
+          v-else-if="outputViewMode === 'edit'"
+          v-model="outputEditContent"
+          class="h-full w-full overflow-auto p-4 text-sm leading-6 whitespace-pre-wrap break-words font-mono bg-background text-foreground resize-none focus:outline-none"
+          spellcheck="false"
+        ></textarea>
+
+        <!-- Source mode (read-only) -->
         <pre v-else class="h-full overflow-auto p-4 text-sm leading-6 whitespace-pre-wrap break-words">{{ selectedOutputFile.content }}</pre>
       </div>
     </div>
@@ -370,7 +403,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue"
 import { useI18n } from "vue-i18n";
 import { 
   ArrowLeft, ChevronRight, ChevronDown, Folder, Pencil, Search, Plus, 
-  Database, HardDrive, Trash2, FileText, FileCode, Bot, PlugZap
+  Database, HardDrive, Trash2, FileText, FileCode, Bot, PlugZap, Save
 } from "lucide-vue-next";
 import AssetBundleDialog from "@/components/catalog/AssetBundleDialog.vue";
 import CreateAgentDialog from "@/components/catalog/CreateAgentDialog.vue";
@@ -401,7 +434,45 @@ const selectedAgent = computed(() => store.selectedAgent.value);
 const selectedModel = computed(() => store.selectedModel.value);
 const selectedOutputFile = computed(() => store.selectedOutputFile.value);
 
-const outputViewMode = ref<'render' | 'source'>('source');
+const outputViewMode = ref<'render' | 'source' | 'edit'>('source');
+
+// Output file editing state
+const outputEditContent = ref('');
+const outputEditModified = ref(false);
+const savingOutputFile = ref(false);
+
+function enterEditMode() {
+  outputEditContent.value = selectedOutputFile.value?.content || '';
+  outputEditModified.value = false;
+  outputViewMode.value = 'edit';
+}
+
+// Track modifications in edit mode
+watch(outputEditContent, (newVal) => {
+  if (outputViewMode.value === 'edit') {
+    outputEditModified.value = newVal !== (selectedOutputFile.value?.content || '');
+  }
+});
+
+async function saveOutputFile() {
+  if (!selectedOutputFile.value || !selectedAgent.value || !selectedBusinessUnit.value) return;
+  savingOutputFile.value = true;
+  try {
+    const result = await businessUnitApi.saveOutputFileContent(
+      selectedBusinessUnit.value.id,
+      selectedAgent.value.name,
+      selectedOutputFile.value.relative_path,
+      outputEditContent.value,
+    );
+    // Update the in-memory content so preview/source reflect the saved version
+    store.selectedOutputFile.value = result;
+    outputEditModified.value = false;
+  } catch (e) {
+    console.error('Failed to save output file:', e);
+  } finally {
+    savingOutputFile.value = false;
+  }
+}
 
 function isMarkdownPath(path?: string): boolean {
   return !!path && /\.(md|markdown)$/i.test(path);
@@ -411,6 +482,8 @@ const isMarkdownOutput = computed(() => isMarkdownPath(selectedOutputFile.value?
 
 watch(selectedOutputFile, (file) => {
   outputViewMode.value = isMarkdownPath(file?.relative_path) ? 'render' : 'source';
+  outputEditContent.value = '';
+  outputEditModified.value = false;
 }, { immediate: true });
 
 type MermaidBlock = { id: string; code: string };

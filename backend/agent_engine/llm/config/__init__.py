@@ -1,5 +1,5 @@
 """
-LLM 配置模块
+LLM Configuration Module
 """
 
 from .providers import (

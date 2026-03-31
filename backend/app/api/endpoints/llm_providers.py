@@ -1,7 +1,7 @@
 """
-LLM 提供商 API 端点
+LLM Provider API Endpoints
 
-提供 LLM 配置的 RESTful API 接口，供前端获取模型配置信息。
+Provides RESTful API for LLM config, used by frontend to get model configuration.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -21,11 +21,11 @@ router = APIRouter()
 
 
 # ============================================================
-# 响应模型
+# Response models
 # ============================================================
 
 class ProviderResponse(BaseModel):
-    """提供商响应模型"""
+    """Provider response model"""
     value: str
     label: str
     provider_type: str
@@ -38,7 +38,7 @@ class ProviderResponse(BaseModel):
 
 
 class ModelResponse(BaseModel):
-    """模型响应模型"""
+    """Model response model"""
     value: str
     label: str
     context_length: int | None = None
@@ -49,12 +49,12 @@ class ModelResponse(BaseModel):
 
 
 class DefaultUrlResponse(BaseModel):
-    """默认 URL 响应模型"""
+    """Default URL response model"""
     default_url: str
 
 
 class ProviderSummaryResponse(BaseModel):
-    """提供商摘要响应模型"""
+    """provider摘要response模型"""
     endpoint_count: int
     local_count: int
     total_models: int
@@ -68,9 +68,9 @@ class ProviderSummaryResponse(BaseModel):
 @router.get("/providers/endpoint", response_model=List[ProviderResponse])
 async def list_endpoint_providers() -> List[Dict[str, Any]]:
     """
-    获取 API 端点提供商列表
+    Get API endpoint provider列表
     
-    返回所有支持的 API 端点 LLM 提供商，包括 OpenAI、Claude、通义千问等。
+    返回所有支持的 API 端点 LLM provider, 包括 OpenAI、Claude、Qwen等.
     """
     return get_endpoint_providers()
 
@@ -78,9 +78,9 @@ async def list_endpoint_providers() -> List[Dict[str, Any]]:
 @router.get("/providers/local", response_model=List[ProviderResponse])
 async def list_local_providers() -> List[Dict[str, Any]]:
     """
-    获取本地模型提供商列表
+    GetLocal model provider列表
     
-    返回所有支持的本地部署模型提供商，如 Llama、Mistral、ChatGLM 等。
+    返回所有支持的本地部署模型provider, 如 Llama、Mistral、ChatGLM 等.
     """
     return get_local_providers()
 
@@ -88,9 +88,9 @@ async def list_local_providers() -> List[Dict[str, Any]]:
 @router.get("/providers", response_model=List[ProviderResponse])
 async def list_all_providers() -> List[Dict[str, Any]]:
     """
-    获取所有提供商列表
+    Get所有provider列表
     
-    返回所有支持的 LLM 提供商，包括 API 端点和本地模型两种类型。
+    返回所有支持的 LLM provider, 包括 API 端点和本地模型两种类型.
     """
     registry = ModelRegistry()
     return [p.to_dict() for p in registry.get_all_providers()]
@@ -99,13 +99,13 @@ async def list_all_providers() -> List[Dict[str, Any]]:
 @router.get("/providers/{provider_id}", response_model=ProviderResponse)
 async def get_provider(provider_id: str) -> Dict[str, Any]:
     """
-    获取指定提供商信息
+    Get指定provider信息
     
     Args:
-        provider_id: 提供商标识符 (如 openai, claude, qianwen 等)
+        provider_id: provider标识符 (如 openai, claude, qianwen 等)
         
     Returns:
-        提供商详细配置信息
+        provider详细配置信息
     """
     registry = ModelRegistry()
     provider = registry.get_provider(provider_id)
@@ -120,24 +120,24 @@ async def get_provider(provider_id: str) -> Dict[str, Any]:
 @router.get("/providers/{provider_id}/models", response_model=List[ModelResponse])
 async def list_provider_models(provider_id: str) -> List[Dict[str, Any]]:
     """
-    获取指定提供商的模型列表
+    Get指定provider的model list
     
     Args:
-        provider_id: 提供商标识符
+        provider_id: provider标识符
         
     Returns:
-        该提供商支持的所有模型列表
+        该provider支持的所有model list
     """
     models = get_provider_models(provider_id)
     if not models:
-        # 检查提供商是否存在
+        # Checkproviderexists
         registry = ModelRegistry()
         if not registry.is_valid_provider(provider_id):
             raise HTTPException(
                 status_code=404, 
                 detail=f"Provider '{provider_id}' not found"
             )
-        # 提供商存在但没有模型（如本地模型提供商）
+        # provider存在但没有模型 (如Local model provider)
         return []
     return models
 
@@ -145,13 +145,13 @@ async def list_provider_models(provider_id: str) -> List[Dict[str, Any]]:
 @router.get("/providers/{provider_id}/default-url", response_model=DefaultUrlResponse)
 async def get_default_url(provider_id: str) -> Dict[str, str]:
     """
-    获取提供商默认 API URL
+    Getprovider默认 API URL
     
     Args:
-        provider_id: 提供商标识符
+        provider_id: provider标识符
         
     Returns:
-        提供商的默认 API 基础 URL
+        provider的默认 API 基础 URL
     """
     registry = ModelRegistry()
     if not registry.is_valid_provider(provider_id):
@@ -165,10 +165,10 @@ async def get_default_url(provider_id: str) -> Dict[str, str]:
 @router.get("/providers/{provider_id}/models/{model_id}", response_model=ModelResponse)
 async def get_model(provider_id: str, model_id: str) -> Dict[str, Any]:
     """
-    获取指定模型信息
+    Get指定model info
     
     Args:
-        provider_id: 提供商标识符
+        provider_id: provider标识符
         model_id: 模型标识符
         
     Returns:
@@ -187,9 +187,9 @@ async def get_model(provider_id: str, model_id: str) -> Dict[str, Any]:
 @router.get("/summary", response_model=ProviderSummaryResponse)
 async def get_summary() -> Dict[str, Any]:
     """
-    获取提供商摘要信息
+    Getprovider摘要信息
     
-    返回所有提供商和模型的统计信息。
+    返回所有provider和模型的统计信息.
     """
     registry = ModelRegistry()
     return registry.get_provider_summary()
@@ -198,13 +198,13 @@ async def get_summary() -> Dict[str, Any]:
 @router.get("/search/providers")
 async def search_providers(q: str) -> List[Dict[str, Any]]:
     """
-    搜索提供商
+    搜索provider
     
     Args:
         q: 搜索关键词
         
     Returns:
-        匹配的提供商列表
+        匹配的provider列表
     """
     registry = ModelRegistry()
     providers = registry.search_providers(q)
@@ -220,7 +220,7 @@ async def search_models(q: str) -> List[Dict[str, Any]]:
         q: 搜索关键词
         
     Returns:
-        匹配的模型列表（包含提供商信息）
+        匹配的model list (containsprovider信息)
     """
     registry = ModelRegistry()
     return registry.search_models(q)

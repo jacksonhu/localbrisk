@@ -1,4 +1,4 @@
-"""Compute Engine 对外导出。"""
+"""Compute Engine public exports."""
 
 from .duckdb_service import (
     DuckDBService,

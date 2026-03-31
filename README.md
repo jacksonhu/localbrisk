@@ -5,6 +5,98 @@
 > **Local-First, Privacy-Safe, All-in-One AI Agent Workstation.**
 
 LocalBrisk is a cross-platform desktop AI assistant focused on **local security**, **ontology modeling**, and **blazing-fast experience**. It integrates agents, data assets, large language models, and local compute into a single application — enabling data analysis, knowledge management, and intelligent conversations without any cloud dependency.
+![img.png](img.png)
+### Why LocalBrisk?
+
+- **Local Agent Sandbox**: Every Agent runs inside an isolated local sandbox with its own virtual environment, file system backend, and tool permissions — your code execution and data processing never leave your machine.
+- **Federated Local + Remote Analysis**: Analyze local sensitive files alongside cloud databases **without uploading anything**. Local Parquet/CSV/Excel files and remote MySQL/PostgreSQL tables are unified under the same AssetBundle, and the Agent queries them in-place through a federated virtual file system.
+- **Unified Ontology for Local & Cloud Data**: Model relationships and actions across local files and cloud data sources in a single `ontology.yaml`. The Agent reasons over the combined ontology graph — no distinction between where data physically resides.
+- **Git-Ready Configuration as Code**: All Agent definitions, ontology models, memory prompts, skill packages, and asset bundle configs are **plain YAML/Markdown files** stored under `~/.localbrisk/App_Data/Catalogs/`. No database, no proprietary format — just a directory tree you can `git init`, version-control, branch, and share across teams via any Git hosting service.
+- **Your Laptop, Your Agent Company**: Each BusinessUnit represents an organizational unit; within it, multiple Agents assume different roles — data analyst, research assistant, code reviewer, operations monitor. Your single local machine becomes a **self-contained AI agent organization** where specialized agents collaborate, share data assets through the same ontology, and execute cross-functional workflows — all without a cloud backend.
+
+### Business Scenario: E-Commerce Agent Company
+
+> Your laptop is an **Agent Company**. You are the **CEO** — directing every department, managing digital assets, and orchestrating workflows through natural language.
+```
+🖥️ WORKSPACE (You = CEO)
+│
+├── 📁 Market_sales                          ── BU: Sales & Marketing Dept
+│   ├── 🤖 Sales_analyst                     ── Agent: analyzes order & customer data
+│   │   ├── 📁 Skills        (sql_gen, report_builder)
+│   │   ├── 📁 Memories       (sales_playbook.md, kpi_definitions.md)
+│   │   ├── 📁 Models         (deepseek-chat ✅, gpt-4o)
+│   │   ├── 📁 MCPs           (web_search, python_executor)
+│   │   └── 📁 output/        ← sandbox workspace (isolated)
+│   ├── 🤖 Ad_optimizer                      ── Agent: optimizes ad spend & ROI
+│   │   ├── 📁 Skills        (ab_test, channel_analysis)
+│   │   ├── 📁 Memories       (campaign_history.md)
+│   │   ├── 📁 Models         (qwen-max ✅)
+│   │   └── 📁 output/        ← sandbox workspace
+│   ├── 🗄️ sales_db          🔌 external     ── AssetBundle: MySQL remote database
+│   │   ├── 📊 orders                         (synced table metadata)
+│   │   ├── 📊 customers
+│   │   ├── 📊 products
+│   │   └── 📄 ontology.yaml                  (fk: orders→customers, derived: monthly_revenue)
+│   └── 🗄️ marketing_docs       local        ── AssetBundle: local files
+│       ├── 📂 campaigns/                      (PDF/PPT campaign decks)
+│       ├── 📂 competitor_reports/             (Excel/CSV market data)
+│       └── 📊 ad_spend.csv
+│
+├── 📁 Supply_chain                          ── BU: Supply Chain Dept
+│   ├── 🤖 Inventory_mgr                     ── Agent: demand forecasting & stock management
+│   │   ├── 📁 Skills        (forecast, reorder_alert)
+│   │   ├── 📁 Models         (deepseek-chat ✅)
+│   │   └── 📁 output/        ← sandbox workspace
+│   ├── 🤖 Logistics_bot                     ── Agent: shipment tracking & route optimization
+│   │   ├── 📁 Skills        (tracking, route_calc)
+│   │   └── 📁 output/        ← sandbox workspace
+│   ├── 🗄️ warehouse_db      🔌 external     ── AssetBundle: PostgreSQL remote database
+│   │   ├── 📊 inventory
+│   │   ├── 📊 sku_master
+│   │   └── 📄 ontology.yaml                  (fk: inventory→sku_master)
+│   └── 🗄️ shipping_docs        local        ── AssetBundle: local contracts & routes
+│       ├── 📂 contracts/                      (PDF supplier agreements)
+│       └── 📊 routes.parquet
+│
+├── 📁 Finance                               ── BU: Finance Dept
+│   ├── 🤖 Finance_analyst                   ── Agent: P&L analysis & financial reporting
+│   │   ├── 📁 Skills        (pivot_table, trend_analysis)
+│   │   ├── 📁 Models         (gpt-4o ✅)
+│   │   └── 📁 output/        ← sandbox workspace
+│   ├── 🤖 Tax_assistant                     ── Agent: tax calculation & invoice processing
+│   │   ├── 📁 Skills        (tax_calc, invoice_ocr)
+│   │   └── 📁 output/        ← sandbox workspace
+│   ├── 🗄️ accounting_db     🔌 external     ── AssetBundle: MySQL financial database
+│   │   ├── 📊 general_ledger
+│   │   ├── 📊 accounts_payable
+│   │   ├── 📊 accounts_receivable
+│   │   └── 📄 ontology.yaml                  (derived: monthly_pnl ← GL entries)
+│   └── 🗄️ tax_docs             local        ── AssetBundle: local tax documents
+│       ├── 📂 invoices/                       (scanned invoice PDFs)
+│       └── 📊 tax_rates.csv
+│
+└── 🔧 Shared Infrastructure (invisible to tree, powers everything)
+    ├── DuckDB Compute Engine                  (cross-BU SQL analytics)
+    ├── LLM Gateway                            (OpenAI / DeepSeek / local models)
+    └── Git-versioned Catalogs/                (all configs = plain YAML/MD files)
+```
+
+| Concept | In LocalBrisk | In This Scenario |
+|---------|---------------|------------------|
+| **You** | WORKSPACE operator | CEO — directs all departments via natural language |
+| **BusinessUnit** | Top-level org folder | Department: Sales, Supply Chain, Finance |
+| **Agent** | AI employee with own sandbox | Role: Sales Analyst, Inventory Mgr, Tax Assistant... |
+| Agent sub-resources | Skills / Memories / Models / MCPs / output | Each agent's capabilities, knowledge, LLM config, and isolated workspace |
+| **AssetBundle** | Data asset collection | Dept data: remote DB tables (🗄️ external) + local files (📂 local) |
+| **Ontology** | `ontology.yaml` in each bundle | Semantic relationships & actions across all assets |
+
+**Key points:**
+- **You = CEO**: Click any Agent to open a Chat and direct it with natural language — no coding required.
+- **BusinessUnit = Department**: Each BU is an organizational boundary with its own staff (Agents) and data (AssetBundles).
+- **Agent = Employee Role**: Each Agent has specialized skills, dedicated memories, and its own model — like hiring a domain expert.
+- **Federated Data**: External bundles (remote DB) and local bundles (your files) coexist side-by-side — the Agent queries both in-place, **zero data upload**.
+- **Sandbox Isolation**: Each Agent's `output/` is a private workspace; shared assets are mounted read-only.
+- **Ontology Bridges Everything**: `ontology.yaml` defines how tables relate, where metrics come from, and what actions to trigger — the Agent reasons over the full graph.
 
 ---
 
@@ -13,10 +105,14 @@ LocalBrisk is a cross-platform desktop AI assistant focused on **local security*
 | Keyword | Description |
 |---------|-------------|
 | **Fully Local** | Physical data isolation, local model inference, zero privacy risk |
+| **Local Agent Sandbox** | Each Agent runs in an isolated sandbox (venv + CompositeBackend), code execution and file I/O stay on-device |
+| **Federated Analysis** | Query local files and remote databases together — sensitive data never leaves your machine |
+| **Unified Ontology** | One semantic model spans local & cloud assets; Agent reasons across the full knowledge graph |
 | **Unified Asset Management** | Three-tier architecture: BusinessUnit → Agent / AssetBundle → Leaf Assets |
 | **One-Click Install** | Minimal installer with built-in lightweight inference engine, no complex setup |
 | **Multi-Model Support** | OpenAI / Claude / Qwen / DeepSeek / Gemini / Zhipu / Moonshot APIs + local models |
 | **Agent-as-a-Service** | Each Agent has its own Memory, Skills, Models, and MCP (Tools), with streaming dialogue and multi-step reasoning |
+| **Local Agent Company** | Each BusinessUnit is an org unit with role-specialized Agents — your laptop becomes a self-contained AI company |
 
 ---
 
@@ -43,11 +139,16 @@ LocalBrisk is a cross-platform desktop AI assistant focused on **local security*
 │                         │                                        │
 │                         ▼                                        │
 │  ┌─────────────────────────────────────────────┐               │
-│  │   ~/.localbrisk/App_Data/Catalogs/ (FS)       │               │
+│  │   ~/.localbrisk/App_Data/Catalogs/ (FS)       │  ◄── Git-ready│
+│  │     ├── {bu}/agents/       (YAML + MD)        │      plain    │
+│  │     ├── {bu}/asset_bundles/ (YAML)            │      files    │
+│  │     └── ontology.yaml                         │               │
 │  │   ~/.localbrisk/localbrisk.db (DuckDB)        │               │
 │  └─────────────────────────────────────────────┘               │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **Configuration as Code**: The entire `Catalogs/` directory is composed of plain YAML and Markdown files — no proprietary binary formats. You can `git init` this directory to version-control Agent definitions, ontology models, memory prompts, and skill packages, then push to any Git remote for team sharing and collaboration.
 
 ### Three-Layer Collaboration
 
@@ -334,6 +435,20 @@ LocalBrisk/
 
 ## Core Features
 
+### Local Agent Sandbox
+
+- Each Agent runs inside an **isolated local sandbox** — dedicated Python venv, file system backend (`CompositeBackend`), and tool permission boundaries
+- Code execution (`LocalShellBackend`) is confined to the Agent's `output/` directory; skills, memories, and asset volumes are mounted as **read-only virtual paths**
+- All intermediate results, conversation history, and checkpoints persist locally — nothing is sent to any cloud service
+- Sandbox environment variables and PATH are fully isolated per Agent
+
+### Federated Local + Remote Analysis
+
+- **No upload required**: local sensitive files (Parquet / CSV / Excel) and remote databases (MySQL / PostgreSQL / DuckDB) are unified under the same AssetBundle
+- The Agent accesses local volumes and remote tables through a **federated virtual file system** (`CompositeBackend` routes) — identical API, no data movement
+- Query local Excel + remote MySQL in a single Agent conversation, with DuckDB as the local analytical engine
+- External database metadata is synced locally as YAML; the actual query is proxied on-demand — raw data never leaves its source
+
 ### Agent Chat
 
 - Each Agent has independent models, memories, skills, and MCP tools
@@ -348,9 +463,9 @@ LocalBrisk/
 - Table data preview, document viewers (PDF/Office/Markdown/Excel)
 - Skills imported as zip packages, Memories edited as Markdown
 
-### Ontology Modeling
+### Ontology Modeling — Unified Local & Cloud
 
-- Define semantic relationships between data assets at the AssetBundle level (`ontology.yaml`)
+- Define semantic relationships between **local files and cloud data sources** in a single `ontology.yaml` — the Agent sees one unified knowledge graph regardless of where data physically resides
 - **Five relationship types**: foreign_key, derived_from, depends_on, references, contains
 - **Four action types**: SQL script, custom function, Agent skill, multi-step pipeline
 - Agent runtime auto-loads ontology for join path inference, data lineage tracing, and smart action orchestration
@@ -504,9 +619,10 @@ Each message from Agent execution is a `StreamMessage` with a type field for fro
 | Phase 3 | Polars + LangGraph unified asset access, Agent streaming execution |
 | Phase 4 | Visual polish, local model support, i18n refinement |
 | Phase 5 | Ontology Modeling — semantic data relationships, Action engine, Agent auto-orchestration |
+| Phase 6 | Local Agent Company — multi-Agent collaboration within a BusinessUnit, role-based task delegation, cross-Agent workflow orchestration |
 
 ---
 
 ## License
 
-Copyright © 2024 LocalBrisk Team. All rights reserved.
+Copyright © 2026 LocalBrisk Team. All rights reserved.

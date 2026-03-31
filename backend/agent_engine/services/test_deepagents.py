@@ -1,7 +1,7 @@
 import sys
 import os
 
-# 将 backend 目录添加到 Python 模块搜索路径
+# 将 backend directory添加到 Python 模块搜索路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import logging
@@ -13,14 +13,14 @@ from pydantic import BaseModel, Field
 
 from agent_engine.services import get_agent_runtime_service
 
-# 配置日志级别为 INFO，确保 info 级别日志能输出
+# Config日志级别为 INFO, 确保 info 级别日志能输出
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
 
-# 设置httpx日志以捕获HTTP请求
+# 设置httpx日志以捕获HTTPrequest
 logging.getLogger("httpx").setLevel(logging.INFO)
 logging.getLogger("httpcore").setLevel(logging.INFO)
 
@@ -37,12 +37,12 @@ def load_agent() -> Any:
         state = service.load_agent("myunit", "Data_analyst")
 
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"Agent 配置不存在: {e}")
+        raise HTTPException(status_code=404, detail=f"Agent config not found: {e}")
     except ImportError as e:
-        raise HTTPException(status_code=503, detail=f"缺少依赖: {e}")
+        raise HTTPException(status_code=503, detail=f"Missing dependencies: {e}")
     except Exception as e:
-        logger.exception(f"加载 Agent 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"加载 Agent 失败: {e}")
+        logger.exception(f"Failed to load  Agent failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Load Agent failed: {e}")
 
 
 async def execute_agent_streaming(
@@ -50,7 +50,7 @@ async def execute_agent_streaming(
         agent_name: str,
         input: str,
 ):
-    """流式执行 Agent，输出 SSE 格式事件"""
+    """Stream execution of Agent, 输出 SSE 格式事件"""
     try:
         service = get_agent_runtime_service()
 
@@ -62,7 +62,7 @@ async def execute_agent_streaming(
             # 输出完整 SSE 格式
             print(event.to_sse())
     except Exception as e:
-        logger.exception(f"流式执行失败: {e}")
+        logger.exception(f"Streaming execution failed: {e}")
         print(f"ERROR: {e}")
 
 
@@ -71,7 +71,7 @@ async def debug_raw_stream(
         agent_name: str,
         input_text: str,
 ):
-    """调试：直接查看 LangGraph 原始流式输出"""
+    """调试:直接查看 LangGraph 原始流式输出"""
     service = get_agent_runtime_service()
     state = await service.load_agent(business_unit_id, agent_name)
     agent = state.agent_instance

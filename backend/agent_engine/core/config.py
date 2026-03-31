@@ -1,6 +1,6 @@
 """
-Agent 配置模型定义
-基于现有 Pydantic 模型扩展，实现 agent_spec.yaml 配置的强类型验证和序列化
+Agent Configuration Model Definitions
+Extends existing Pydantic models for strongly-typed validation and serialization of agent_spec.yaml
 """
 
 from datetime import datetime
@@ -10,17 +10,17 @@ from enum import Enum
 
 
 class RunMode(str, Enum):
-    """运行模式"""
-    DEBUG = "debug"      # 调试模式
-    SERVICE = "service"  # 服务模式
+    """Run mode"""
+    DEBUG = "debug"      # Debug mode
+    SERVICE = "service"  # Service mode
 
 
 class ModelReference(BaseModel):
-    """模型引用
+    """Model reference
     
-    支持格式:
-    1. 仅模型名称: model_name (Model 在 Agent 目录下)
-    2. schema.model 格式: schema_name.model_name (兼容旧格式)
+    Supported formats:
+    1. Model name only: model_name (model in Agent directory)
+    2. schema.model format: schema_name.model_name (compatible with old format)
     """
     schema_name: Optional[str] = None
     model_name: str
@@ -28,11 +28,11 @@ class ModelReference(BaseModel):
     
     @classmethod
     def parse(cls, reference: str) -> "ModelReference":
-        """解析模型引用字符串"""
+        """Parse model reference string"""
         if not reference:
-            raise ValueError("模型引用不能为空")
+            raise ValueError("Model reference must not be empty")
         
-        # 支持新格式：仅模型名称（Model 在 Agent 目录下）
+        # Support new format: model name only (model in Agent directory)
         if "." not in reference:
             return cls(
                 schema_name=None,
@@ -40,7 +40,7 @@ class ModelReference(BaseModel):
                 full_reference=reference
             )
         
-        # 兼容旧格式：schema.model
+        # Compatible with old format: schema.model
         parts = reference.split(".", 1)
         return cls(
             schema_name=parts[0],
@@ -50,11 +50,11 @@ class ModelReference(BaseModel):
 
 
 class SkillConfig(BaseModel):
-    """技能配置"""
+    """Skill config"""
     name: str
     enabled: bool = True
     config_path: Optional[str] = None
-    # 技能详细信息（运行时加载）
+    # Skill details (loaded at runtime)
     display_name: Optional[str] = None
     description: Optional[str] = None
     version: Optional[str] = None
@@ -63,28 +63,28 @@ class SkillConfig(BaseModel):
 
 
 class PromptConfig(BaseModel):
-    """提示词配置"""
+    """Prompt config"""
     name: str
     enabled: bool = True
     file_path: Optional[str] = None
-    # 提示词详细信息（运行时加载）
+    # Prompt details (loaded at runtime)
     content: Optional[str] = None
     display_name: Optional[str] = None
     description: Optional[str] = None
 
 
 class LLMRuntimeConfig(BaseModel):
-    """LLM 运行时配置"""
+    """LLM runtime配置"""
     model_reference: Optional[ModelReference] = None
     temperature: float = Field(default=0.2, ge=0, le=2)
     max_tokens: int = Field(default=4096, ge=1)
     response_format: str = Field(default="text", pattern="^(text|json_object)$")
-    # 运行时解析的完整模型配置
+    # Fully resolved model config at runtime
     resolved_model: Optional[Dict[str, Any]] = None
     
     @classmethod
     def from_agent_llm_config(cls, llm_config: Dict[str, Any]) -> "LLMRuntimeConfig":
-        """从 agent_spec.yaml 的 llm_config 创建"""
+        """Create from agent_spec.yaml llm_config"""
         model_ref = None
         if llm_config.get("llm_model"):
             model_ref = ModelReference.parse(llm_config["llm_model"])
@@ -98,11 +98,11 @@ class LLMRuntimeConfig(BaseModel):
 
 
 class AgentRuntimeConfig(BaseModel):
-    """Agent 运行时配置
+    """Agent runtime配置
     
-    简化的 Agent 运行时配置，仅包含必要的配置项
+    简化的 Agent runtime config, 仅contains必要的配置项
     """
-    # 基础信息
+    # Base info
     agent_name: str
     business_unit_id: str
     display_name: Optional[str] = None
@@ -110,21 +110,21 @@ class AgentRuntimeConfig(BaseModel):
     tags: List[str] = Field(default_factory=list)
     agent_path: Optional[str] = None
     
-    # 核心配置（从 agent_spec.yaml 解析）
+    # Core config (parsed from agent_spec.yaml)
     llm_config: Optional[LLMRuntimeConfig] = None
     
-    # 运行时扩展配置
+    # Runtime extension config
     run_mode: RunMode = RunMode.DEBUG
-    debug_mode: bool = Field(default=False, description="是否启用调试模式")
-    max_execution_time: int = Field(default=300, description="最大执行时间（秒）")
-    max_iterations: int = Field(default=10, description="最大迭代次数")
-    enable_logging: bool = Field(default=True, description="启用日志")
-    enable_tracing: bool = Field(default=False, description="启用追踪")
+    debug_mode: bool = Field(default=False, description="Whether to enable debug mode")
+    max_execution_time: int = Field(default=300, description="Max execution time (seconds)")
+    max_iterations: int = Field(default=10, description="Max iterations")
+    enable_logging: bool = Field(default=True, description="Enable logging")
+    enable_tracing: bool = Field(default=False, description="Enable tracing")
     
-    # 原始配置（备份）
+    # Raw config (备份)
     raw_config: Optional[Dict[str, Any]] = None
     
-    # 元数据
+    # Metadata
     loaded_at: Optional[datetime] = None
     config_version: Optional[str] = None
     
@@ -139,10 +139,10 @@ class AgentRuntimeConfig(BaseModel):
         spec_data: Dict[str, Any],
         agent_path: Optional[str] = None
     ) -> "AgentRuntimeConfig":
-        """从 agent_spec.yaml 数据创建运行时配置"""
+        """Create from agent_spec.yaml data运行时配置"""
         baseinfo = spec_data.get("baseinfo", {})
         
-        # 解析 LLM 配置
+        # Parse LLM 配置
         llm_config = None
         if spec_data.get("llm_config"):
             llm_config = LLMRuntimeConfig.from_agent_llm_config(spec_data["llm_config"])
@@ -160,7 +160,7 @@ class AgentRuntimeConfig(BaseModel):
         )
     
     def get_model_reference(self) -> Optional[ModelReference]:
-        """获取模型引用"""
+        """Get model reference"""
         if self.llm_config and self.llm_config.model_reference:
             return self.llm_config.model_reference
         return None

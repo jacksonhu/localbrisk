@@ -1,8 +1,8 @@
 """
-LLM 提供商配置
+LLM Provider Configuration
 
-该模块包含所有支持的 LLM 提供商和模型配置，
-从前端配置迁移而来，保持前后端一致性。
+This module contains all supported LLM provider and model configurations,
+migrated from frontend to maintain frontend-backend consistency.
 """
 
 from dataclasses import dataclass, field
@@ -11,24 +11,24 @@ from enum import Enum
 
 
 class ProviderType(str, Enum):
-    """提供商类型"""
-    API_ENDPOINT = "api_endpoint"  # API 端点提供商
-    LOCAL_MODEL = "local_model"   # 本地模型提供商
+    """Provider type"""
+    API_ENDPOINT = "api_endpoint"  # API endpoint provider
+    LOCAL_MODEL = "local_model"   # Local model provider
 
 
 @dataclass
 class ModelInfo:
-    """模型信息"""
-    value: str                              # 模型标识符
-    label: str                              # 显示名称
-    context_length: Optional[int] = None    # 上下文长度
-    max_tokens: Optional[int] = None        # 最大输出 token 数
-    supports_streaming: bool = True         # 是否支持流式输出
-    supports_function_calling: bool = False # 是否支持函数调用
-    supports_vision: bool = False           # 是否支持视觉输入
+    """Model info"""
+    value: str                              # Model identifier
+    label: str                              # Display name
+    context_length: Optional[int] = None    # Context length
+    max_tokens: Optional[int] = None        # Max output tokens
+    supports_streaming: bool = True         # Supports streaming output
+    supports_function_calling: bool = False # Supports function calling
+    supports_vision: bool = False           # Supports vision input
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """Convert to dict"""
         return {
             "value": self.value,
             "label": self.label,
@@ -42,21 +42,21 @@ class ModelInfo:
 
 @dataclass
 class ProviderConfig:
-    """提供商配置"""
-    provider_id: str                        # 提供商标识符
-    name: str                               # 显示名称
-    provider_type: ProviderType             # 提供商类型
-    default_base_url: str = ""              # 默认 API 基础 URL
-    models: List[ModelInfo] = field(default_factory=list)  # 支持的模型列表
-    icon: Optional[str] = None              # 图标名称
-    auth_type: str = "api_key"              # 认证类型
-    headers: Dict[str, str] = field(default_factory=dict)  # 额外请求头
-    rate_limit: Optional[int] = None        # 速率限制
-    timeout: int = 60                       # 请求超时时间
-    description: Optional[str] = None       # 描述
+    """Provider config"""
+    provider_id: str                        # Provider identifier
+    name: str                               # Display name
+    provider_type: ProviderType             # Provider type
+    default_base_url: str = ""              # Default API base URL
+    models: List[ModelInfo] = field(default_factory=list)  # Supported model list
+    icon: Optional[str] = None              # Icon name
+    auth_type: str = "api_key"              # Auth type
+    headers: Dict[str, str] = field(default_factory=dict)  # Extra headers
+    rate_limit: Optional[int] = None        # Rate limit
+    timeout: int = 60                       # Request timeout
+    description: Optional[str] = None       # Description
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """Convert to dict"""
         return {
             "value": self.provider_id,
             "label": self.name,
@@ -71,7 +71,7 @@ class ProviderConfig:
 
 
 # ============================================================
-# API 端点提供商配置
+# API Endpoint Provider Configurations
 # ============================================================
 
 ENDPOINT_PROVIDERS: List[ProviderConfig] = [
@@ -82,7 +82,7 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://api.openai.com/v1",
         icon="Sparkles",
-        description="OpenAI GPT 系列模型",
+        description="OpenAI GPT series models",
         models=[
             ModelInfo("gpt-4o", "GPT-4o", context_length=128000, supports_function_calling=True, supports_vision=True),
             ModelInfo("gpt-4o-mini", "GPT-4o Mini", context_length=128000, supports_function_calling=True, supports_vision=True),
@@ -99,7 +99,7 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://api.anthropic.com/v1",
         icon="Bot",
-        description="Anthropic Claude 系列模型",
+        description="Anthropic Claude series models",
         models=[
             ModelInfo("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet", context_length=200000, supports_function_calling=True, supports_vision=True),
             ModelInfo("claude-3-opus-20240229", "Claude 3 Opus", context_length=200000, supports_function_calling=True, supports_vision=True),
@@ -108,14 +108,14 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
         ]
     ),
     
-    # 通义千问 (Qwen)
+    # Qwen (Qwen)
     ProviderConfig(
         provider_id="qianwen",
-        name="通义千问",
+        name="Qwen",
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
         icon="Brain",
-        description="阿里云通义千问系列模型",
+        description="Alibaba Cloud Qwen series models",
         models=[
             ModelInfo("qwen-turbo", "Qwen Turbo", context_length=8000, supports_function_calling=True),
             ModelInfo("qwen-plus", "Qwen Plus", context_length=32000, supports_function_calling=True),
@@ -124,14 +124,14 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
         ]
     ),
     
-    # 百度千帆 (Qianfan)
+    # Baidu Qianfan (Qianfan)
     ProviderConfig(
         provider_id="qianfan",
-        name="百度千帆",
+        name="Baidu Qianfan",
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop",
         icon="Globe",
-        description="百度千帆文心一言系列模型",
+        description="Baidu Qianfan ERNIE series models",
         models=[
             ModelInfo("ernie-4.0-8k", "ERNIE 4.0", context_length=8192, supports_function_calling=True),
             ModelInfo("ernie-3.5-8k", "ERNIE 3.5", context_length=8192, supports_function_calling=True),
@@ -147,7 +147,7 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://generativelanguage.googleapis.com/v1",
         icon="Zap",
-        description="Google Gemini 系列模型",
+        description="Google Gemini series models",
         models=[
             ModelInfo("gemini-1.5-pro", "Gemini 1.5 Pro", context_length=1000000, supports_function_calling=True, supports_vision=True),
             ModelInfo("gemini-1.5-flash", "Gemini 1.5 Flash", context_length=1000000, supports_function_calling=True, supports_vision=True),
@@ -162,21 +162,21 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://api.deepseek.com/v1",
         icon="MessageSquare",
-        description="DeepSeek 系列模型",
+        description="DeepSeek series models",
         models=[
             ModelInfo("deepseek-chat", "DeepSeek Chat", context_length=64000, supports_function_calling=True),
             ModelInfo("deepseek-coder", "DeepSeek Coder", context_length=64000, supports_function_calling=True),
         ]
     ),
     
-    # 智谱 AI (Zhipu)
+    # Zhipu AI (Zhipu)
     ProviderConfig(
         provider_id="zhipu",
-        name="智谱 AI",
+        name="Zhipu AI",
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://open.bigmodel.cn/api/paas/v4",
         icon="Brain",
-        description="智谱 AI GLM 系列模型",
+        description="Zhipu AI GLM series models",
         models=[
             ModelInfo("glm-4", "GLM-4", context_length=128000, supports_function_calling=True),
             ModelInfo("glm-4-flash", "GLM-4 Flash", context_length=128000, supports_function_calling=True),
@@ -191,7 +191,7 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
         provider_type=ProviderType.API_ENDPOINT,
         default_base_url="https://api.moonshot.cn/v1",
         icon="Sparkles",
-        description="Moonshot Kimi 系列模型",
+        description="Moonshot Kimi series models",
         models=[
             ModelInfo("moonshot-v1-8k", "Moonshot V1 8K", context_length=8000, supports_function_calling=True),
             ModelInfo("moonshot-v1-32k", "Moonshot V1 32K", context_length=32000, supports_function_calling=True),
@@ -202,88 +202,88 @@ ENDPOINT_PROVIDERS: List[ProviderConfig] = [
 
 
 # ============================================================
-# 本地模型提供商配置
+# Local Model Provider Configurations
 # ============================================================
 
 LOCAL_PROVIDERS: List[ProviderConfig] = [
     ProviderConfig(
         provider_id="qianwen",
-        name="通义千问 (Qwen)",
+        name="Qwen (Qwen)",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="阿里云通义千问本地模型"
+        description="Alibaba Cloud Qwen local models"
     ),
     ProviderConfig(
         provider_id="deepseek",
         name="DeepSeek",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="DeepSeek 本地模型"
+        description="DeepSeek local models"
     ),
     ProviderConfig(
         provider_id="llama",
         name="Llama",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="Meta Llama 系列本地模型"
+        description="Meta Llama series local models"
     ),
     ProviderConfig(
         provider_id="mistral",
         name="Mistral",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="Mistral AI 本地模型"
+        description="Mistral AI local models"
     ),
     ProviderConfig(
         provider_id="chatglm",
         name="ChatGLM",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="智谱 AI ChatGLM 本地模型"
+        description="Zhipu AI ChatGLM local models"
     ),
     ProviderConfig(
         provider_id="baichuan",
-        name="百川",
+        name="Baichuan",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="百川智能本地模型"
+        description="Baichuan Intelligence local models"
     ),
     ProviderConfig(
         provider_id="internlm",
         name="InternLM",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="上海人工智能实验室 InternLM 本地模型"
+        description="Shanghai AI Lab InternLM local models"
     ),
     ProviderConfig(
         provider_id="qwen2",
         name="Qwen2",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="阿里云 Qwen2 系列本地模型"
+        description="Alibaba Cloud Qwen2 series local models"
     ),
     ProviderConfig(
         provider_id="other",
-        name="其他",
+        name="Other",
         provider_type=ProviderType.LOCAL_MODEL,
-        description="其他本地模型"
+        description="Other local models"
     ),
 ]
 
 
 # ============================================================
-# 便捷函数
+# Convenience Functions
 # ============================================================
 
 def get_endpoint_providers() -> List[Dict[str, Any]]:
-    """获取 API 端点提供商列表"""
+    """Get  API endpoint provider列表"""
     return [provider.to_dict() for provider in ENDPOINT_PROVIDERS]
 
 
 def get_local_providers() -> List[Dict[str, Any]]:
-    """获取本地模型提供商列表"""
+    """Get Local model provider列表"""
     return [provider.to_dict() for provider in LOCAL_PROVIDERS]
 
 
 def get_all_providers() -> List[Dict[str, Any]]:
-    """获取所有提供商列表"""
+    """Get all providers列表"""
     return get_endpoint_providers() + get_local_providers()
 
 
 def get_provider_by_id(provider_id: str) -> Optional[ProviderConfig]:
-    """根据 ID 获取提供商配置"""
+    """Get provider config by ID"""
     for provider in ENDPOINT_PROVIDERS + LOCAL_PROVIDERS:
         if provider.provider_id == provider_id:
             return provider
@@ -291,7 +291,7 @@ def get_provider_by_id(provider_id: str) -> Optional[ProviderConfig]:
 
 
 def get_provider_models(provider_id: str) -> List[Dict[str, Any]]:
-    """获取指定提供商的模型列表"""
+    """Get model list for specified provider"""
     provider = get_provider_by_id(provider_id)
     if provider:
         return [model.to_dict() for model in provider.models]
@@ -299,7 +299,7 @@ def get_provider_models(provider_id: str) -> List[Dict[str, Any]]:
 
 
 def get_provider_default_url(provider_id: str) -> str:
-    """获取提供商默认 API URL"""
+    """Get provider default API URL"""
     provider = get_provider_by_id(provider_id)
     if provider:
         return provider.default_base_url

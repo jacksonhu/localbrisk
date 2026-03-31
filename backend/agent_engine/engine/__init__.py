@@ -1,22 +1,22 @@
 """
-Agent 执行引擎模块
+Agent Execution Engine Module
 
-基于 LangChain DeepAgents SDK 实现的智能代理引擎，支持：
-- 从 agent_spec.yaml 加载 Agent 配置
-- 加载 skills、prompts、models 目录配置
-- 支持多个 system prompt 拼接
-- FilesystemBackend 文件系统后端
+Smart agent engine based on LangChain DeepAgents SDK, supports:
+- Loading Agent config from agent_spec.yaml
+- Loading skills, prompts, models directory configs
+- Multiple system prompt concatenation
+- FilesystemBackend filesystem backend
 
-主要模块：
+Main modules:
 - deepagents_engine: DeepAgents SDK 集成的核心引擎
-- agent_loader: Agent 配置加载和解析
+- agent_loader: Agent 配置Load和Parse
 
-依赖说明：
-- agent_loader: 仅需要 pyyaml，可独立使用
+依赖Notes:
+- agent_loader: 仅需要 pyyaml, 可独立使用
 - deepagents_engine: 需要 langchain-core, langchain-openai, deepagents
 """
 
-# Agent 配置加载器 (无 langchain 依赖)
+# Agent configuration loader (无 langchain 依赖)
 from .agent_loader import (
     AgentConfig,
     AgentConfigLoader,
@@ -27,7 +27,7 @@ from .agent_loader import (
     load_agent_config,
 )
 
-# DeepAgents 引擎 (有依赖，延迟导入)
+# DeepAgents 引擎 (有依赖, 延迟Import)
 from .deepagents_engine import (
     DeepAgentsEngine,
     AgentBuildContext,
@@ -36,7 +36,7 @@ from .deepagents_engine import (
 )
 
 __all__ = [
-    # 配置加载器 (无依赖)
+    # ConfigLoad器 (无依赖)
     "AgentConfig",
     "AgentConfigLoader",
     "ModelInfo",

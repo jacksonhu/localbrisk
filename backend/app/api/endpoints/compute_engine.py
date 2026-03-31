@@ -1,4 +1,4 @@
-"""Compute Engine API 端点。"""
+"""Compute Engine API endpoints."""
 
 from __future__ import annotations
 
@@ -15,16 +15,16 @@ router = APIRouter()
 
 
 class DuckDBSqlExecuteRequest(BaseModel):
-    """执行 DuckDB SQL 脚本请求。"""
+    """Execute DuckDB SQL script request."""
 
-    sql_script: str = Field(..., min_length=1, description="SQL 脚本")
-    params: Optional[List[Any]] = Field(default=None, description="可选参数（占位符 ?）")
-    fetch_result: bool = Field(default=True, description="是否返回结果集")
-    max_rows: int = Field(default=500, ge=1, le=10000, description="最大返回行数")
+    sql_script: str = Field(..., min_length=1, description="SQL script")
+    params: Optional[List[Any]] = Field(default=None, description="Optional parameters (placeholder ?)")
+    fetch_result: bool = Field(default=True, description="Whether to return result set")
+    max_rows: int = Field(default=500, ge=1, le=10000, description="Maximum rows to return")
 
 
 class DuckDBSqlExecuteResponse(BaseModel):
-    """执行 DuckDB SQL 脚本响应。"""
+    """Execute  DuckDB SQL scriptresponse."""
 
     success: bool
     columns: List[str]
@@ -36,8 +36,8 @@ class DuckDBSqlExecuteResponse(BaseModel):
 
 @router.post("/sql/execute", response_model=DuckDBSqlExecuteResponse)
 async def execute_duckdb_sql(request: DuckDBSqlExecuteRequest):
-    """执行 DuckDB SQL 脚本。"""
-    logger.info("执行 DuckDB SQL 脚本")
+    """Execute  DuckDB SQL script."""
+    logger.info("Executing  DuckDB SQL script")
 
     try:
         service = get_duckdb_service()
@@ -49,11 +49,11 @@ async def execute_duckdb_sql(request: DuckDBSqlExecuteRequest):
         )
         return DuckDBSqlExecuteResponse(**result)
     except ValueError as e:
-        logger.warning(f"DuckDB SQL 参数错误: {e}")
+        logger.warning(f"DuckDB SQL parameter error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
-        logger.error(f"DuckDB 服务不可用: {e}")
+        logger.error(f"DuckDB service unavailable: {e}")
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        logger.exception(f"DuckDB SQL 执行失败: {e}")
-        raise HTTPException(status_code=500, detail=f"DuckDB SQL 执行失败: {e}")
+        logger.exception(f"DuckDB SQL Execution failed: {e}")
+        raise HTTPException(status_code=500, detail=f"DuckDB SQL Execution failed: {e}")

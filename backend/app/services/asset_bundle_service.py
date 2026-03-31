@@ -1,5 +1,5 @@
 """
-AssetBundle 服务 - 管理 AssetBundle 及其 Asset
+AssetBundle Service - manages AssetBundle and its Assets
 """
 
 import logging
@@ -26,10 +26,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# 默认 Output 资源
+# Default output assets
 DEFAULT_OUTPUT_BUNDLE_NAME = "output"
 
-# Asset 类型目录映射
+# Asset type directory mapping
 ASSET_TYPE_DIRS = {
     AssetType.TABLE: TABLES_DIR,
     AssetType.VOLUME: VOLUMES_DIR,
@@ -39,24 +39,24 @@ ASSET_TYPE_DIRS = {
 
 
 class AssetBundleService(BaseService):
-    """AssetBundle 服务类"""
+    """AssetBundle service class"""
     
     def __init__(self, business_unit_service: "BusinessUnitService"):
         super().__init__()
         self.business_unit_service = business_unit_service
     
-    # ==================== 路径方法 ====================
+    # ==================== Path Methods ====================
     
     def _get_bundle_path(self, business_unit_id: str, bundle_name: str) -> Optional[Path]:
-        """获取 AssetBundle 路径"""
+        """Get AssetBundle path"""
         return self.business_unit_service.get_asset_bundle_path(business_unit_id, bundle_name)
     
     def _get_config_file_path(self, bundle_path: Path) -> Path:
-        """获取配置文件路径"""
+        """Get config file path"""
         return bundle_path / ASSET_BUNDLE_CONFIG_FILE
     
     def _get_type_dir(self, asset_type: AssetType) -> str:
-        """获取 Asset 类型目录名"""
+        """Get Asset type directory name"""
         if isinstance(asset_type, str):
             return ASSET_TYPE_DIRS.get(AssetType(asset_type), asset_type + "s")
         return ASSET_TYPE_DIRS.get(asset_type, str(asset_type.value) + "s")
@@ -64,16 +64,16 @@ class AssetBundleService(BaseService):
     # ==================== AssetBundle CRUD ====================
     
     def scan_asset_bundles(self, bu_path: Path, business_unit_id: str) -> List[AssetBundle]:
-        """扫描 AssetBundle"""
-        logger.debug(f"扫描 AssetBundle: {business_unit_id}")
+        """Scan AssetBundles"""
+        logger.debug(f"Scanning AssetBundles: {business_unit_id}")
         bundles_dir = self.business_unit_service.get_asset_bundles_dir(bu_path)
         bundles = self._scan_subdirs(bundles_dir, lambda p: self._load_bundle(business_unit_id, p))
-        logger.debug(f"发现 {len(bundles)} 个 AssetBundle")
+        logger.debug(f"Found  {len(bundles)}  AssetBundle(s)")
         return bundles
     
     def _load_bundle(self, business_unit_id: str, bundle_path: Path) -> Optional[AssetBundle]:
-        """加载 AssetBundle"""
-        logger.debug(f"加载 AssetBundle: {bundle_path.name}")
+        """Load AssetBundle"""
+        logger.debug(f"Loading AssetBundle: {bundle_path.name}")
         config = self._load_yaml(self._get_config_file_path(bundle_path)) or {}
         baseinfo = self._extract_baseinfo(config, bundle_path.name)
         
@@ -99,68 +99,68 @@ class AssetBundleService(BaseService):
         )
     
     def get_asset_bundles(self, business_unit_id: str) -> List[AssetBundle]:
-        """获取 AssetBundle 列表"""
+        """Get AssetBundle list"""
         bu = self.business_unit_service.get_business_unit(business_unit_id)
         return bu.asset_bundles if bu else []
     
     def get_asset_bundle_config_content(self, business_unit_id: str, bundle_name: str) -> Optional[str]:
-        """获取 AssetBundle 配置内容"""
+        """Get AssetBundle config content"""
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
             return None
         return self._read_file(self._get_config_file_path(bundle_path))
     
     def create_asset_bundle(self, business_unit_id: str, data: AssetBundleCreate) -> AssetBundle:
-        """创建 AssetBundle"""
-        logger.info(f"创建 AssetBundle: {business_unit_id}/{data.name}")
+        """Create AssetBundle"""
+        logger.info(f"Creating AssetBundle: {business_unit_id}/{data.name}")
         bu_path = self.business_unit_service.get_business_unit_path(business_unit_id)
         if not bu_path.exists():
-            logger.warning(f"BusinessUnit 不存在: {business_unit_id}")
-            raise ValueError(f"BusinessUnit '{business_unit_id}' 不存在")
+            logger.warning(f"BusinessUnit  does not exist: {business_unit_id}")
+            raise ValueError(f"BusinessUnit '{business_unit_id}' does not exist")
         
         bundle_type = data.bundle_type or "local"
         if bundle_type == "external" and not data.connection:
-            raise ValueError("External 类型必须配置数据库连接")
+            raise ValueError("External type requires database connection")
         
         bundles_dir = self.business_unit_service.get_asset_bundles_dir(bu_path)
         bundles_dir.mkdir(parents=True, exist_ok=True)
         
         bundle_path = bundles_dir / data.name
         if bundle_path.exists():
-            logger.warning(f"AssetBundle 已存在: {data.name}")
-            raise ValueError(f"AssetBundle '{data.name}' 已存在")
+            logger.warning(f"AssetBundle  already exists: {data.name}")
+            raise ValueError(f"AssetBundle '{data.name}' already exists")
         
-        # 创建目录结构（不再创建 models 目录，Model 已移到 Agent 下）
+        # Create directory structure (models dir no longer created, Model moved under Agent)
         bundle_path.mkdir(parents=True, exist_ok=True)
         for dir_name in ["tables", "functions", "volumes"]:
             (bundle_path / dir_name).mkdir(exist_ok=True)
         
-        # 创建配置
+        # Create config
         baseinfo = self._create_baseinfo(data.name, data.display_name, data.description, data.tags, data.owner or "admin")
         config = {"baseinfo": baseinfo, "bundle_type": bundle_type}
         
         connection = data.connection if bundle_type == "external" else None
         if connection:
             config["connection"] = connection.model_dump()
-            # 同步外部元数据
-            logger.info(f"同步外部元数据: {data.name}")
+            # Sync external metadata
+            logger.info(f"Syncing external metadata: {data.name}")
             sync_result = self._sync_metadata(bundle_path, business_unit_id, data.name, connection)
             if sync_result.success:
                 config["synced_at"] = self._now_iso()
-                logger.info(f"元数据同步成功: {data.name}")
+                logger.info(f"Metadata sync succeeded: {data.name}")
             else:
-                logger.warning(f"元数据同步失败: {sync_result.errors}")
+                logger.warning(f"Metadata sync failed: {sync_result.errors}")
         
         self._save_yaml(bundle_path / ASSET_BUNDLE_CONFIG_FILE, config)
-        logger.info(f"AssetBundle 创建成功: {data.name}")
+        logger.info(f"AssetBundle created successfully: {data.name}")
         return self._load_bundle(business_unit_id, bundle_path)
     
     def update_asset_bundle(self, business_unit_id: str, bundle_name: str, update: AssetBundleUpdate) -> Optional[AssetBundle]:
-        """更新 AssetBundle"""
-        logger.info(f"更新 AssetBundle: {business_unit_id}/{bundle_name}")
+        """Update AssetBundle"""
+        logger.info(f"Updating AssetBundle: {business_unit_id}/{bundle_name}")
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
-            logger.warning(f"AssetBundle 不存在: {bundle_name}")
+            logger.warning(f"AssetBundle  does not exist: {bundle_name}")
             return None
         
         config_path = self._get_config_file_path(bundle_path)
@@ -174,37 +174,37 @@ class AssetBundleService(BaseService):
         
         config["baseinfo"] = baseinfo
         self._save_yaml(config_path, config)
-        logger.info(f"AssetBundle 更新成功: {bundle_name}")
+        logger.info(f"AssetBundle updated successfully: {bundle_name}")
         return self._load_bundle(business_unit_id, bundle_path)
     
     def delete_asset_bundle(self, business_unit_id: str, bundle_name: str) -> bool:
-        """删除 AssetBundle"""
-        logger.info(f"删除 AssetBundle: {business_unit_id}/{bundle_name}")
+        """Delete AssetBundle"""
+        logger.info(f"Deleting AssetBundle: {business_unit_id}/{bundle_name}")
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         result = self._remove_dir(bundle_path) if bundle_path else False
         if result:
-            logger.info(f"AssetBundle 删除成功: {bundle_name}")
+            logger.info(f"AssetBundle deleted successfully: {bundle_name}")
         else:
-            logger.warning(f"AssetBundle 不存在: {bundle_name}")
+            logger.warning(f"AssetBundle  does not exist: {bundle_name}")
         return result
     
     def _sync_metadata(self, bundle_path: Path, business_unit_id: str, bundle_name: str, connection: ConnectionConfig) -> SyncResult:
-        """同步 AssetBundle 元数据"""
+        """Sync AssetBundle metadata"""
         from app.services.metadata_sync_service import MetadataSyncService
         sync_service = MetadataSyncService(bundle_path, business_unit_id, bundle_name)
         return sync_service.sync_connection(connection)
     
     def sync_asset_bundle_metadata(self, business_unit_id: str, bundle_name: str) -> SyncResult:
-        """手动同步 AssetBundle 元数据"""
-        logger.info(f"手动同步 AssetBundle 元数据: {business_unit_id}/{bundle_name}")
+        """Manually sync AssetBundle metadata"""
+        logger.info(f"Manually sync AssetBundle metadata: {business_unit_id}/{bundle_name}")
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
-            logger.warning(f"AssetBundle 不存在: {bundle_name}")
-            return SyncResult(success=False, errors=[f"AssetBundle '{bundle_name}' 不存在"])
+            logger.warning(f"AssetBundle  does not exist: {bundle_name}")
+            return SyncResult(success=False, errors=[f"AssetBundle '{bundle_name}' does not exist"])
         
         config = self._load_yaml(self._get_config_file_path(bundle_path))
         if not config or not config.get("connection"):
-            return SyncResult(success=False, errors=["AssetBundle 没有配置数据库连接"])
+            return SyncResult(success=False, errors=["AssetBundle has no database connection configured"])
         
         connection = ConnectionConfig(**config["connection"])
         result = self._sync_metadata(bundle_path, business_unit_id, bundle_name, connection)
@@ -212,16 +212,16 @@ class AssetBundleService(BaseService):
         if result.success:
             config["synced_at"] = self._now_iso()
             self._save_yaml(self._get_config_file_path(bundle_path), config)
-            logger.info(f"元数据同步成功: {bundle_name}")
+            logger.info(f"Metadata sync succeeded: {bundle_name}")
         else:
-            logger.warning(f"元数据同步失败: {result.errors}")
+            logger.warning(f"Metadata sync failed: {result.errors}")
         
         return result
-    # ==================== Asset 操作 ====================
+    # ==================== Asset Operations ====================
     
     def scan_assets(self, business_unit_id: str, bundle_name: str) -> List[Asset]:
-        """扫描 AssetBundle 下的资产"""
-        logger.debug(f"扫描 Asset: {business_unit_id}/{bundle_name}")
+        """Scan AssetBundles 下的Asset"""
+        logger.debug(f"Scanning Assets: {business_unit_id}/{bundle_name}")
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
             return []
@@ -236,16 +236,16 @@ class AssetBundleService(BaseService):
             if type_dir.exists() and type_dir.is_dir():
                 assets.extend(self._scan_asset_dir(business_unit_id, bundle_name, type_dir, asset_type, is_external))
         
-        # 函数目录
+        # 函数directory
         functions_dir = bundle_path / FUNCTIONS_DIR
         if functions_dir.exists():
             assets.extend(self._scan_asset_dir(business_unit_id, bundle_name, functions_dir, AssetType.AGENT, is_external))
         
-        logger.debug(f"发现 {len(assets)} 个 Asset")
+        logger.debug(f"Found  {len(assets)}  Asset(s)")
         return assets
     
     def _scan_asset_dir(self, business_unit_id: str, bundle_name: str, type_dir: Path, asset_type: AssetType, is_external: bool) -> List[Asset]:
-        """扫描资产目录"""
+        """Scan asset directory"""
         assets = []
         for item in type_dir.iterdir():
             if item.name.startswith(".") or item.suffix != ".yaml":
@@ -274,7 +274,7 @@ class AssetBundleService(BaseService):
         return assets
     
     def get_asset_config_content(self, business_unit_id: str, bundle_name: str, asset_name: str) -> Optional[str]:
-        """获取 Asset 配置内容"""
+        """Get Asset config content"""
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
             return None
@@ -287,20 +287,20 @@ class AssetBundleService(BaseService):
         return None
     
     def create_asset(self, business_unit_id: str, bundle_name: str, data: AssetCreate) -> Asset:
-        """创建 Asset"""
-        logger.info(f"创建 Asset: {business_unit_id}/{bundle_name}/{data.name}, type={data.asset_type}")
+        """Create Asset"""
+        logger.info(f"Creating Asset: {business_unit_id}/{bundle_name}/{data.name}, type={data.asset_type}")
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
-            logger.warning(f"AssetBundle 不存在: {bundle_name}")
-            raise FileNotFoundError(f"AssetBundle '{bundle_name}' 不存在")
+            logger.warning(f"AssetBundle  does not exist: {bundle_name}")
+            raise FileNotFoundError(f"AssetBundle '{bundle_name}' does not exist")
         
         type_dir = bundle_path / self._get_type_dir(data.asset_type)
         type_dir.mkdir(parents=True, exist_ok=True)
         
         asset_path = type_dir / f"{data.name}.yaml"
         if asset_path.exists():
-            logger.warning(f"Asset 已存在: {data.name}")
-            raise ValueError(f"资产 '{data.name}' 已存在")
+            logger.warning(f"Asset  already exists: {data.name}")
+            raise ValueError(f"Asset '{data.name}' already exists")
         
         baseinfo = self._create_baseinfo(data.name, data.display_name, data.description, data.tags, data.owner or "admin")
         
@@ -310,7 +310,7 @@ class AssetBundleService(BaseService):
             "source": "local",
         }
         
-        # 类型特有字段
+        # Type-specific fields
         if data.asset_type == AssetType.VOLUME or data.asset_type == "volume":
             asset_config["volume_type"] = data.volume_type or "local"
             if data.volume_type == "local":
@@ -328,7 +328,7 @@ class AssetBundleService(BaseService):
         
         self._save_yaml(asset_path, asset_config)
         
-        logger.info(f"Asset 创建成功: {data.name}")
+        logger.info(f"Asset created successfully: {data.name}")
         return Asset(
             id=f"{business_unit_id}_{bundle_name}_{data.name}",
             name=data.name,
@@ -344,8 +344,8 @@ class AssetBundleService(BaseService):
         )
     
     def delete_asset(self, business_unit_id: str, bundle_name: str, asset_name: str) -> bool:
-        """删除 Asset"""
-        logger.info(f"删除 Asset: {business_unit_id}/{bundle_name}/{asset_name}")
+        """Delete Asset"""
+        logger.info(f"Deleting Asset: {business_unit_id}/{bundle_name}/{asset_name}")
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
             return False
@@ -354,39 +354,39 @@ class AssetBundleService(BaseService):
             asset_path = bundle_path / dir_name / f"{asset_name}.yaml"
             if asset_path.exists():
                 asset_path.unlink()
-                logger.info(f"Asset 删除成功: {asset_name}")
+                logger.info(f"Asset deleted successfully: {asset_name}")
                 return True
         
-        logger.warning(f"Asset 不存在: {asset_name}")
+        logger.warning(f"Asset  does not exist: {asset_name}")
         return False
     
     def preview_table_data(self, business_unit_id: str, bundle_name: str, table_name: str, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
-        """预览表数据"""
-        logger.debug(f"预览表数据: {business_unit_id}/{bundle_name}/{table_name}")
+        """Preview table data"""
+        logger.debug(f"Previewing table data: {business_unit_id}/{bundle_name}/{table_name}")
         from app.services.connectors import ConnectorFactory
         
         bundle_path = self._get_bundle_path(business_unit_id, bundle_name)
         if not bundle_path:
-            raise ValueError(f"AssetBundle '{bundle_name}' 不存在")
+            raise ValueError(f"AssetBundle '{bundle_name}' does not exist")
         
         config = self._load_yaml(self._get_config_file_path(bundle_path))
         bundle_type = config.get("bundle_type") if config else None
         if bundle_type != "external":
-            raise ValueError("只有 External 类型的 AssetBundle 支持数据预览")
+            raise ValueError("Only External type AssetBundle supports data preview")
         
         if not config.get("connection"):
-            raise ValueError("AssetBundle 没有配置数据库连接")
+            raise ValueError("AssetBundle has no database connection configured")
         
         connection = ConnectionConfig(**config["connection"])
         connector = ConnectorFactory.create(connection)
         if not connector:
-            raise ValueError(f"不支持的连接类型: {connection.type}")
+            raise ValueError(f"Unsupported connection type: {connection.type}")
         
         try:
             if not connector.connect():
-                raise ValueError("无法连接到数据库")
+                raise ValueError("Unable to connect to database")
             result = connector.preview_data(connection.db_name, table_name, limit, offset)
-            logger.debug(f"表数据预览成功: {table_name}")
+            logger.debug(f"Table data preview succeeded: {table_name}")
             return result
         finally:
             connector.disconnect()

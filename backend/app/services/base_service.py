@@ -1,6 +1,6 @@
 """
-基础服务类
-提供文件操作、YAML处理、baseinfo处理等公共功能
+Base service class.
+Provides common file operations, YAML handling, and baseinfo processing.
 """
 
 import logging
@@ -19,78 +19,78 @@ T = TypeVar('T')
 
 
 class BaseService:
-    """基础服务类，提供公共文件操作方法"""
+    """Base service class providing common file operation methods."""
     
     def __init__(self, base_dir: Path = None):
         self.base_dir = base_dir or settings.CATALOGS_DIR
         self._ensure_dir(self.base_dir)
     
-    # ==================== 目录操作 ====================
+    # ==================== Directory Operations ====================
     
     def _ensure_dir(self, path: Path) -> None:
-        """确保目录存在"""
+        """Ensure directory exists."""
         path.mkdir(parents=True, exist_ok=True)
     
     def _remove_dir(self, path: Path) -> bool:
-        """删除目录"""
+        """Remove directory."""
         if not path.exists():
             return False
         shutil.rmtree(path)
         return True
     
-    # ==================== 文件操作 ====================
+    # ==================== File Operations ====================
     
     def _load_yaml(self, path: Path) -> Optional[Dict[str, Any]]:
-        """加载 YAML 文件"""
+        """Load YAML file."""
         if not path.exists():
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            logger.error(f"加载 YAML 失败 {path}: {e}")
+            logger.error(f"Failed to load YAML {path}: {e}")
             return None
     
     def _save_yaml(self, path: Path, data: Dict[str, Any]) -> None:
-        """保存 YAML 文件"""
+        """Save YAML file."""
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False, indent=2)
     
     def _read_file(self, path: Path) -> Optional[str]:
-        """读取文件内容"""
+        """Read file content."""
         if not path.exists():
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
-            logger.error(f"读取文件失败 {path}: {e}")
+            logger.error(f"Failed to read file {path}: {e}")
             return None
     
     def _write_file(self, path: Path, content: str) -> None:
-        """写入文件内容"""
+        """Write file content."""
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
     
     def _delete_file(self, path: Path) -> bool:
-        """删除文件"""
+        """Delete file."""
         if not path.exists():
             return False
         path.unlink()
         return True
     
-    # ==================== BaseInfo 操作 ====================
+    # ==================== BaseInfo Operations ====================
     
     @staticmethod
     def _now_iso() -> str:
-        """获取当前 ISO 时间字符串"""
+        """Get current ISO time string."""
         return datetime.now().isoformat()
     
     @staticmethod
     def _parse_datetime(value: Any) -> Optional[datetime]:
-        """解析日期时间"""
+        """Parse datetime value."""
         if value is None:
             return None
         if isinstance(value, datetime):
@@ -108,7 +108,7 @@ class BaseService:
         tags: List[str] = None,
         owner: str = "admin"
     ) -> Dict[str, Any]:
-        """创建标准 baseinfo 字典"""
+        """Create standard baseinfo dictionary."""
         now = self._now_iso()
         return {
             "name": name,
@@ -121,7 +121,7 @@ class BaseService:
         }
     
     def _extract_baseinfo(self, config: Dict[str, Any], fallback_name: str = "") -> Dict[str, Any]:
-        """从配置中提取 baseinfo，兼容新旧格式"""
+        """Extract baseinfo from config, compatible with old and new formats."""
         baseinfo = config.get("baseinfo", {})
         if not baseinfo:
             baseinfo = {
@@ -142,7 +142,7 @@ class BaseService:
         description: str = None,
         tags: List[str] = None
     ) -> Dict[str, Any]:
-        """更新 baseinfo 字段"""
+        """Update baseinfo fields."""
         if display_name is not None:
             baseinfo["display_name"] = display_name
         if description is not None:
@@ -152,7 +152,7 @@ class BaseService:
         baseinfo["updated_at"] = self._now_iso()
         return baseinfo
     
-    # ==================== 扫描操作 ====================
+    # ==================== Scan Operations ====================
     
     def _scan_dir(
         self,
@@ -161,12 +161,12 @@ class BaseService:
         loader_fn: Callable[[Path], Optional[T]] = None
     ) -> List[T]:
         """
-        扫描目录并加载实体
+        Scan directory and load entities.
         
         Args:
-            directory: 目录路径
-            filter_fn: 过滤函数，返回 True 表示保留
-            loader_fn: 加载函数，将路径转换为实体
+            directory: Directory path
+            filter_fn: Filter function, returns True to keep
+            loader_fn: Loader function, converts path to entity
         """
         if not directory.exists():
             return []
@@ -188,7 +188,7 @@ class BaseService:
         directory: Path,
         loader_fn: Callable[[Path], Optional[T]] = None
     ) -> List[T]:
-        """扫描目录下的 YAML 文件"""
+        """Scan YAML files in directory."""
         return self._scan_dir(
             directory,
             filter_fn=lambda p: p.is_file() and p.suffix == ".yaml",
@@ -200,7 +200,7 @@ class BaseService:
         directory: Path,
         loader_fn: Callable[[Path], Optional[T]] = None
     ) -> List[T]:
-        """扫描子目录"""
+        """Scan subdirectories."""
         return self._scan_dir(
             directory,
             filter_fn=lambda p: p.is_dir(),

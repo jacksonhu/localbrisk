@@ -1,10 +1,10 @@
 """
-元数据同步服务
-负责从外部数据库拉取元数据并保存到本地文件系统
+Metadata Sync Service
+Pulls metadata from external databases and saves to local filesystem
 
-设计原则：
-1. 同步的表元数据统一使用 baseinfo 结构存储基础属性
-2. 表特有的元数据与 baseinfo 同级存储
+Design principles:
+1. Synced table metadata uses unified baseinfo structure for base properties
+2. Table-specific metadata stored at the same level as baseinfo
 """
 
 from datetime import datetime
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class MetadataSyncService:
-    """元数据同步服务"""
+    """Metadata Sync Service"""
     
     def __init__(self, schema_path: Path, catalog_id: str, schema_name: str):
         self.schema_path = schema_path
@@ -31,24 +31,24 @@ class MetadataSyncService:
         self.schema_name = schema_name
     
     def sync_connection(self, connection: ConnectionConfig) -> SyncResult:
-        """同步连接的元数据"""
+        """Sync connection metadata"""
         result = SyncResult()
         
         connector = ConnectorFactory.create(connection)
         if connector is None:
             result.success = False
-            result.errors.append(f"不支持的连接类型: {connection.type}")
+            result.errors.append(f"Unsupported connection type: {connection.type}")
             return result
         
         try:
             if not connector.connect():
                 result.success = False
-                result.errors.append(f"无法连接到数据库: {connection.host}:{connection.port}")
+                result.errors.append(f"Unable to connect to database: {connection.host}:{connection.port}")
                 return result
             
             schemas_metadata = connector.get_full_metadata()
             
-            # 查找目标 schema
+            # Find target schema
             target_schema = None
             for schema_meta in schemas_metadata:
                 if schema_meta.name == connection.db_name:
@@ -59,7 +59,7 @@ class MetadataSyncService:
                 target_schema = schemas_metadata[0]
             
             if not target_schema:
-                result.warnings.append(f"数据库 '{connection.db_name}' 中没有找到可同步的表")
+                result.warnings.append(f"数据库 '{connection.db_name}' 中没有找到可Sync的表")
                 return result
             
             # 设置 catalog 和 schema 名称
@@ -68,7 +68,7 @@ class MetadataSyncService:
                 table.catalog_name = self.catalog_id
                 table.schema_name = self.schema_name
             
-            # 保存表元数据
+            # Save表元数据
             for table in target_schema.tables:
                 self._save_table_metadata(table)
                 result.tables_synced += 1
@@ -77,27 +77,27 @@ class MetadataSyncService:
             result.schemas_synced = 1
             
             logger.info(
-                f"Schema '{self.schema_name}' 元数据同步完成: "
+                f"Schema '{self.schema_name}' 元数据Sync完成: "
                 f"{result.tables_synced} 张表, {result.columns_synced} 个字段"
             )
             
         except Exception as e:
             result.success = False
-            result.errors.append(f"同步过程发生错误: {str(e)}")
-            logger.exception(f"同步元数据失败: {e}")
+            result.errors.append(f"Sync过程发生error: {str(e)}")
+            logger.exception(f"Sync元数据failed: {e}")
         finally:
             connector.disconnect()
         
         return result
     
     def _save_table_metadata(self, table_meta: TableMetadata) -> Path:
-        """保存表元数据（使用 baseinfo 结构）"""
+        """Save 表元数据 (使用 baseinfo 结构)"""
         tables_dir = self.schema_path / TABLES_DIR
         tables_dir.mkdir(parents=True, exist_ok=True)
         
         now = datetime.now().isoformat()
         
-        # 构建 baseinfo
+        # Build baseinfo
         baseinfo = {
             "name": table_meta.name,
             "display_name": table_meta.name,
@@ -108,7 +108,7 @@ class MetadataSyncService:
             "updated_at": table_meta.update_time.isoformat() if table_meta.update_time else now,
         }
         
-        # 构建完整配置
+        # Build完整配置
         table_config = {
             "baseinfo": baseinfo,
             # 表特有元数据
@@ -141,17 +141,17 @@ class MetadataSyncService:
         
         table_path = tables_dir / f"{table_meta.name}{ASSET_FILE_SUFFIX}"
         self._write_yaml(table_path, table_config)
-        logger.debug(f"保存表元数据: {table_path}")
+        logger.debug(f"Save表元数据: {table_path}")
         
         return table_path
     
     def _write_yaml(self, path: Path, data: dict) -> None:
-        """写入 YAML 文件"""
+        """Write  YAML 文件"""
         with open(path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False, indent=2)
     
     def load_table_metadata(self, table_name: str) -> Optional[dict]:
-        """加载表元数据"""
+        """Load 表元数据"""
         table_path = self.schema_path / TABLES_DIR / f"{table_name}{ASSET_FILE_SUFFIX}"
         
         if not table_path.exists():
@@ -161,11 +161,11 @@ class MetadataSyncService:
             with open(table_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f)
         except Exception as e:
-            logger.error(f"加载表元数据失败 {table_path}: {e}")
+            logger.error(f"Failed to load 表元数据failed {table_path}: {e}")
             return None
     
     def get_synced_tables(self) -> List[str]:
-        """获取已同步的表列表"""
+        """Get 已Sync的表列表"""
         tables = []
         tables_dir = self.schema_path / TABLES_DIR
         

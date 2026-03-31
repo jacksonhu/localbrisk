@@ -1,6 +1,6 @@
 """
-工具模块
-包含 YAML 解析、路径解析等工具
+Utilities Module
+Contains YAML parsing, path resolution, and other utilities
 """
 
 from .yaml_parser import YamlParser, parse_agent_spec, parse_model_config

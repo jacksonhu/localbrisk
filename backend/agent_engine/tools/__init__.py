@@ -1,11 +1,11 @@
 """
-Agent 工具模块
-提供 Agent 可用的内置工具
+Agent Tools Module
+Provides built-in tools available to Agents
 
-内置工具:
-1. OfficeReader - Office365 文件读取（Excel/Word/PPT/PDF）
-2. LocalFileKeywordSearch - 基于关键字的本地文件查找（基于虚拟文件系统 backend）
-3. TaskTools - 持久化任务管理（create/get/update/list/claim）
+Built-in tools:
+1. OfficeReader - Office365 file reading (Excel/Word/PPT/PDF)
+2. LocalFileKeywordSearch - Keyword-based local file search (via virtual filesystem backend)
+3. TaskTools - Persistent task management (create/get/update/list/claim)
 """
 
 from typing import Optional
@@ -35,11 +35,11 @@ __all__ = [
 
 
 def get_builtin_tools(backend=None, task_root: Optional[str] = None) -> list:
-    """获取所有内置工具实例列表
+    """Get all built-in tool instances
 
     Args:
-        backend: CompositeBackend 实例，用于虚拟路径解析。
-        task_root: 任务存储目录（通常为 output/.task）。
+        backend: CompositeBackend instance for virtual path resolution.
+        task_root: 任务存储directory (通常为 output/.task).
 
     Returns:
         List[BaseTool]: 可用的内置工具实例

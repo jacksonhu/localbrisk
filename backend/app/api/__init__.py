@@ -1,5 +1,5 @@
 """
-API 路由模块
+API routing module.
 """
 
 from fastapi import APIRouter
@@ -8,10 +8,10 @@ from app.api.endpoints import business_unit, health, agent_runtime, llm_provider
 
 router = APIRouter()
 
-# 注册各个端点路由
-router.include_router(health.router, prefix="/health", tags=["健康检查"])
-router.include_router(business_unit.router, prefix="/business_units", tags=["BusinessUnit 管理"])
-router.include_router(agent_runtime.router, prefix="/runtime", tags=["Agent 运行时"])
-router.include_router(model_runtime.router, prefix="/runtime", tags=["Model 运行时"])
-router.include_router(llm_providers.router, prefix="/llm", tags=["LLM 配置"])
+# Register endpoint routers
+router.include_router(health.router, prefix="/health", tags=["Health Check"])
+router.include_router(business_unit.router, prefix="/business_units", tags=["BusinessUnit Management"])
+router.include_router(agent_runtime.router, prefix="/runtime", tags=["Agent Runtime"])
+router.include_router(model_runtime.router, prefix="/runtime", tags=["Model Runtime"])
+router.include_router(llm_providers.router, prefix="/llm", tags=["LLM Configuration"])
 router.include_router(compute_engine.router, prefix="/compute", tags=["Compute Engine"])

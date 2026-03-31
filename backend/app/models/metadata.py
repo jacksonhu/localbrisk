@@ -1,6 +1,6 @@
 """
-数据库元数据模型
-用于存储从外部数据库同步的元数据信息
+Database metadata models.
+Used to store metadata information synchronized from external databases.
 """
 
 from datetime import datetime
@@ -9,16 +9,16 @@ from pydantic import BaseModel, Field
 
 
 class ColumnMetadata(BaseModel):
-    """字段元数据"""
+    """Column metadata."""
     name: str
-    data_type: str  # 原始数据类型
+    data_type: str  # Raw data type
     nullable: bool = True
     default_value: Optional[str] = None
     is_primary_key: bool = False
     is_auto_increment: bool = False
     is_unique: bool = False
     comment: Optional[str] = None
-    ordinal_position: int = 0  # 字段在表中的位置
+    ordinal_position: int = 0  # Column position in the table
     character_max_length: Optional[int] = None
     numeric_precision: Optional[int] = None
     numeric_scale: Optional[int] = None
@@ -26,7 +26,7 @@ class ColumnMetadata(BaseModel):
 
 
 class TableMetadata(BaseModel):
-    """表元数据"""
+    """Table metadata."""
     name: str
     schema_name: str
     catalog_name: str
@@ -45,7 +45,7 @@ class TableMetadata(BaseModel):
 
 
 class SchemaMetadata(BaseModel):
-    """Schema（数据库）元数据"""
+    """Schema (database) metadata."""
     name: str
     catalog_name: str
     character_set: Optional[str] = None
@@ -61,7 +61,7 @@ class SchemaMetadata(BaseModel):
 
 
 class SyncResult(BaseModel):
-    """元数据同步结果"""
+    """Metadata sync result."""
     success: bool = True
     schemas_synced: int = 0
     tables_synced: int = 0

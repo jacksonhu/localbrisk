@@ -1,4 +1,4 @@
 """
-Agent 引擎核心模块
-包含配置模型、类型定义和异常处理
+Agent Engine Core Module
+Contains config models, type definitions, and exception handling
 """

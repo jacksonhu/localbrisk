@@ -1,6 +1,6 @@
 """
-MySQL 数据库连接器
-实现 MySQL/MariaDB 数据库的元数据读取
+MySQL Database Connector
+Implements metadata reading for MySQL/MariaDB databases
 """
 
 from datetime import datetime
@@ -13,7 +13,7 @@ from .base import BaseConnector, ConnectorFactory
 
 logger = logging.getLogger(__name__)
 
-# MySQL 系统数据库列表（通常不需要同步）
+# MySQL system databases (usually not needed for sync)
 MYSQL_SYSTEM_SCHEMAS = {
     "information_schema",
     "mysql",
@@ -25,8 +25,8 @@ MYSQL_SYSTEM_SCHEMAS = {
 @ConnectorFactory.register(ConnectionType.MYSQL)
 class MySQLConnector(BaseConnector):
     """
-    MySQL 数据库连接器
-    使用 PyMySQL 驱动连接 MySQL/MariaDB 数据库
+    MySQL Database Connector
+    Uses PyMySQL driver to connect to MySQL/MariaDB databases
     """
     
     @property
@@ -34,7 +34,7 @@ class MySQLConnector(BaseConnector):
         return ConnectionType.MYSQL
     
     def connect(self) -> bool:
-        """建立 MySQL 连接"""
+        """Establish MySQL connection"""
         try:
             import pymysql
             
@@ -48,28 +48,28 @@ class MySQLConnector(BaseConnector):
                 cursorclass=pymysql.cursors.DictCursor,
                 connect_timeout=10,
             )
-            logger.info(f"成功连接到 MySQL: {self.config.host}:{self.config.port}")
+            logger.info(f"Successfully connected to MySQL: {self.config.host}:{self.config.port}")
             return True
         except ImportError:
-            logger.error("未安装 PyMySQL 驱动，请运行: pip install pymysql")
+            logger.error("PyMySQL driver not installed, please run: pip install pymysql")
             return False
         except Exception as e:
-            logger.error(f"连接 MySQL 失败: {e}")
+            logger.error(f"Failed to connect to MySQL: {e}")
             return False
     
     def disconnect(self) -> None:
-        """关闭 MySQL 连接"""
+        """Close MySQL connection"""
         if self._connection:
             try:
                 self._connection.close()
-                logger.debug("MySQL 连接已关闭")
+                logger.debug("MySQL connection closed")
             except Exception as e:
-                logger.warning(f"关闭 MySQL 连接时出错: {e}")
+                logger.warning(f"Error closing MySQL connection: {e}")
             finally:
                 self._connection = None
     
     def test_connection(self) -> bool:
-        """测试 MySQL 连接"""
+        """Test MySQL connection"""
         try:
             if self._connection is None:
                 return False
@@ -80,24 +80,24 @@ class MySQLConnector(BaseConnector):
     
     def _execute_query(self, sql: str, params: tuple = None) -> List[dict]:
         """
-        执行 SQL 查询
+        Execute SQL query
         
         Args:
-            sql: SQL 语句
-            params: 查询参数（使用参数化查询防止 SQL 注入）
+            sql: SQL statement
+            params: Query parameters (using parameterized queries to prevent SQL injection)
             
         Returns:
-            查询结果列表
+            List of query results
         """
         if self._connection is None:
-            raise RuntimeError("数据库未连接")
+            raise RuntimeError("Database not connected")
         
         with self._connection.cursor() as cursor:
             cursor.execute(sql, params)
             return cursor.fetchall()
     
     def get_schemas(self) -> List[str]:
-        """获取所有数据库名称（排除系统数据库）"""
+        """Get all database names (excluding system databases)"""
         sql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME"
         
         results = self._execute_query(sql)
@@ -107,14 +107,14 @@ class MySQLConnector(BaseConnector):
             if row["SCHEMA_NAME"].lower() not in MYSQL_SYSTEM_SCHEMAS
         ]
         
-        # 如果配置了特定数据库，只返回该数据库
+        # If a specific database is configured, return only that database
         if self.config.db_name and self.config.db_name in schemas:
             return [self.config.db_name]
         
         return schemas
     
     def get_schema_metadata(self, schema_name: str) -> Optional[SchemaMetadata]:
-        """获取指定数据库的元数据"""
+        """Get metadata for specified database"""
         sql = """
             SELECT 
                 SCHEMA_NAME,
@@ -131,7 +131,7 @@ class MySQLConnector(BaseConnector):
         row = results[0]
         return SchemaMetadata(
             name=row["SCHEMA_NAME"],
-            catalog_name="",  # 将在外部设置
+            catalog_name="",  # Set externally
             character_set=row["DEFAULT_CHARACTER_SET_NAME"],
             collation=row["DEFAULT_COLLATION_NAME"],
             connection_type=self.connection_type.value,
@@ -141,7 +141,7 @@ class MySQLConnector(BaseConnector):
         )
     
     def get_tables(self, schema_name: str) -> List[str]:
-        """获取指定数据库下的所有表名"""
+        """Get all table names under specified database"""
         sql = """
             SELECT TABLE_NAME 
             FROM information_schema.TABLES 
@@ -154,8 +154,8 @@ class MySQLConnector(BaseConnector):
         return [row["TABLE_NAME"] for row in results]
     
     def get_table_metadata(self, schema_name: str, table_name: str) -> Optional[TableMetadata]:
-        """获取指定表的元数据"""
-        # 获取表基本信息
+        """Get metadata for specified table"""
+        # Get table basic info
         sql = """
             SELECT 
                 TABLE_NAME,
@@ -177,22 +177,22 @@ class MySQLConnector(BaseConnector):
         
         row = results[0]
         
-        # 获取字段元数据
+        # Get column metadata
         columns = self.get_columns(schema_name, table_name)
         
-        # 获取主键信息
+        # Get primary key info
         primary_keys = self._get_primary_keys(schema_name, table_name)
         
-        # 获取索引信息
+        # Get index info
         indexes = self._get_indexes(schema_name, table_name)
         
-        # 获取外键信息
+        # Get foreign key info
         foreign_keys = self._get_foreign_keys(schema_name, table_name)
         
         return TableMetadata(
             name=row["TABLE_NAME"],
             schema_name=row["TABLE_SCHEMA"],
-            catalog_name="",  # 将在外部设置
+            catalog_name="",  # Set externally
             table_type=row["TABLE_TYPE"],
             engine=row["ENGINE"],
             comment=row["TABLE_COMMENT"] if row["TABLE_COMMENT"] else None,
@@ -207,7 +207,7 @@ class MySQLConnector(BaseConnector):
         )
     
     def get_columns(self, schema_name: str, table_name: str) -> List[ColumnMetadata]:
-        """获取指定表的所有字段元数据"""
+        """Get all column metadata for specified table"""
         sql = """
             SELECT 
                 COLUMN_NAME,
@@ -233,7 +233,7 @@ class MySQLConnector(BaseConnector):
         for row in results:
             column = ColumnMetadata(
                 name=row["COLUMN_NAME"],
-                data_type=row["COLUMN_TYPE"],  # 使用完整类型如 varchar(255)
+                data_type=row["COLUMN_TYPE"],  # Use full type like varchar(255)
                 nullable=row["IS_NULLABLE"] == "YES",
                 default_value=row["COLUMN_DEFAULT"],
                 is_primary_key=row["COLUMN_KEY"] == "PRI",
@@ -255,7 +255,7 @@ class MySQLConnector(BaseConnector):
         return columns
     
     def _get_primary_keys(self, schema_name: str, table_name: str) -> List[str]:
-        """获取主键字段列表"""
+        """Get primary key column list"""
         sql = """
             SELECT COLUMN_NAME
             FROM information_schema.KEY_COLUMN_USAGE
@@ -269,7 +269,7 @@ class MySQLConnector(BaseConnector):
         return [row["COLUMN_NAME"] for row in results]
     
     def _get_indexes(self, schema_name: str, table_name: str) -> List[dict]:
-        """获取索引信息"""
+        """Get index info"""
         sql = """
             SELECT 
                 INDEX_NAME,
@@ -284,7 +284,7 @@ class MySQLConnector(BaseConnector):
         
         results = self._execute_query(sql, (schema_name, table_name))
         
-        # 按索引名分组
+        # Group by index name
         indexes_dict = {}
         for row in results:
             idx_name = row["INDEX_NAME"]
@@ -300,7 +300,7 @@ class MySQLConnector(BaseConnector):
         return list(indexes_dict.values())
     
     def _get_foreign_keys(self, schema_name: str, table_name: str) -> List[dict]:
-        """获取外键信息"""
+        """Get foreign key info"""
         sql = """
             SELECT 
                 kcu.CONSTRAINT_NAME,
@@ -322,7 +322,7 @@ class MySQLConnector(BaseConnector):
         
         results = self._execute_query(sql, (schema_name, table_name))
         
-        # 按外键名分组
+        # Group by foreign key name
         fk_dict = {}
         for row in results:
             fk_name = row["CONSTRAINT_NAME"]
@@ -349,37 +349,37 @@ class MySQLConnector(BaseConnector):
         offset: int = 0
     ) -> dict:
         """
-        预览表数据
+        Preview table data
         
         Args:
-            schema_name: Schema 名称
-            table_name: 表名
-            limit: 返回行数限制（最大 1000）
-            offset: 偏移量
+            schema_name: Schema name
+            table_name: Table name
+            limit: Row limit (最大 1000)
+            offset: Offset
             
         Returns:
-            包含 columns 和 rows 的字典
+            contains columns 和 rows 的字典
         """
-        # 限制最大返回行数
+        # Limit maximum rows to return
         limit = min(limit, 1000)
         
-        # 使用反引号转义标识符，防止 SQL 注入
-        # 注意：这里不能使用参数化查询，因为表名和列名不能作为参数
-        # 但我们通过验证表是否存在来确保安全性
+        # Use backticks to escape identifiers to prevent SQL injection
+        # Note: parameterized queries cannot be used here as table/column names cannot be parameters
+        # But we ensure safety by validating table existence
         tables = self.get_tables(schema_name)
         if table_name not in tables:
-            raise ValueError(f"表不存在: {schema_name}.{table_name}")
+            raise ValueError(f"Table does not exist: {schema_name}.{table_name}")
         
-        # 获取列信息
+        # Get column info
         columns_meta = self.get_columns(schema_name, table_name)
         columns = [col.name for col in columns_meta]
         
-        # 构造安全的 SQL（标识符已验证）
+        # Construct safe SQL (identifiers validated)
         sql = f"SELECT * FROM `{schema_name}`.`{table_name}` LIMIT %s OFFSET %s"
         
         rows = self._execute_query(sql, (limit, offset))
         
-        # 获取总行数（近似值）
+        # Get total row count (approximate)
         count_sql = f"SELECT COUNT(*) as cnt FROM `{schema_name}`.`{table_name}`"
         count_result = self._execute_query(count_sql)
         total = count_result[0]["cnt"] if count_result else 0

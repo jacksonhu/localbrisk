@@ -1,4 +1,4 @@
 """
-监控模块
-包含日志管理、性能指标和状态跟踪
+Monitoring Module
+Contains log management, performance metrics, and status tracking
 """
