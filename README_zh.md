@@ -1,7 +1,7 @@
 # LocalBrisk — 你的电脑，就是一个 Agent 公司
 
 <p align="center">
-  <strong>🌍 开源共建 · 邀请全球开发者参与 · 一起定义本地 AI 的未来</strong>
+  <strong>🚀 项目初创，快速迭代中 — 寻找首批共建者，一起定义本地 AI 的未来</strong>
 </p>
 
 [English](README.md) | **中文** | [Development Guide](DEVELOPMENT.md) | [开发指南](DEVELOPMENT_zh.md)

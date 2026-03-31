@@ -1,7 +1,7 @@
 # LocalBrisk — Your Laptop, Your Agent Company
 
 <p align="center">
-  <strong>🌍 Open Source · Built by Developers Worldwide · Join Us and Shape the Future of Local AI</strong>
+  <strong>🚀 Early Stage & Actively Evolving — Looking for Founding Contributors to Build the Future of Local AI Together</strong>
 </p>
 
 **English** | [中文](README_zh.md) | [Development Guide](DEVELOPMENT.md) | [开发指南](DEVELOPMENT_zh.md)
