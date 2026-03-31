@@ -1,6 +1,6 @@
 """
-YAML 解析工具
-提供 agent_spec.yaml 配置文件的解析、验证和格式化功能
+YAML Parsing Utility
+Provides parsing, validation, and formatting for agent_spec.yaml config files
 """
 
 import logging
@@ -15,39 +15,39 @@ logger = logging.getLogger(__name__)
 
 
 class YamlParser:
-    """YAML 解析器
+    """YAML parser
     
-    功能：
-    1. 解析 agent_spec.yaml 文件
-    2. 解析 model 配置文件
-    3. 解析 skill 配置文件
-    4. 支持变量替换和引用解析
+    Features:
+    1. Parse agent_spec.yaml files
+    2. Parse model config files
+    3. Parse skill config files
+    4. Support variable substitution and reference resolution
     """
     
     def __init__(self):
-        # 自定义加载器以支持特殊标签
+        # Custom loader to support special tags
         self._loader = yaml.SafeLoader
     
     def parse_file(self, file_path: Union[str, Path]) -> Dict[str, Any]:
-        """解析 YAML 文件
+        """Parse  YAML 文件
         
         Args:
-            file_path: 文件路径
+            file_path: file path
             
         Returns:
-            解析后的字典数据
+            Parsed dict data
         """
         file_path = Path(file_path)
         
         if not file_path.exists():
             raise AgentConfigError(
-                message=f"配置文件不存在: {file_path}",
+                message=f"Config file does not exist: {file_path}",
                 config_path=str(file_path)
             )
         
         if not file_path.is_file():
             raise AgentConfigError(
-                message=f"路径不是文件: {file_path}",
+                message=f"Path is not a file: {file_path}",
                 config_path=str(file_path)
             )
         
@@ -58,43 +58,43 @@ class YamlParser:
             if data is None:
                 data = {}
             
-            logger.debug(f"解析 YAML 文件: {file_path}")
+            logger.debug(f"Parsed YAML file: {file_path}")
             return data
             
         except yaml.YAMLError as e:
             raise AgentConfigError(
-                message=f"YAML 解析错误: {str(e)}",
+                message=f"YAML parse error: {str(e)}",
                 config_path=str(file_path),
                 details={"yaml_error": str(e)}
             )
     
     def parse_string(self, content: str) -> Dict[str, Any]:
-        """解析 YAML 字符串
+        """Parse  YAML  string
         
         Args:
-            content: YAML 内容字符串
+            content: YAML 内容 string
             
         Returns:
-            解析后的字典数据
+            Parsed dict data
         """
         try:
             data = yaml.safe_load(content)
             return data if data else {}
         except yaml.YAMLError as e:
             raise AgentConfigError(
-                message=f"YAML 解析错误: {str(e)}",
+                message=f"YAML parse error: {str(e)}",
                 details={"yaml_error": str(e)}
             )
     
     def dump(self, data: Dict[str, Any], **kwargs) -> str:
-        """将数据转换为 YAML 字符串
+        """Convert data to YAML string
         
         Args:
             data: 要转换的数据
             **kwargs: yaml.dump 的额外参数
             
         Returns:
-            YAML 字符串
+            YAML  string
         """
         default_opts = {
             "default_flow_style": False,
@@ -111,11 +111,11 @@ class YamlParser:
         file_path: Union[str, Path],
         **kwargs
     ):
-        """保存数据到 YAML 文件
+        """Save 数据到 YAML 文件
         
         Args:
-            data: 要保存的数据
-            file_path: 文件路径
+            data: 要Save的数据
+            file_path: file path
             **kwargs: yaml.dump 的额外参数
         """
         file_path = Path(file_path)
@@ -126,10 +126,10 @@ class YamlParser:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         
-        logger.debug(f"保存 YAML 文件: {file_path}")
+        logger.debug(f"Saved YAML file: {file_path}")
     
     def merge(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-        """深度合并两个字典
+        """Deep merge two dictionaries
         
         Args:
             base: 基础字典
@@ -154,15 +154,15 @@ def parse_agent_spec(
     business_unit_id: str,
     agent_name: str
 ) -> AgentRuntimeConfig:
-    """解析 agent_spec.yaml 文件并创建运行时配置
+    """Parse  agent_spec.yaml 文件并Create运行时配置
     
     Args:
-        file_path: agent_spec.yaml 文件路径
+        file_path: agent_spec.yaml file path
         business_unit_id: Business Unit ID
-        agent_name: Agent 名称
+        agent_name: Agent name
         
     Returns:
-        Agent 运行时配置
+        Agent runtime config
     """
     parser = YamlParser()
     spec_data = parser.parse_file(file_path)
@@ -176,31 +176,31 @@ def parse_agent_spec(
 
 
 def parse_model_config(file_path: Union[str, Path]) -> Dict[str, Any]:
-    """解析模型配置文件
+    """Parse model config文件
     
     Args:
-        file_path: 模型配置文件路径
+        file_path: model configfile path
         
     Returns:
-        模型配置数据
+        model config数据
     """
     parser = YamlParser()
     return parser.parse_file(file_path)
 
 
 def parse_skill_config(file_path: Union[str, Path]) -> Dict[str, Any]:
-    """解析技能配置文件
+    """Parse Skill配置文件
     
     Args:
-        file_path: 技能配置文件路径
+        file_path: Skill配置file path
         
     Returns:
-        技能配置数据
+        Skill配置数据
     """
     parser = YamlParser()
     data = parser.parse_file(file_path)
     
-    # 读取关联的 prompt 文件（如果有）
+    # 读取关联的 prompt 文件 (如果有)
     if "prompt" in data:
         prompt_file = data["prompt"]
         if not Path(prompt_file).is_absolute():
@@ -216,10 +216,10 @@ def parse_skill_config(file_path: Union[str, Path]) -> Dict[str, Any]:
 def load_prompts_from_directory(
     prompts_dir: Union[str, Path]
 ) -> Dict[str, str]:
-    """从目录加载所有提示词模板
+    """Load all prompt templates from directory
     
     Args:
-        prompts_dir: prompts 目录路径
+        prompts_dir: prompts directory path
         
     Returns:
         {模板名称: 模板内容} 的字典
@@ -242,13 +242,13 @@ def load_prompts_from_directory(
 def load_skills_from_directory(
     skills_dir: Union[str, Path]
 ) -> List[Dict[str, Any]]:
-    """从目录加载所有技能配置
+    """Load all skill configs from directory
     
     Args:
-        skills_dir: skills 目录路径
+        skills_dir: skills directory path
         
     Returns:
-        技能配置列表
+        skill config list
     """
     skills_dir = Path(skills_dir)
     skills = []
@@ -258,7 +258,7 @@ def load_skills_from_directory(
     
     for skill_path in skills_dir.iterdir():
         if skill_path.is_dir():
-            # 查找技能配置文件
+            # 查找Skill配置文件
             config_file = skill_path / f"{skill_path.name}.yaml"
             if config_file.exists():
                 try:
@@ -267,6 +267,6 @@ def load_skills_from_directory(
                     skill_config["path"] = str(skill_path)
                     skills.append(skill_config)
                 except Exception as e:
-                    logger.warning(f"加载技能失败: {skill_path.name}, 错误: {e}")
+                    logger.warning(f"Failed to load skill: {skill_path.name}, error: {e}")
     
     return skills

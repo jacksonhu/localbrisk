@@ -1,3 +1,3 @@
 """
-LocalBrisk Backend App 包初始化
+LocalBrisk Backend App package initialization.
 """

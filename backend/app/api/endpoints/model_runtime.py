@@ -1,8 +1,8 @@
 """
-Model 运行时 API
-提供 Model 加载、执行、状态查询等运行时管理接口
+Model Runtime API
+Provides runtime management endpoints for Model loading, execution, status query
 
-用于直接与 LLM 模型交互，不涉及 Agent 逻辑
+For direct LLM model interaction without Agent logic
 """
 
 import logging
@@ -18,19 +18,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ==================== 请求/响应模型 ====================
+# ==================== Request/Response Models ====================
 
 class ModelExecuteRequest(BaseModel):
-    """执行 Model 请求"""
-    input: str = Field(..., description="用户输入")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="执行上下文")
-    temperature: Optional[float] = Field(default=None, description="温度参数")
-    max_tokens: Optional[int] = Field(default=None, description="最大生成长度")
-    system_prompt: Optional[str] = Field(default=None, description="系统提示词")
+    """Execute  Model request"""
+    input: str = Field(..., description="User input")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Execution context")
+    temperature: Optional[float] = Field(default=None, description="Temperature parameter")
+    max_tokens: Optional[int] = Field(default=None, description="Max generation length")
+    system_prompt: Optional[str] = Field(default=None, description="System prompt")
 
 
 class ModelExecutionResponse(BaseModel):
-    """执行响应"""
+    """Execute response"""
     execution_id: str
     model_name: str
     status: str
@@ -41,7 +41,7 @@ class ModelExecutionResponse(BaseModel):
 
 
 class ModelStatusResponse(BaseModel):
-    """状态响应"""
+    """Status response"""
     execution_id: Optional[str] = None
     status: str
     model_name: Optional[str] = None
@@ -50,27 +50,27 @@ class ModelStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-# ==================== API 端点 ====================
+# ==================== API Endpoints ====================
 
 @router.post("/{business_unit_id}/agents/{agent_name}/models/{model_name}/load")
 async def load_model(business_unit_id: str, agent_name: str, model_name: str):
-    """加载 Model
+    """Load Model
     
-    从配置文件加载 Model 并初始化运行时
+    从配置文件Load Model 并初始化运行时
     """
-    logger.info(f"加载 Model: {business_unit_id}/{agent_name}/{model_name}")
+    logger.info(f"Loading  Model: {business_unit_id}/{agent_name}/{model_name}")
     try:
         executor = get_model_executor_service()
         
-        # 从文件系统加载配置
+        # 从文件系统Load配置
         from app.services import business_unit_service
         
         model = business_unit_service.get_model(business_unit_id, agent_name, model_name)
         if not model:
-            logger.warning(f"Model 不存在: {business_unit_id}/{agent_name}/{model_name}")
+            logger.warning(f"Model  does not exist: {business_unit_id}/{agent_name}/{model_name}")
             raise HTTPException(status_code=404, detail="Model not found")
         
-        # 加载 Model
+        # Load Model
         await executor.load_model(
             business_unit_id=business_unit_id,
             agent_name=agent_name,
@@ -78,7 +78,7 @@ async def load_model(business_unit_id: str, agent_name: str, model_name: str):
             model_config=model
         )
         
-        logger.info(f"Model 加载成功: {business_unit_id}/{agent_name}/{model_name}")
+        logger.info(f"Model Load成功: {business_unit_id}/{agent_name}/{model_name}")
         return {
             "message": "Model loaded successfully",
             "model_name": model_name,
@@ -89,7 +89,7 @@ async def load_model(business_unit_id: str, agent_name: str, model_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"加载 Model 失败: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
+        logger.error(f"Failed to load  Model failed: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -100,11 +100,11 @@ async def execute_model(
     model_name: str,
     request: ModelExecuteRequest
 ):
-    """执行 Model
+    """Execute  Model
     
-    同步执行 Model 并返回结果
+    SyncExecute Model 并返回结果
     """
-    logger.info(f"执行 Model: {business_unit_id}/{agent_name}/{model_name}, input_length={len(request.input)}")
+    logger.info(f"Executing  Model: {business_unit_id}/{agent_name}/{model_name}, input_length={len(request.input)}")
     try:
         executor = get_model_executor_service()
         
@@ -119,7 +119,7 @@ async def execute_model(
             system_prompt=request.system_prompt
         )
         
-        logger.info(f"Model 执行完成: {model_name}, execution_id={result.execution_id}, status={result.status}")
+        logger.info(f"Model Execute完成: {model_name}, execution_id={result.execution_id}, status={result.status}")
         return ModelExecutionResponse(
             execution_id=result.execution_id,
             model_name=result.model_name,
@@ -131,7 +131,7 @@ async def execute_model(
         )
         
     except Exception as e:
-        logger.error(f"执行 Model 失败: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
+        logger.error(f"Execute Model failed: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -142,11 +142,11 @@ async def execute_model_streaming(
     model_name: str,
     request: ModelExecuteRequest
 ):
-    """流式执行 Model
+    """Stream execution of Model
     
-    流式执行 Model，实时返回生成内容
+    streaming execution Model, 实时返回生成内容
     """
-    logger.info(f"流式执行 Model: {business_unit_id}/{agent_name}/{model_name}, input_length={len(request.input)}")
+    logger.info(f"Streaming execution of  Model: {business_unit_id}/{agent_name}/{model_name}, input_length={len(request.input)}")
     
     async def event_generator():
         event_count = 0
@@ -166,11 +166,11 @@ async def execute_model_streaming(
                 event_count += 1
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             
-            logger.info(f"流式执行完成: {model_name}, event_count={event_count}")
+            logger.info(f"Streaming execution of 完成: {model_name}, event_count={event_count}")
             yield "data: {\"event_type\": \"done\"}\n\n"
             
         except Exception as e:
-            logger.error(f"流式执行失败: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
+            logger.error(f"流式Execution failed: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
             yield f"data: {{\"event_type\": \"error\", \"error\": \"{str(e)}\"}}\n\n"
     
     return StreamingResponse(
@@ -187,8 +187,8 @@ async def execute_model_streaming(
 
 @router.get("/{business_unit_id}/agents/{agent_name}/models/{model_name}/status", response_model=ModelStatusResponse)
 async def get_model_status(business_unit_id: str, agent_name: str, model_name: str):
-    """获取 Model 执行状态"""
-    logger.debug(f"获取 Model 状态: {business_unit_id}/{agent_name}/{model_name}")
+    """Get Model Execute状态"""
+    logger.debug(f"Fetching  Model 状态: {business_unit_id}/{agent_name}/{model_name}")
     try:
         executor = get_model_executor_service()
         
@@ -199,23 +199,23 @@ async def get_model_status(business_unit_id: str, agent_name: str, model_name: s
         return ModelStatusResponse(**status)
         
     except Exception as e:
-        logger.error(f"获取状态失败: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
+        logger.error(f"Failed to get 状态failed: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/{business_unit_id}/agents/{agent_name}/models/{model_name}/cancel")
 async def cancel_model(business_unit_id: str, agent_name: str, model_name: str):
-    """取消 Model 执行"""
-    logger.info(f"取消 Model 执行: {business_unit_id}/{agent_name}/{model_name}")
+    """Cancel  Model Execute"""
+    logger.info(f"Cancelling  Model Execute: {business_unit_id}/{agent_name}/{model_name}")
     try:
         executor = get_model_executor_service()
         
         success = await executor.cancel(business_unit_id, agent_name, model_name)
         
         if success:
-            logger.info(f"Model 执行已取消: {model_name}")
+            logger.info(f"Model Executecancelled: {model_name}")
         else:
-            logger.debug(f"没有运行中的执行: {model_name}")
+            logger.debug(f"没有运行中的Execute: {model_name}")
         
         return {
             "message": "Cancelled" if success else "No running execution",
@@ -223,17 +223,17 @@ async def cancel_model(business_unit_id: str, agent_name: str, model_name: str):
         }
         
     except Exception as e:
-        logger.error(f"取消执行失败: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
+        logger.error(f"Failed to cancel execution: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{business_unit_id}/agents/{agent_name}/models/{model_name}/unload")
 async def unload_model(business_unit_id: str, agent_name: str, model_name: str):
-    """卸载 Model
+    """Unload  Model
     
     清理 Model 运行时资源
     """
-    logger.info(f"卸载 Model: {business_unit_id}/{agent_name}/{model_name}")
+    logger.info(f"Unloading  Model: {business_unit_id}/{agent_name}/{model_name}")
     try:
         executor = get_model_executor_service()
         
@@ -242,7 +242,7 @@ async def unload_model(business_unit_id: str, agent_name: str, model_name: str):
         if success:
             logger.info(f"Model 卸载成功: {model_name}")
         else:
-            logger.warning(f"Model 未找到: {model_name}")
+            logger.warning(f"Model not found: {model_name}")
         
         return {
             "message": "Unloaded" if success else "Model not found",
@@ -250,20 +250,20 @@ async def unload_model(business_unit_id: str, agent_name: str, model_name: str):
         }
         
     except Exception as e:
-        logger.error(f"卸载 Model 失败: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
+        logger.error(f"卸载 Model failed: {business_unit_id}/{agent_name}/{model_name} - {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/models/loaded")
 async def list_loaded_models():
-    """列出已加载的 Model"""
-    logger.debug("获取已加载 Model 列表")
+    """列出已Load的 Model"""
+    logger.debug("Get已Load Model 列表")
     try:
         executor = get_model_executor_service()
         models = executor.list_loaded_models()
-        logger.debug(f"已加载 {len(models)} 个 Model")
+        logger.debug(f"已Load {len(models)}  Model(s)")
         return models
         
     except Exception as e:
-        logger.error(f"获取列表失败: {e}", exc_info=True)
+        logger.error(f"Failed to get 列表failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

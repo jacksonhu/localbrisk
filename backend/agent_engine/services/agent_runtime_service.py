@@ -1,8 +1,8 @@
 """
-Agent 运行时服务
+Agent Runtime Service
 
-负责管理 Agent 的加载、执行、状态和生命周期。
-使用 StreamMessage 协议输出 THOUGHT/TASK_LIST/ARTIFACT/STATUS/ERROR/DONE 消息包。
+Manages Agent loading, execution, state, and lifecycle.
+Outputs THOUGHT/TASK_LIST/ARTIFACT/STATUS/ERROR/DONE message packets via the StreamMessage protocol.
 """
 
 import asyncio
@@ -30,11 +30,11 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 状态定义
+# Status Definitions
 # ============================================================
 
 class AgentStatus(str, Enum):
-    """Agent 运行状态"""
+    """Agent runtime status"""
     IDLE = "idle"
     LOADING = "loading"
     READY = "ready"
@@ -47,7 +47,7 @@ class AgentStatus(str, Enum):
 
 @dataclass
 class AgentRuntimeState:
-    """Agent 运行时状态"""
+    """Agent runtime state"""
     business_unit_id: str
     agent_name: str
     agent_path: str
@@ -63,7 +63,7 @@ class AgentRuntimeState:
 
 @dataclass
 class ExecutionSnapshot:
-    """执行快照 — 用于断线重连恢复"""
+    """Execution snapshot — used for reconnection recovery"""
     execution_id: str
     thoughts: List[Dict[str, Any]] = field(default_factory=list)
     tasks: List[TaskItem] = field(default_factory=list)
@@ -73,11 +73,11 @@ class ExecutionSnapshot:
 
 
 # ============================================================
-# MessageTranslator — LangGraph 事件 → StreamMessage
+# MessageTranslator — LangGraph Events → StreamMessage
 # ============================================================
 
 class MessageTranslator:
-    """将 LangGraph 的原始流式事件翻译为 StreamMessage 消息包"""
+    """Translates raw LangGraph streaming events into StreamMessage packets"""
 
     @staticmethod
     def detect_phase(node_name: str, content: str) -> str:
@@ -86,20 +86,20 @@ class MessageTranslator:
             return "planning"
         if "reflect" in node_name.lower():
             return "reflecting"
-        if "search" in lower or "搜索" in lower:
+        if "search" in lower:
             return "searching"
-        if "code" in lower or "代码" in lower:
+        if "code" in lower:
             return "coding"
         return "analyzing"
 
     @staticmethod
     def detect_icon(node_name: str, content: str) -> str:
         lower = content[:100].lower()
-        if "search" in lower or "查找" in lower or "搜索" in lower:
+        if "search" in lower:
             return "search"
-        if "code" in lower or "代码" in lower:
+        if "code" in lower:
             return "code"
-        if "plan" in lower or "计划" in lower:
+        if "plan" in lower:
             return "plan"
         return "brain"
 
@@ -134,7 +134,7 @@ class MessageTranslator:
                     status = TaskStatus.PENDING
                 tasks.append(TaskItem(
                     id=str(todo.get("id", f"task-{i}")),
-                    title=todo.get("content") or todo.get("title") or todo.get("description") or f"任务 {i + 1}",
+                    title=todo.get("content") or todo.get("title") or todo.get("description") or f"Task {i + 1}",
                     description=todo.get("description"),
                     status=status,
                 ))
@@ -166,10 +166,10 @@ class MessageTranslator:
 # ============================================================
 
 class AgentRuntimeService:
-    """Agent 运行时服务 — 管理 Agent 完整生命周期"""
+    """Agent Runtime Service — manages the full Agent lifecycle"""
 
     def __init__(self):
-        logger.info("初始化 AgentRuntimeService")
+        logger.info("Initializing AgentRuntimeService")
         self._agents: Dict[str, AgentRuntimeState] = {}
         self._engine = None
         self._lock = asyncio.Lock()
@@ -207,7 +207,7 @@ class AgentRuntimeService:
         try:
             return with_config(config)
         except Exception as bind_error:
-            logger.warning(f"绑定 Agent 运行配置失败，回退到显式传参: {bind_error}")
+            logger.warning(f"Failed to bind Agent runtime config, falling back to explicit params: {bind_error}")
             return agent
 
     def _stream_with_config(self, agent: Any, input_data: Dict[str, Any], config: Dict[str, Any], stream_mode: str):
@@ -293,7 +293,7 @@ class AgentRuntimeService:
             parsed.setdefault("thread_id", thread_id)
             return parsed
         except Exception as read_error:
-            logger.warning(f"读取历史记录失败，将重置文件: {history_file}, error={read_error}")
+            logger.warning(f"Failed to read history, resetting file: {history_file}, error={read_error}")
             return self._build_default_history(agent_name, thread_id)
 
     @staticmethod
@@ -359,7 +359,7 @@ class AgentRuntimeService:
         }
 
     # ================================================================
-    # Agent 加载
+    # Agent Loading
     # ================================================================
 
     async def load_agent(
@@ -368,14 +368,14 @@ class AgentRuntimeService:
         agent_name: str,
         agent_path: Optional[str] = None
     ) -> AgentRuntimeState:
-        """加载 Agent"""
+        """Load an Agent"""
         key = self._get_agent_key(business_unit_id, agent_name)
 
         async with self._lock:
             if key in self._agents:
                 state = self._agents[key]
                 if state.status in (AgentStatus.READY, AgentStatus.RUNNING):
-                    logger.info(f"Agent 已加载: {key}")
+                    logger.info(f"Agent already loaded: {key}")
                     return state
 
             if not agent_path:
@@ -391,7 +391,7 @@ class AgentRuntimeService:
             self._agents[key] = state
 
         try:
-            logger.info(f"开始加载 Agent: {key}, path={agent_path}")
+            logger.info(f"Loading Agent: {key}, path={agent_path}")
             engine = self._ensure_engine()
             agent = await engine.build_agent(
                 agent_path=agent_path,
@@ -403,19 +403,19 @@ class AgentRuntimeService:
             try:
                 task_dir.mkdir(parents=True, exist_ok=True)
             except Exception as mkdir_error:
-                logger.error(f"初始化任务目录失败: {task_dir}, error={mkdir_error}")
-                raise RuntimeError(f"初始化任务目录失败: {task_dir}") from mkdir_error
+                logger.error(f"Failed to initialize task directory: {task_dir}, error={mkdir_error}")
+                raise RuntimeError(f"Failed to initialize task directory: {task_dir}") from mkdir_error
 
             async with self._lock:
                 state.agent_instance = agent
                 state.status = AgentStatus.READY
                 state.loaded_at = datetime.now().isoformat()
 
-            logger.info(f"Agent 加载成功: {key}")
+            logger.info(f"Agent loaded successfully: {key}")
             return state
 
         except Exception as e:
-            logger.error(f"Agent 加载失败: {key}, error={e}")
+            logger.error(f"Failed to load Agent: {key}, error={e}")
             async with self._lock:
                 state.status = AgentStatus.FAILED
                 state.error_count += 1
@@ -453,7 +453,7 @@ class AgentRuntimeService:
             state.error_count += 1
 
     # ================================================================
-    # 流式执行 — 输出 StreamMessage 消息包
+    # Streaming Execution — outputs StreamMessage packets
     # ================================================================
 
     async def execute_agent_stream(
@@ -463,7 +463,7 @@ class AgentRuntimeService:
         user_input: str,
         context: Optional[Dict[str, Any]] = None
     ) -> AsyncIterator[StreamMessage]:
-        """流式执行 Agent — 输出 StreamMessage 消息包"""
+        """Stream-execute an Agent — outputs StreamMessage packets"""
         key = self._get_agent_key(business_unit_id, agent_name)
         thread_id = self._resolve_thread_id(agent_name, context)
         execution_id = thread_id
@@ -489,17 +489,17 @@ class AgentRuntimeService:
                 )
             return message
 
-        yield record_stream_message(builder.status("正在初始化 Agent...", icon="loading"))
+        yield record_stream_message(builder.status("Initializing Agent...", icon="loading"))
 
         try:
             state = self._agents.get(key)
             if not state or state.status != AgentStatus.READY:
-                yield record_stream_message(builder.status("正在加载 Agent...", icon="loading"))
+                yield record_stream_message(builder.status("Loading Agent...", icon="loading"))
             state = await self._ensure_ready_agent(business_unit_id, agent_name)
             await self._mark_agent_running(state, execution_id)
 
             agent = state.agent_instance
-            yield record_stream_message(builder.status("Agent 已就绪，开始执行...", icon="play"))
+            yield record_stream_message(builder.status("Agent is ready, starting execution...", icon="play"))
 
             input_data = {"messages": [{"role": "user", "content": user_input}]}
             config = self._build_runnable_config(thread_id, agent_name)
@@ -522,23 +522,23 @@ class AgentRuntimeService:
 
         except asyncio.CancelledError:
             snapshot.status = "cancelled"
-            yield record_stream_message(builder.status("执行已取消", icon="cancel"))
-            yield record_stream_message(builder.done(summary="执行已取消"))
+            yield record_stream_message(builder.status("Execution cancelled", icon="cancel"))
+            yield record_stream_message(builder.done(summary="Execution cancelled"))
 
         except Exception as e:
-            logger.error(f"Agent 流式执行失败: {key}, error={e}")
+            logger.error(f"Agent streaming execution failed: {key}, error={e}")
             await self._mark_agent_failed(key)
 
             snapshot.status = "failed"
             yield record_stream_message(builder.error(
                 message=str(e),
                 error_type=type(e).__name__,
-                suggestion="请检查 Agent 配置或重试",
+                suggestion="Please check Agent configuration or retry",
                 retryable=True,
                 traceback=tb_module.format_exc(),
             ))
             yield record_stream_message(builder.done(
-                summary=f"执行失败: {str(e)[:50]}",
+                summary=f"Execution failed: {str(e)[:50]}",
                 total_time_ms=int((time.time() - start_time) * 1000),
             ))
 
@@ -553,7 +553,7 @@ class AgentRuntimeService:
                 )
             except Exception as persist_error:
                 logger.warning(
-                    f"保存对话历史失败: {business_unit_id}/{agent_name}, thread_id={thread_id}, error={persist_error}"
+                    f"Failed to persist conversation history: {business_unit_id}/{agent_name}, thread_id={thread_id}, error={persist_error}"
                 )
 
             if len(self._snapshots) > 20:
@@ -574,30 +574,30 @@ class AgentRuntimeService:
         builder: StreamMessageBuilder,
         snapshot: ExecutionSnapshot,
     ) -> AsyncIterator[StreamMessage]:
-        """核心流式执行 — 翻译 LangGraph 事件为 StreamMessage
+        """Core streaming execution — translates LangGraph events to StreamMessage.
 
-        关键说明：
-        LangGraph stream_mode="messages" 以增量 AIMessageChunk 方式输出 tool_calls。
-        同一个 tool_call 会跨多个 chunk：
-          - 第1个 chunk: name="ls", id="call_xxx", args="" (或部分)
-          - 后续 chunk: name="", id="call_xxx", args="..." (增量追加)
-        因此必须用 tool_call_id 做去重和跟踪。
+        Key notes:
+        LangGraph stream_mode="messages" outputs incremental AIMessageChunks for tool_calls.
+        The same tool_call spans multiple chunks:
+          - 1st chunk: name="ls", id="call_xxx", args="" (or partial)
+          - Subsequent chunks: name="", id="call_xxx", args="..." (incremental append)
+        Therefore, tool_call_id must be used for deduplication and tracking.
         """
         accumulated_content = ""
         t = self._translator
 
-        # tool_call_id → tool_name：记录每个 tool_call 的名称（首次出现时记录）
+        # tool_call_id -> tool_name: records the name of each tool_call (captured on first occurrence)
         tool_call_names: Dict[str, str] = {}
-        # tool_call index → tool_call_id（tool_call_chunks 中后续 chunk 可能只有 index）
+        # tool_call index -> tool_call_id (subsequent chunks may only have index)
         index_to_id: Dict[int, str] = {}
-        # 已发送 TOOL_CALL running 事件的 tool_call_id
+        # tool_call_ids for which a TOOL_CALL running event has been emitted
         emitted_tool_ids: set = set()
-        # 已发送 TOOL_CALL completed 事件的 tool_call_id（避免重复）
+        # tool_call_ids for which a TOOL_CALL completed event has been emitted (avoid duplicates)
         completed_tool_ids: set = set()
-        # 需要过滤的内部工具调用
+        # Internal tool calls to filter out
         filtered_tool_ids: set = set()
 
-        yield builder.thought("正在分析您的请求...", mode="replace", phase="planning", icon="brain")
+        yield builder.thought("Analyzing your request...", mode="replace", phase="planning", icon="brain")
 
         try:
             async for chunk in self._stream_with_config(agent, input_data, config, stream_mode="messages"):
@@ -610,7 +610,7 @@ class AgentRuntimeService:
                 node_name = metadata.get("langgraph_node", "")
                 chunk_type = getattr(message_chunk, 'type', '')
 
-                # ── 1. AI 文本流 → THOUGHT ──
+                # -- 1. AI text stream -> THOUGHT --
                 if chunk_type != 'tool' and hasattr(message_chunk, 'content') and message_chunk.content:
                     content = self._extract_text_from_content(message_chunk.content)
                     if content:
@@ -627,28 +627,27 @@ class AgentRuntimeService:
                             "timestamp": time.time(),
                         })
 
-                # ── 2. 工具调用 ──
-                # AIMessageChunk 有两个相关属性：
-                #   tool_call_chunks: 原始增量片段（args 是 str 片段，id 可能为空）
-                #   tool_calls:       解析后的完整调用（args 是 dict，仅当 JSON 完整时存在）
+                # -- 2. Tool calls --
+                # AIMessageChunk has two relevant attributes:
+                #   tool_call_chunks: raw incremental fragments (args is str fragment, id may be empty)
+                #   tool_calls:       parsed complete calls (args is dict, only present when JSON is complete)
                 #
-                # 策略：
-                # A) 用 tool_call_chunks 来：发现新 tool_call + 累积 AgentResponse args
-                # B) 用 tool_calls 来：获取完整解析的 args（用于普通工具的参数展示）
+                # Strategy:
+                # A) Use tool_call_chunks to: discover new tool_calls + accumulate args
+                # B) Use tool_calls to: get fully parsed args (for parameter display)
 
-                # A) 处理增量 tool_call_chunks
+                # A) Process incremental tool_call_chunks
                 if hasattr(message_chunk, 'tool_call_chunks') and message_chunk.tool_call_chunks:
                     for tc in message_chunk.tool_call_chunks:
-                        # 注意：后续 chunk 中 name/id 可能是 None（不是空字符串）
                         tc_name = (tc.get('name') if isinstance(tc, dict) else getattr(tc, 'name', None)) or ''
                         tc_args = (tc.get('args') if isinstance(tc, dict) else getattr(tc, 'args', None)) or ''
                         tc_id = (tc.get('id') if isinstance(tc, dict) else getattr(tc, 'id', None)) or ''
                         tc_idx = tc.get('index', None) if isinstance(tc, dict) else getattr(tc, 'index', None)
 
-                        # 记录 name→id 映射
+                        # Record name -> id mapping
                         if tc_name and tc_id:
                             tool_call_names[tc_id] = tc_name
-                        # index→id 映射（后续 chunk 可能没有 id 只有 index）
+                        # index -> id mapping (subsequent chunks may lack id, only have index)
                         if tc_id and tc_idx is not None:
                             index_to_id[tc_idx] = tc_id
                         if not tc_id and tc_idx is not None:
@@ -656,17 +655,17 @@ class AgentRuntimeService:
 
                         known_name = tool_call_names.get(tc_id, '') if tc_id else ''
 
-                        # write_todos / todo_write → 标记过滤
+                        # write_todos / todo_write -> mark as filtered
                         if known_name in self._INTERNAL_TOOL_NAMES or tc_name in self._INTERNAL_TOOL_NAMES:
                             if tc_id:
                                 filtered_tool_ids.add(tc_id)
                             continue
 
-                        # 已过滤 id
+                        # Already filtered id
                         if tc_id and tc_id in filtered_tool_ids:
                             continue
 
-                        # 普通工具：首次出现 → 发 running（args 此时可能不完整，先不传）
+                        # Regular tool: first occurrence -> emit running (args may be incomplete, skip for now)
                         if tc_id and tc_id not in emitted_tool_ids:
                             display_name = known_name or tc_name or 'unknown'
                             tool_call_names.setdefault(tc_id, display_name)
@@ -678,7 +677,7 @@ class AgentRuntimeService:
                                 icon=t.tool_icon(display_name),
                             )
 
-                # B) 处理完整 tool_calls（用于 write_todos 的完整 args）
+                # B) Process complete tool_calls (for write_todos full args)
                 if hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
                     for tc in message_chunk.tool_calls:
                         tc_name = (tc.get('name') if isinstance(tc, dict) else getattr(tc, 'name', None)) or ''
@@ -720,7 +719,7 @@ class AgentRuntimeService:
                                 expected_outcome=t.extract_expected_outcome(tool_args),
                             )
 
-                # ── 3. 工具结果（ToolMessage） ──
+                # -- 3. Tool results (ToolMessage) --
                 if chunk_type == 'tool':
                     tool_call_id = getattr(message_chunk, 'tool_call_id', '')
                     if tool_call_id in filtered_tool_ids:
@@ -743,7 +742,7 @@ class AgentRuntimeService:
                         completed_tool_ids.add(tool_call_id)
 
         except Exception as stream_error:
-            logger.warning(f"messages 模式失败，回退到 values 模式: {stream_error}")
+            logger.warning(f"Messages mode failed, falling back to values mode: {stream_error}")
             try:
                 async for chunk in self._stream_with_config(agent, input_data, config, stream_mode="values"):
                     if state.cancel_requested:
@@ -834,14 +833,15 @@ class AgentRuntimeService:
                                     icon="brain",
                                 )
             except Exception as values_error:
-                logger.warning(f"values 模式失败，回退到非流式 invoke: {values_error}")
+                logger.warning(f"Values mode failed, falling back to non-streaming invoke: {values_error}")
                 output = await self._invoke_non_stream(agent, input_data, config)
                 if output and output != accumulated_content:
                     accumulated_content = output
 
-        # ── 最终输出（Markdown 直出） ──
+        # -- Final output (Markdown direct output) --
         for msg in self._emit_final_output(accumulated_content, builder, snapshot):
             yield msg
+
     async def execute_agent(
             self,
             business_unit_id: str,
@@ -849,7 +849,7 @@ class AgentRuntimeService:
             user_input: str,
             context: Optional[Dict[str, Any]] = None
     ) -> AsyncIterator[StreamMessage]:
-        """流式执行 Agent — 输出 StreamMessage 消息包"""
+        """Stream-execute an Agent — outputs StreamMessage packets"""
         key = self._get_agent_key(business_unit_id, agent_name)
         execution_id = agent_name
         start_time = time.time()
@@ -858,21 +858,21 @@ class AgentRuntimeService:
         snapshot = ExecutionSnapshot(execution_id=execution_id)
         self._snapshots[execution_id] = snapshot
 
-        yield builder.status("正在初始化 Agent...", icon="loading")
+        yield builder.status("Initializing Agent...", icon="loading")
 
         try:
             state = self._agents.get(key)
             if not state or state.status != AgentStatus.READY:
-                yield builder.status("正在加载 Agent...", icon="loading")
+                yield builder.status("Loading Agent...", icon="loading")
             state = await self._ensure_ready_agent(business_unit_id, agent_name)
             await self._mark_agent_running(state, execution_id)
 
             agent = state.agent_instance
-            yield builder.status("Agent 已就绪，开始执行...", icon="play")
+            yield builder.status("Agent is ready, starting execution...", icon="play")
 
             input_data = {"messages": [{"role": "user", "content": user_input}]}
             config = self._build_runnable_config(execution_id, agent_name)
-            yield builder.thought("正在处理请求...", mode="replace", phase="analyzing", icon="brain")
+            yield builder.thought("Processing request...", mode="replace", phase="analyzing", icon="brain")
             output = await self._invoke_non_stream(agent, input_data, config)
             yield output
             await self._mark_agent_ready(key, increase_execution_count=True)
@@ -888,23 +888,23 @@ class AgentRuntimeService:
 
         except asyncio.CancelledError:
             snapshot.status = "cancelled"
-            yield builder.status("执行已取消", icon="cancel")
-            yield builder.done(summary="执行已取消")
+            yield builder.status("Execution cancelled", icon="cancel")
+            yield builder.done(summary="Execution cancelled")
 
         except Exception as e:
-            logger.error(f"Agent 流式执行失败: {key}, error={e}")
+            logger.error(f"Agent streaming execution failed: {key}, error={e}")
             await self._mark_agent_failed(key)
 
             snapshot.status = "failed"
             yield builder.error(
                 message=str(e),
                 error_type=type(e).__name__,
-                suggestion="请检查 Agent 配置或重试",
+                suggestion="Please check Agent configuration or retry",
                 retryable=True,
                 traceback=tb_module.format_exc(),
             )
             yield builder.done(
-                summary=f"执行失败: {str(e)[:50]}",
+                summary=f"Execution failed: {str(e)[:50]}",
                 total_time_ms=int((time.time() - start_time) * 1000),
             )
 
@@ -920,14 +920,14 @@ class AgentRuntimeService:
         input_data: Dict[str, Any],
         config: Dict[str, Any],
     ) -> str:
-        """调用非流式接口并提取最终文本输出"""
+        """Invoke the non-streaming interface and extract the final text output"""
         bound_agent = self._bind_agent_config(agent, config)
         result = await bound_agent.ainvoke(input_data)
 
         if result is None:
             return ""
 
-        # 兼容部分模型 SDK 在非流式调用路径返回 AsyncStream 的情况
+        # Handle cases where some model SDKs return AsyncStream in non-streaming call paths
         if hasattr(result, "__aiter__") and not isinstance(result, (str, dict)):
             stream_text_parts: List[str] = []
             async for chunk in result:
@@ -964,7 +964,7 @@ class AgentRuntimeService:
         builder: StreamMessageBuilder,
         snapshot: ExecutionSnapshot,
     ) -> List[StreamMessage]:
-        """补发最终 Markdown 文本（仅在流式阶段未完整输出时）"""
+        """Emit final Markdown text (only when streaming phase did not output completely)"""
         if not accumulated_content.strip():
             return []
 
@@ -987,10 +987,10 @@ class AgentRuntimeService:
         artifact_count = len(snapshot.artifacts)
         if task_count > 0:
             completed = sum(1 for t in snapshot.tasks if t.status == TaskStatus.COMPLETED)
-            return f"完成 {completed}/{task_count} 个任务，产出 {artifact_count} 个制品"
+            return f"Completed {completed}/{task_count} tasks, produced {artifact_count} artifacts"
         if artifact_count > 0:
-            return f"已产出 {artifact_count} 个制品"
-        return "执行完成"
+            return f"Produced {artifact_count} artifacts"
+        return "Execution completed"
 
     def _extract_output(self, result: Dict[str, Any]) -> str:
         if not result:
@@ -1006,7 +1006,7 @@ class AgentRuntimeService:
         return ""
 
     # ================================================================
-    # 重连快照
+    # Reconnection Snapshot
     # ================================================================
 
     def get_execution_snapshot(self, execution_id: str) -> Optional[Dict[str, Any]]:
@@ -1022,7 +1022,7 @@ class AgentRuntimeService:
         ).model_dump(exclude_none=True)
 
     # ================================================================
-    # Agent 管理
+    # Agent Management
     # ================================================================
 
     async def get_agent_status(self, business_unit_id: str, agent_name: str) -> Dict[str, Any]:
@@ -1047,7 +1047,7 @@ class AgentRuntimeService:
             state = self._agents.get(key)
             if state and state.status == AgentStatus.RUNNING:
                 state.cancel_requested = True
-                logger.info(f"请求取消 Agent 执行: {key}")
+                logger.info(f"Requested cancellation of Agent execution: {key}")
                 return True
         return False
 
@@ -1057,7 +1057,7 @@ class AgentRuntimeService:
         agent_name: str,
         thread_id: Optional[str] = None,
     ) -> bool:
-        """清理 Agent 对话上下文（LangGraph thread）与本地历史。"""
+        """Clear Agent conversation context (LangGraph thread) and local history."""
         key = self._get_agent_key(business_unit_id, agent_name)
         resolved_thread_id = self._resolve_thread_id(agent_name, {"thread_id": thread_id} if thread_id else None)
         state = self._agents.get(key)
@@ -1066,12 +1066,12 @@ class AgentRuntimeService:
         if state and state.agent_instance:
             checkpointer = getattr(state.agent_instance, "checkpointer", None)
             if not checkpointer:
-                logger.warning(f"Agent checkpointer 不存在，跳过上下文清理: {key}")
+                logger.warning(f"Agent checkpointer does not exist, skipping context cleanup: {key}")
                 context_cleared = False
             else:
                 adelete_thread = getattr(checkpointer, "adelete_thread", None)
                 if not callable(adelete_thread):
-                    logger.warning(f"checkpointer 不支持 adelete_thread，跳过上下文清理: {key}")
+                    logger.warning(f"Checkpointer does not support adelete_thread, skipping context cleanup: {key}")
                     context_cleared = False
                 else:
                     await adelete_thread(resolved_thread_id)
@@ -1086,11 +1086,11 @@ class AgentRuntimeService:
             except Exception as delete_error:
                 history_cleared = False
                 logger.warning(
-                    f"删除对话历史文件失败: {history_file}, error={delete_error}"
+                    f"Failed to delete conversation history file: {history_file}, error={delete_error}"
                 )
 
         logger.info(
-            f"Agent 对话上下文清理完成: {key}, thread_id={resolved_thread_id}, context={context_cleared}, history={history_cleared}"
+            f"Agent conversation context cleared: {key}, thread_id={resolved_thread_id}, context={context_cleared}, history={history_cleared}"
         )
         return context_cleared and history_cleared
 
@@ -1114,12 +1114,12 @@ class AgentRuntimeService:
                         if asyncio.iscoroutine(result):
                             await result
                     except Exception as e:
-                        logger.warning(f"关闭 Agent 资源失败: {key}, error={e}")
+                        logger.warning(f"Failed to close Agent resources: {key}, error={e}")
 
             state.agent_instance = None
             state.status = AgentStatus.UNLOADED
             del self._agents[key]
-            logger.info(f"Agent 已卸载: {key}")
+            logger.info(f"Agent unloaded: {key}")
             return True
 
     def list_loaded_agents(self) -> List[Dict[str, Any]]:
@@ -1135,7 +1135,7 @@ class AgentRuntimeService:
         ]
 
 
-# 全局服务实例
+# Global service instance
 _service_instance: Optional[AgentRuntimeService] = None
 
 

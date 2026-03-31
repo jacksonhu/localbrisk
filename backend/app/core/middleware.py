@@ -1,6 +1,6 @@
 """
-国际化中间件
-根据请求头自动设置语言
+I18n middleware.
+Automatically sets language based on request headers.
 """
 
 from typing import Callable
@@ -13,51 +13,51 @@ from app.core.i18n import SupportedLocale, set_locale
 
 class I18nMiddleware(BaseHTTPMiddleware):
     """
-    国际化中间件
-    从请求头 Accept-Language 或自定义头 X-Language 中获取语言设置
+    Internationalization middleware.
+    Detects language from Accept-Language or custom X-Language request header.
     """
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # 优先从自定义头获取语言
+        # Prefer custom header for language
         language = request.headers.get("X-Language")
         
-        # 如果没有自定义头，从 Accept-Language 获取
+        # Fall back to Accept-Language if no custom header
         if not language:
             accept_language = request.headers.get("Accept-Language", "")
             language = self._parse_accept_language(accept_language)
         
-        # 设置语言
+        # Set locale
         locale = self._get_locale(language)
         set_locale(locale)
         
-        # 将语言信息存储到请求状态中
+        # Store locale in request state
         request.state.locale = locale
         
         response = await call_next(request)
         
-        # 在响应头中返回实际使用的语言
+        # Return actual locale in response header
         response.headers["Content-Language"] = locale.value
         
         return response
     
     def _parse_accept_language(self, accept_language: str) -> str:
         """
-        解析 Accept-Language 头
+        Parse Accept-Language header.
         
         Args:
-            accept_language: Accept-Language 头的值
+            accept_language: Value of Accept-Language header
             
         Returns:
-            语言代码
+            Language code
         """
         if not accept_language:
             return ""
         
-        # 简单解析，取第一个语言
-        # 格式: zh-CN,zh;q=0.9,en;q=0.8
+        # Simple parsing: take the first language
+        # Format: zh-CN,zh;q=0.9,en;q=0.8
         languages = accept_language.split(",")
         if languages:
-            # 去掉权重部分
+            # Strip quality weight
             first_lang = languages[0].split(";")[0].strip()
             return first_lang
         
@@ -65,21 +65,21 @@ class I18nMiddleware(BaseHTTPMiddleware):
     
     def _get_locale(self, language: str) -> SupportedLocale:
         """
-        根据语言代码获取支持的语言枚举
+        Get supported locale enum from language code.
         
         Args:
-            language: 语言代码
+            language: Language code
             
         Returns:
-            SupportedLocale 枚举值
+            SupportedLocale enum value
         """
         if not language:
             return SupportedLocale.ZH_CN
         
-        # 标准化语言代码
+        # Normalize language code
         language = language.lower().replace("_", "-")
         
-        # 匹配支持的语言
+        # Match supported languages
         if language.startswith("zh"):
             if "tw" in language or "hk" in language or "hant" in language:
                 return SupportedLocale.ZH_TW
@@ -89,5 +89,5 @@ class I18nMiddleware(BaseHTTPMiddleware):
         elif language.startswith("en"):
             return SupportedLocale.EN
         
-        # 默认返回中文
+        # Default to Chinese
         return SupportedLocale.ZH_CN

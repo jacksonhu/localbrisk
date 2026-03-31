@@ -1,5 +1,5 @@
 """
-BusinessUnit 服务 - 核心服务，管理 BusinessUnit 及其子服务
+BusinessUnit Service - core service managing BusinessUnit and sub-services
 """
 
 import logging
@@ -34,18 +34,18 @@ logger = logging.getLogger(__name__)
 
 
 class BusinessUnitService(BaseService):
-    """BusinessUnit 服务类"""
+    """BusinessUnit service class"""
     
     def __init__(self):
         super().__init__(settings.CATALOGS_DIR)
-        # 延迟导入子服务，避免循环依赖
+        # Lazy import to avoid circular dependencies
         self._asset_bundle_service = None
         self._agent_service = None
-        logger.debug(f"BusinessUnitService 初始化, base_dir={settings.CATALOGS_DIR}")
+        logger.debug(f"BusinessUnitService initialized, base_dir={settings.CATALOGS_DIR}")
     
     @property
     def asset_bundle_service(self):
-        """AssetBundle 服务"""
+        """AssetBundle service"""
         if self._asset_bundle_service is None:
             from app.services.asset_bundle_service import AssetBundleService
             self._asset_bundle_service = AssetBundleService(self)
@@ -58,26 +58,26 @@ class BusinessUnitService(BaseService):
             self._agent_service = AgentService(self)
         return self._agent_service
     
-    # ==================== 路径方法 ====================
+    # ==================== Path Methods ====================
     
     def get_business_unit_path(self, business_unit_id: str) -> Path:
-        """获取 BusinessUnit 路径"""
+        """Get BusinessUnit path"""
         return self.base_dir / business_unit_id
     
     def get_config_path(self, bu_path: Path) -> Path:
-        """获取 BusinessUnit 配置文件路径"""
+        """Get BusinessUnit config file path"""
         return bu_path / BUSINESS_UNIT_CONFIG_FILE
     
     def get_agents_dir(self, bu_path: Path) -> Path:
-        """获取 Agents 目录路径"""
+        """Get Agents directory path"""
         return bu_path / AGENTS_DIR
     
     def get_asset_bundles_dir(self, bu_path: Path) -> Path:
-        """获取 AssetBundles 目录路径"""
+        """Get AssetBundles directory path"""
         return bu_path / ASSET_BUNDLES_DIR
     
     def get_asset_bundle_path(self, business_unit_id: str, bundle_name: str) -> Optional[Path]:
-        """获取 AssetBundle 路径"""
+        """Get AssetBundle path"""
         bu_path = self.get_business_unit_path(business_unit_id)
         bundle_path = self.get_asset_bundles_dir(bu_path) / bundle_name
         return bundle_path if bundle_path.exists() else None
@@ -85,20 +85,20 @@ class BusinessUnitService(BaseService):
     # ==================== BusinessUnit CRUD ====================
     
     def discover_business_units(self) -> List[BusinessUnit]:
-        """发现所有 BusinessUnit"""
-        logger.debug(f"扫描 BusinessUnit 目录: {self.base_dir}")
+        """Discover all BusinessUnits"""
+        logger.debug(f"Scanning BusinessUnit directory: {self.base_dir}")
         bus = self._scan_subdirs(self.base_dir, self._load_business_unit)
-        logger.info(f"发现 {len(bus)} 个 BusinessUnit")
+        logger.info(f"Discover {len(bus)}  BusinessUnit(s)")
         return bus
     
     def _load_business_unit(self, bu_path: Path) -> Optional[BusinessUnit]:
-        """加载 BusinessUnit"""
-        logger.debug(f"加载 BusinessUnit: {bu_path.name}")
+        """Load BusinessUnit"""
+        logger.debug(f"Loading BusinessUnit: {bu_path.name}")
         config_path = self.get_config_path(bu_path)
         config = self._load_yaml(config_path)
         
         if config is None:
-            logger.debug(f"BusinessUnit 配置不存在，创建默认配置: {bu_path.name}")
+            logger.debug(f"BusinessUnit config not found, creating default config: {bu_path.name}")
             baseinfo = self._create_baseinfo(bu_path.name)
             config = {"baseinfo": baseinfo}
             self._save_yaml(config_path, config)
@@ -121,46 +121,46 @@ class BusinessUnitService(BaseService):
         )
     
     def get_business_unit(self, business_unit_id: str) -> Optional[BusinessUnit]:
-        """获取 BusinessUnit"""
-        logger.debug(f"获取 BusinessUnit: {business_unit_id}")
+        """Get BusinessUnit"""
+        logger.debug(f"Fetching BusinessUnit: {business_unit_id}")
         bu_path = self.get_business_unit_path(business_unit_id)
         if not bu_path.exists():
-            logger.debug(f"BusinessUnit 不存在: {business_unit_id}")
+            logger.debug(f"BusinessUnit  does not exist: {business_unit_id}")
             return None
         return self._load_business_unit(bu_path)
     
     def get_business_unit_config_content(self, business_unit_id: str) -> Optional[str]:
-        """获取 BusinessUnit 配置文件原始内容"""
+        """Get BusinessUnit config raw content"""
         bu_path = self.get_business_unit_path(business_unit_id)
         if not bu_path.exists():
             return None
         return self._read_file(self.get_config_path(bu_path))
     
     def create_business_unit(self, data: BusinessUnitCreate) -> BusinessUnit:
-        """创建 BusinessUnit"""
-        logger.info(f"创建 BusinessUnit: {data.name}")
+        """Create BusinessUnit"""
+        logger.info(f"Creating BusinessUnit: {data.name}")
         bu_path = self.get_business_unit_path(data.name)
         if bu_path.exists():
-            logger.warning(f"BusinessUnit 已存在: {data.name}")
-            raise ValueError(f"BusinessUnit '{data.name}' 已存在")
+            logger.warning(f"BusinessUnit  already exists: {data.name}")
+            raise ValueError(f"BusinessUnit '{data.name}' already exists")
         
-        # 创建目录结构
+        # Create directory structure
         bu_path.mkdir(parents=True, exist_ok=True)
         self.get_agents_dir(bu_path).mkdir(exist_ok=True)
-        (bu_path / ASSET_BUNDLES_DIR).mkdir(exist_ok=True)  # 使用新目录名
+        (bu_path / ASSET_BUNDLES_DIR).mkdir(exist_ok=True)  # Use new directory name
         
-        # 创建配置
+        # Create config
         baseinfo = self._create_baseinfo(data.name, data.display_name, data.description, data.tags, data.owner or "admin")
         self._save_yaml(bu_path / BUSINESS_UNIT_CONFIG_FILE, {"baseinfo": baseinfo})
-        logger.info(f"BusinessUnit 创建成功: {data.name}")
+        logger.info(f"BusinessUnit created successfully: {data.name}")
         return self._load_business_unit(bu_path)
     
     def update_business_unit(self, business_unit_id: str, update: BusinessUnitUpdate) -> Optional[BusinessUnit]:
-        """更新 BusinessUnit"""
-        logger.info(f"更新 BusinessUnit: {business_unit_id}")
+        """Update BusinessUnit"""
+        logger.info(f"Updating BusinessUnit: {business_unit_id}")
         bu_path = self.get_business_unit_path(business_unit_id)
         if not bu_path.exists():
-            logger.warning(f"BusinessUnit 不存在: {business_unit_id}")
+            logger.warning(f"BusinessUnit  does not exist: {business_unit_id}")
             return None
         
         config_path = self.get_config_path(bu_path)
@@ -171,20 +171,20 @@ class BusinessUnitService(BaseService):
         config["baseinfo"] = baseinfo
         self._save_yaml(config_path, config)
         
-        logger.info(f"BusinessUnit 更新成功: {business_unit_id}")
+        logger.info(f"BusinessUnit updated successfully: {business_unit_id}")
         return self._load_business_unit(bu_path)
     
     def delete_business_unit(self, business_unit_id: str) -> bool:
-        """删除 BusinessUnit"""
-        logger.info(f"删除 BusinessUnit: {business_unit_id}")
+        """Delete BusinessUnit"""
+        logger.info(f"Deleting BusinessUnit: {business_unit_id}")
         result = self._remove_dir(self.get_business_unit_path(business_unit_id))
         if result:
-            logger.info(f"BusinessUnit 删除成功: {business_unit_id}")
+            logger.info(f"BusinessUnit deleted successfully: {business_unit_id}")
         else:
-            logger.warning(f"BusinessUnit 不存在: {business_unit_id}")
+            logger.warning(f"BusinessUnit  does not exist: {business_unit_id}")
         return result
     
-    # ==================== AssetBundle 代理方法 ====================
+    # ==================== AssetBundle Proxy Methods ====================
     
     def get_asset_bundles(self, business_unit_id: str) -> List[AssetBundle]:
         return self.asset_bundle_service.get_asset_bundles(business_unit_id)
@@ -204,7 +204,7 @@ class BusinessUnitService(BaseService):
     def sync_asset_bundle_metadata(self, business_unit_id: str, bundle_name: str) -> SyncResult:
         return self.asset_bundle_service.sync_asset_bundle_metadata(business_unit_id, bundle_name)
     
-    # ==================== Asset 代理方法 ====================
+    # ==================== Asset Proxy Methods ====================
     
     def scan_assets(self, business_unit_id: str, bundle_name: str) -> List[Asset]:
         return self.asset_bundle_service.scan_assets(business_unit_id, bundle_name)
@@ -221,7 +221,7 @@ class BusinessUnitService(BaseService):
     def preview_table_data(self, business_unit_id: str, bundle_name: str, table_name: str, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
         return self.asset_bundle_service.preview_table_data(business_unit_id, bundle_name, table_name, limit, offset)
     
-    # ==================== Agent 代理方法 ====================
+    # ==================== Agent Proxy Methods ====================
     
     def list_agents(self, business_unit_id: str) -> List[Agent]:
         return self.agent_service.list_agents(business_unit_id)
@@ -241,7 +241,7 @@ class BusinessUnitService(BaseService):
     def delete_agent(self, business_unit_id: str, agent_name: str) -> bool:
         return self.agent_service.delete_agent(business_unit_id, agent_name)
     
-    # ==================== Model 代理方法 ====================
+    # ==================== Model Proxy Methods ====================
     
     def list_models(self, business_unit_id: str, agent_name: str) -> List[Model]:
         return self.agent_service.list_models(business_unit_id, agent_name)
@@ -262,10 +262,10 @@ class BusinessUnitService(BaseService):
         return self.agent_service.delete_model(business_unit_id, agent_name, model_name)
     
     def enable_model(self, business_unit_id: str, agent_name: str, model_name: str) -> bool:
-        """启用指定 Model"""
+        """Enable specified Model"""
         return self.agent_service.enable_model(business_unit_id, agent_name, model_name)
     
-    # ==================== MCP 代理方法 ====================
+    # ==================== MCP Proxy Methods ====================
     
     def list_mcps(self, business_unit_id: str, agent_name: str) -> List[MCP]:
         return self.agent_service.list_mcps(business_unit_id, agent_name)
@@ -282,7 +282,7 @@ class BusinessUnitService(BaseService):
     def delete_mcp(self, business_unit_id: str, agent_name: str, mcp_name: str) -> bool:
         return self.agent_service.delete_mcp(business_unit_id, agent_name, mcp_name)
     
-    # ==================== Memory 代理方法 ====================
+    # ==================== Memory Proxy Methods ====================
     
     def list_agent_memories(self, business_unit_id: str, agent_name: str) -> Optional[List[Memory]]:
         return self.agent_service.list_memories(business_unit_id, agent_name)
@@ -302,7 +302,7 @@ class BusinessUnitService(BaseService):
     def toggle_memory_enabled(self, business_unit_id: str, agent_name: str, memory_name: str, enabled: bool) -> bool:
         return self.agent_service.toggle_memory_enabled(business_unit_id, agent_name, memory_name, enabled)
     
-    # ==================== Skill 代理方法 ====================
+    # ==================== Skill Proxy Methods ====================
     
     def get_agent_skill(self, business_unit_id: str, agent_name: str, skill_name: str) -> Optional[Dict[str, Any]]:
         return self.agent_service.get_skill(business_unit_id, agent_name, skill_name)
@@ -316,49 +316,49 @@ class BusinessUnitService(BaseService):
     def import_skill_from_zip(self, business_unit_id: str, agent_name: str, zip_file_path: Path, original_filename: str = None) -> Dict[str, Any]:
         return self.agent_service.import_skill_from_zip(business_unit_id, agent_name, zip_file_path, original_filename)
     
-    # ==================== 导航树 ====================
+    # ==================== Navigation Tree ====================
     
     def get_business_unit_tree(self) -> List[BusinessUnitTreeNode]:
-        """获取导航树"""
+        """Get navigation tree"""
         return [self._build_bu_node(bu) for bu in self.discover_business_units()]
     
     def _build_bu_node(self, bu: BusinessUnit) -> BusinessUnitTreeNode:
-        """构建 BusinessUnit 树节点"""
+        """Build BusinessUnit tree node"""
         children = []
         
-        # Agent 节点
+        # Agent nodes
         for agent in bu.agents:
             agent_children = []
             
-            # Skills 文件夹
+            # Skills folder
             if agent.skills:
                 agent_children.append(self._build_folder_node(
                     f"{agent.id}_skills", "skills", "Skills", "skill",
                     agent.skills, {"business_unit_id": bu.id, "agent_name": agent.name}
                 ))
             
-            # Memories 文件夹
+            # Memories folder
             if agent.memories:
                 agent_children.append(self._build_folder_node(
                     f"{agent.id}_memories", "memories", "Memories", "prompt",
                     agent.memories, {"business_unit_id": bu.id, "agent_name": agent.name}
                 ))
             
-            # Models 文件夹
+            # Models folder
             if agent.models:
                 agent_children.append(self._build_folder_node(
                     f"{agent.id}_models", "models", "Models", "model",
                     agent.models, {"business_unit_id": bu.id, "agent_name": agent.name, "active_model": agent.active_model}
                 ))
             
-            # MCPs 文件夹
+            # MCPs folder
             if agent.mcps:
                 agent_children.append(self._build_folder_node(
                     f"{agent.id}_mcps", "mcps", "MCPs", "mcp",
                     agent.mcps, {"business_unit_id": bu.id, "agent_name": agent.name}
                 ))
 
-            # Output 文件夹
+            # Output folder
             output_node = self._build_output_node(bu.id, agent.name, agent.id)
             if output_node:
                 agent_children.append(output_node)
@@ -394,7 +394,7 @@ class BusinessUnitService(BaseService):
         )
     
     def _build_folder_node(self, id: str, name: str, display_name: str, child_type: str, items: List[str], metadata: Dict) -> BusinessUnitTreeNode:
-        """构建文件夹节点"""
+        """Build folder node"""
         return BusinessUnitTreeNode(
             id=id, name=name, display_name=display_name, node_type="folder",
             children=[
@@ -405,7 +405,7 @@ class BusinessUnitService(BaseService):
         )
 
     def _build_output_node(self, business_unit_id: str, agent_name: str, agent_id: str) -> Optional[BusinessUnitTreeNode]:
-        """构建 Agent output 树节点"""
+        """Build Agent output tree node"""
         agent_path = self.agent_service._get_agent_path(business_unit_id, agent_name)
         output_path = agent_path / AGENT_OUTPUT_DIR
         if not output_path.exists() or not output_path.is_dir():
@@ -435,7 +435,7 @@ class BusinessUnitService(BaseService):
         parent_id: str,
         relative_path: str,
     ) -> List[BusinessUnitTreeNode]:
-        """递归构建 output 下的目录树"""
+        """Recursively build directory tree under output"""
         current_path = root_path / relative_path if relative_path else root_path
         if not current_path.exists() or not current_path.is_dir():
             return []
@@ -478,7 +478,7 @@ class BusinessUnitService(BaseService):
         return nodes
 
     def _resolve_output_path(self, business_unit_id: str, agent_name: str, relative_path: str) -> Path:
-        """解析并校验 output 相对路径，防止目录穿越"""
+        """Parse and validate output relative path to prevent directory traversal"""
         agent_path = self.agent_service._get_agent_path(business_unit_id, agent_name)
         output_path = (agent_path / AGENT_OUTPUT_DIR).resolve()
         if not output_path.exists() or not output_path.is_dir():
@@ -500,7 +500,7 @@ class BusinessUnitService(BaseService):
         return target_path
 
     def get_output_file_content(self, business_unit_id: str, agent_name: str, relative_path: str) -> Dict[str, Any]:
-        """读取 output 下文件内容"""
+        """Read file content under output"""
         target_path = self._resolve_output_path(business_unit_id, agent_name, relative_path)
         if not target_path.exists() or not target_path.is_file():
             raise FileNotFoundError("output file not found")
@@ -515,6 +515,22 @@ class BusinessUnitService(BaseService):
             "content": content,
         }
 
+    def save_output_file_content(self, business_unit_id: str, agent_name: str, relative_path: str, content: str) -> Dict[str, Any]:
+        """Save edited content to an output file"""
+        target_path = self._resolve_output_path(business_unit_id, agent_name, relative_path)
 
-# 全局服务实例
+        # Allow saving to existing files only (prevent creating arbitrary files)
+        if not target_path.exists() or not target_path.is_file():
+            raise FileNotFoundError("output file not found")
+
+        self._write_file(target_path, content)
+
+        return {
+            "path": str(target_path),
+            "relative_path": relative_path.replace('\\', '/'),
+            "content": content,
+        }
+
+
+# Global service instance
 business_unit_service = BusinessUnitService()

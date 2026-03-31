@@ -1,12 +1,12 @@
 """
-LocalBrisk Backend - FastAPI 主入口
-本地化全能 AI 智能体工作站后端服务
+LocalBrisk Backend - FastAPI Main Entry
+Local-first all-in-one AI agent workstation backend service.
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# 首先初始化日志系统
+# Initialize logging system first
 from app.core.logging import setup_logging, get_logger
 setup_logging()
 
@@ -18,16 +18,16 @@ from compute_engine import init_duckdb_service, close_duckdb_service
 
 logger = get_logger(__name__)
 
-# 创建 FastAPI 应用实例
+# Create FastAPI application instance
 app = FastAPI(
     title="LocalBrisk Backend",
-    description="本地化全能 AI 智能体工作站后端服务",
+    description="Local-first all-in-one AI agent workstation backend service",
     version="0.1.0",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
 
-# CORS 配置 - 允许 Tauri 前端访问
+# CORS configuration - allow Tauri frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:1420", "tauri://localhost"],
@@ -36,47 +36,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 添加国际化中间件
+# Add i18n middleware
 app.add_middleware(I18nMiddleware)
 
-# 注册 API 路由
+# Register API routes
 app.include_router(api_router, prefix="/api")
 
 
 @app.on_event("startup")
 async def _startup_init_compute_engine():
-    """服务启动时初始化持久化 DuckDB 实例。"""
+    """Initialize persistent DuckDB instance on service startup."""
     try:
         init_duckdb_service(settings.DUCKDB_PATH)
-        logger.info(f"DuckDB 初始化完成: {settings.DUCKDB_PATH}")
+        logger.info(f"DuckDB initialized: {settings.DUCKDB_PATH}")
     except Exception as e:
-        logger.exception(f"DuckDB 初始化失败: {e}")
+        logger.exception(f"DuckDB initialization failed: {e}")
         raise
 
 
 @app.on_event("shutdown")
 async def _shutdown_close_compute_engine():
-    """服务关闭时释放 DuckDB 连接。"""
+    """Release DuckDB connection on service shutdown."""
     close_duckdb_service()
 
 
 @app.get("/")
 async def root():
-    """根路径 - 健康检查"""
-    logger.debug("健康检查请求")
+    """Root path - health check."""
+    logger.debug("Health check request")
     return {"status": "ok", "message": "LocalBrisk Backend is running"}
 
 
 @app.get("/health")
 async def health_check():
-    """健康检查端点"""
-    logger.debug("健康检查请求")
+    """Health check endpoint."""
+    logger.debug("Health check request")
     return {"status": "healthy", "message": t("health.healthy"), "version": "0.1.0"}
 
 
 @app.get("/api/i18n/locales")
 async def get_supported_locales():
-    """获取支持的语言列表"""
+    """Get supported language list."""
     return {
         "locales": [
             {"code": "zh-CN", "name": "Simplified Chinese", "nativeName": "简体中文"},
@@ -91,7 +91,7 @@ async def get_supported_locales():
 if __name__ == "__main__":
     import uvicorn
     
-    logger.info(f"启动 LocalBrisk Backend, host={settings.HOST}, port={settings.PORT}, debug={settings.DEBUG}")
+    logger.info(f"Starting LocalBrisk Backend, host={settings.HOST}, port={settings.PORT}, debug={settings.DEBUG}")
     
     uvicorn.run(
         "main:app",

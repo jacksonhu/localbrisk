@@ -176,6 +176,19 @@ export const businessUnitApi = {
     request<OutputFileContent>(
       `/api/business_units/${businessUnitId}/agents/${agentName}/output/file?path=${encodeURIComponent(relativePath)}`
     ),
+
+  /**
+   * Save edited Agent output file content
+   */
+  saveOutputFileContent: (businessUnitId: string, agentName: string, relativePath: string, content: string): Promise<OutputFileContent> =>
+    request<OutputFileContent>(
+      `/api/business_units/${businessUnitId}/agents/${agentName}/output/file`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: relativePath, content }),
+      }
+    ),
 };
 
 // ============ AssetBundle API ============

@@ -1,6 +1,6 @@
 """
-数据库连接器抽象基类
-定义统一的数据库元数据读取接口，支持扩展其他数据库类型
+Database Connector Abstract Base Class
+Defines unified database metadata reading interface, extensible for other database types
 """
 
 from abc import ABC, abstractmethod
@@ -15,16 +15,16 @@ logger = logging.getLogger(__name__)
 
 class BaseConnector(ABC):
     """
-    数据库连接器抽象基类
-    所有数据库连接器必须继承此类并实现相应的方法
+    Database Connector Abstract Base Class
+    All database connectors must inherit this class and implement its methods
     """
     
     def __init__(self, config: ConnectionConfig):
         """
-        初始化连接器
+        Initialize connector
         
         Args:
-            config: 连接配置
+            config: Connection config
         """
         self.config = config
         self._connection = None
@@ -32,78 +32,78 @@ class BaseConnector(ABC):
     @property
     @abstractmethod
     def connection_type(self) -> ConnectionType:
-        """返回连接器支持的数据库类型"""
+        """Return the database type supported by this connector"""
         pass
     
     @abstractmethod
     def connect(self) -> bool:
         """
-        建立数据库连接
+        Establish database connection
         
         Returns:
-            是否连接成功
+            Whether connection succeeded
         """
         pass
     
     @abstractmethod
     def disconnect(self) -> None:
-        """关闭数据库连接"""
+        """Close database connection"""
         pass
     
     @abstractmethod
     def test_connection(self) -> bool:
         """
-        测试连接是否正常
+        Test if connection is healthy
         
         Returns:
-            连接是否正常
+            Whether connection is healthy
         """
         pass
     
     @abstractmethod
     def get_schemas(self) -> List[str]:
         """
-        获取所有数据库/Schema 名称
+        Get all database/schema names
         
         Returns:
-            Schema 名称列表
+            List of schema names
         """
         pass
     
     @abstractmethod
     def get_schema_metadata(self, schema_name: str) -> Optional[SchemaMetadata]:
         """
-        获取指定 Schema 的元数据
+        Get metadata for specified schema
         
         Args:
-            schema_name: Schema 名称
+            schema_name: Schema name
             
         Returns:
-            SchemaMetadata 对象
+            SchemaMetadata object
         """
         pass
     
     @abstractmethod
     def get_tables(self, schema_name: str) -> List[str]:
         """
-        获取指定 Schema 下的所有表名
+        Get all table names under specified schema
         
         Args:
-            schema_name: Schema 名称
+            schema_name: Schema name
             
         Returns:
-            表名列表
+            List of table names
         """
         pass
     
     @abstractmethod
     def get_table_metadata(self, schema_name: str, table_name: str) -> Optional[TableMetadata]:
         """
-        获取指定表的元数据
+        Get metadata for specified table
         
         Args:
-            schema_name: Schema 名称
-            table_name: 表名
+            schema_name: Schema name
+            table_name: Table name
             
         Returns:
             TableMetadata 对象
@@ -113,14 +113,14 @@ class BaseConnector(ABC):
     @abstractmethod
     def get_columns(self, schema_name: str, table_name: str) -> List[ColumnMetadata]:
         """
-        获取指定表的所有字段元数据
+        Get all column metadata for specified table
         
         Args:
-            schema_name: Schema 名称
-            table_name: 表名
+            schema_name: Schema name
+            table_name: Table name
             
         Returns:
-            ColumnMetadata 列表
+            List of ColumnMetadata
         """
         pass
     
@@ -132,28 +132,28 @@ class BaseConnector(ABC):
         offset: int = 0
     ) -> Dict[str, Any]:
         """
-        预览表数据
+        Preview table data
         
         Args:
-            schema_name: Schema 名称
-            table_name: 表名
-            limit: 返回行数限制
-            offset: 偏移量
+            schema_name: Schema name
+            table_name: Table name
+            limit: Row limit
+            offset: Offset
             
         Returns:
-            包含 columns 和 rows 的字典
+            contains columns 和 rows 的字典
         """
-        raise NotImplementedError("该连接器不支持数据预览")
+        raise NotImplementedError("This connector does not support data preview")
     
     def get_full_metadata(self, schema_name: Optional[str] = None) -> List[SchemaMetadata]:
         """
-        获取完整的元数据（Schema + Tables + Columns）
+        Get full metadata (Schema + Tables + Columns)
         
         Args:
-            schema_name: 可选，指定只获取某个 Schema 的元数据
+            schema_name: Optional, specify to get metadata for only one schema
             
         Returns:
-            SchemaMetadata 列表
+            List of SchemaMetadata
         """
         schemas_metadata = []
         
@@ -165,7 +165,7 @@ class BaseConnector(ABC):
         for name in schema_names:
             schema_meta = self.get_schema_metadata(name)
             if schema_meta:
-                # 获取该 Schema 下的所有表
+                # Get all tables under this schema
                 tables = []
                 for table_name in self.get_tables(name):
                     table_meta = self.get_table_metadata(name, table_name)
@@ -179,20 +179,20 @@ class BaseConnector(ABC):
         return schemas_metadata
     
     def __enter__(self):
-        """上下文管理器入口"""
+        """Context manager entry"""
         self.connect()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """上下文管理器退出"""
+        """Context manager exit"""
         self.disconnect()
         return False
 
 
 class ConnectorFactory:
     """
-    连接器工厂类
-    根据连接类型创建对应的连接器实例
+    Connector factory class
+    Creates connector instances based on connection type
     """
     
     _connectors: Dict[ConnectionType, Type[BaseConnector]] = {}
@@ -200,31 +200,31 @@ class ConnectorFactory:
     @classmethod
     def register(cls, connection_type: ConnectionType):
         """
-        注册连接器类的装饰器
+        Decorator for registering connector classes
         
         Args:
-            connection_type: 连接类型
+            connection_type: Connection type
         """
         def decorator(connector_class: Type[BaseConnector]):
             cls._connectors[connection_type] = connector_class
-            logger.debug(f"注册连接器: {connection_type} -> {connector_class.__name__}")
+            logger.debug(f"Registering connector: {connection_type} -> {connector_class.__name__}")
             return connector_class
         return decorator
     
     @classmethod
     def create(cls, config: ConnectionConfig) -> Optional[BaseConnector]:
         """
-        根据配置创建连接器实例
+        Create connector instance from config
         
         Args:
-            config: 连接配置
+            config: Connection config
             
         Returns:
-            BaseConnector 实例，如果不支持该类型则返回 None
+            BaseConnector 实例, Returns None if the type is not supported
         """
         connector_class = cls._connectors.get(config.type)
         if connector_class is None:
-            logger.warning(f"不支持的连接类型: {config.type}")
+            logger.warning(f"Unsupported connection type: {config.type}")
             return None
         
         return connector_class(config)
@@ -232,22 +232,22 @@ class ConnectorFactory:
     @classmethod
     def get_supported_types(cls) -> List[ConnectionType]:
         """
-        获取所有支持的连接类型
+        Get所有支持的Connection type
         
         Returns:
-            支持的连接类型列表
+            支持的Connection type列表
         """
         return list(cls._connectors.keys())
     
     @classmethod
     def is_supported(cls, connection_type: ConnectionType) -> bool:
         """
-        检查是否支持指定的连接类型
+        CheckWhether supported指定的Connection type
         
         Args:
-            connection_type: 连接类型
+            connection_type: Connection type
             
         Returns:
-            是否支持
+            Whether supported
         """
         return connection_type in cls._connectors

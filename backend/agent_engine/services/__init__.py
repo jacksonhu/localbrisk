@@ -1,7 +1,7 @@
 """
 Agent 服务模块
 
-包含 Agent 运行时服务，负责 Agent 的加载、执行、状态管理
+contains Agent 运行时服务, 负责 Agent 的Load、Execute、状态管理
 """
 
 from .agent_runtime_service import (

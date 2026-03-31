@@ -1,6 +1,6 @@
 """
-数据库连接器模块
-提供统一的数据库元数据读取接口
+Database Connector Module
+Provides unified database metadata reading interface
 """
 
 from .base import BaseConnector, ConnectorFactory

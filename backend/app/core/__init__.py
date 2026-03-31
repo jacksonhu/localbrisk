@@ -1,5 +1,5 @@
 """
-Core 模块初始化
+Core module initialization.
 """
 
 from app.core.config import settings

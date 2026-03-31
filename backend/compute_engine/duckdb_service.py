@@ -1,4 +1,4 @@
-"""DuckDB 计算引擎服务（持久化模式）。"""
+"""DuckDB compute engine service (persistent mode)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import duckdb
 
 
 class DuckDBService:
-    """管理持久化 DuckDB 连接并执行 SQL 脚本。"""
+    """Manages persistent DuckDB connections and executes SQL scripts."""
 
     _QUERY_SQL_PREFIXES = ("SELECT", "WITH", "SHOW", "DESCRIBE", "PRAGMA")
 
@@ -97,7 +97,7 @@ class DuckDBService:
         max_rows: int = 500,
     ) -> Dict[str, Any]:
         if not script or not script.strip():
-            raise ValueError("SQL 脚本不能为空")
+            raise ValueError("SQL script不能为空")
         if max_rows <= 0:
             raise ValueError("max_rows 必须大于 0")
 
@@ -156,14 +156,14 @@ class DuckDBService:
         params: Optional[List[Any]] = None,
         max_rows: int = 500,
     ) -> Dict[str, Any]:
-        """执行查询类 SQL 脚本，并返回表格数据。"""
+        """Execute查询类 SQL script, 并返回表格数据."""
         normalized_script = (script or "").strip()
         if not normalized_script:
-            raise ValueError("SQL 脚本不能为空")
+            raise ValueError("SQL script不能为空")
 
         upper_script = normalized_script.upper()
         if not upper_script.startswith(self._QUERY_SQL_PREFIXES):
-            raise ValueError("仅支持查询类 SQL（SELECT/WITH/SHOW/DESCRIBE/PRAGMA）")
+            raise ValueError("仅支持查询类 SQL (SELECT/WITH/SHOW/DESCRIBE/PRAGMA)")
 
         result = self.execute_sql_script(
             script=normalized_script,
@@ -224,7 +224,7 @@ def init_duckdb_service(db_path: Path) -> DuckDBService:
 
 def get_duckdb_service() -> DuckDBService:
     if _service is None:
-        raise RuntimeError("DuckDBService 尚未初始化")
+        raise RuntimeError("DuckDBService has not been initialized")
     return _service
 
 

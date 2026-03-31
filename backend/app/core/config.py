@@ -1,5 +1,5 @@
 """
-应用配置模块
+Application configuration module.
 """
 
 import os
@@ -8,20 +8,20 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """应用配置类"""
+    """Application settings."""
     
-    # 服务配置
+    # Server configuration
     HOST: str = "127.0.0.1"
     PORT: int = 8765
     DEBUG: bool = True
     
-    # 数据目录配置
+    # Data directory configuration
     DATA_DIR: Path = Path.home() / ".localbrisk" / "data"
     
-    # Catalogs 目录配置（基于文件系统的 Catalog 存储）
+    # Catalogs directory configuration (filesystem-based Catalog storage)
     CATALOGS_DIR: Path = Path.home() / ".localbrisk" / "App_Data" / "Catalogs"
     
-    # DuckDB 配置
+    # DuckDB configuration
     DUCKDB_PATH: Path = Path.home() / ".localbrisk" / "localbrisk.db"
     
     class Config:
@@ -29,11 +29,11 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 
-# 全局配置实例
+# Global settings instance
 settings = Settings()
 
-# 确保数据目录存在
+# Ensure data directory exists
 settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# 确保 Catalogs 目录存在
+# Ensure Catalogs directory exists
 settings.CATALOGS_DIR.mkdir(parents=True, exist_ok=True)

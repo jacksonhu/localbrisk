@@ -1,5 +1,5 @@
 """
-Model 服务 - 管理 Model
+Model Service - manages Models
 """
 
 import logging
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class ModelService(BaseService):
-    """Model 服务类"""
+    """Model service class"""
     
     def __init__(self, catalog_service: "CatalogService"):
         super().__init__()
@@ -26,12 +26,12 @@ class ModelService(BaseService):
     # ==================== Model CRUD ====================
     
     def _get_models_dir(self, catalog_id: str, schema_name: str) -> Optional[Path]:
-        """获取 Models 目录路径"""
+        """Get Models directory path"""
         schema_path = self.catalog_service.get_schema_path(catalog_id, schema_name)
         return schema_path / MODELS_DIR if schema_path else None
     
     def _get_model_path(self, catalog_id: str, schema_name: str, model_name: str) -> Optional[Path]:
-        """获取 Model 文件路径"""
+        """Get Model file path"""
         models_dir = self._get_models_dir(catalog_id, schema_name)
         if not models_dir:
             return None
@@ -39,7 +39,7 @@ class ModelService(BaseService):
         return model_path if model_path.exists() else None
     
     def _load_model(self, catalog_id: str, schema_name: str, model_path: Path) -> Optional[Model]:
-        """加载 Model"""
+        """Load Model"""
         config = self._load_yaml(model_path) or {}
         baseinfo = self._extract_baseinfo(config, model_path.stem)
         
@@ -67,53 +67,53 @@ class ModelService(BaseService):
         )
     
     def list_models(self, catalog_id: str, schema_name: str) -> List[Model]:
-        """获取 Model 列表"""
-        logger.debug(f"获取 Model 列表: {catalog_id}/{schema_name}")
+        """Get Model list"""
+        logger.debug(f"Fetching Model list: {catalog_id}/{schema_name}")
         models_dir = self._get_models_dir(catalog_id, schema_name)
         if not models_dir or not models_dir.exists():
             return []
         models = self._scan_yaml_files(models_dir, lambda p: self._load_model(catalog_id, schema_name, p))
-        logger.debug(f"发现 {len(models)} 个 Model")
+        logger.debug(f"Found  {len(models)}  Model(s)")
         return models
     
     def get_model(self, catalog_id: str, schema_name: str, model_name: str) -> Optional[Model]:
-        """获取 Model"""
-        logger.debug(f"获取 Model: {catalog_id}/{schema_name}/{model_name}")
+        """Get Model"""
+        logger.debug(f"Fetching  Model: {catalog_id}/{schema_name}/{model_name}")
         model_path = self._get_model_path(catalog_id, schema_name, model_name)
         if not model_path:
-            # 尝试不存在时创建路径
+            # Try creating path when it does not exist
             models_dir = self._get_models_dir(catalog_id, schema_name)
             if not models_dir:
-                logger.debug(f"Models 目录不存在: {catalog_id}/{schema_name}")
+                logger.debug(f"Models directory does not exist: {catalog_id}/{schema_name}")
                 return None
             model_path = models_dir / f"{model_name}.yaml"
             if not model_path.exists():
-                logger.debug(f"Model 不存在: {model_name}")
+                logger.debug(f"Model  does not exist: {model_name}")
                 return None
         return self._load_model(catalog_id, schema_name, model_path)
     
     def get_model_config_content(self, catalog_id: str, schema_name: str, model_name: str) -> Optional[str]:
-        """获取 Model 配置内容"""
+        """Get Model config content"""
         models_dir = self._get_models_dir(catalog_id, schema_name)
         if not models_dir:
             return None
         return self._read_file(models_dir / f"{model_name}.yaml")
     
     def create_model(self, catalog_id: str, schema_name: str, data: ModelCreate) -> Model:
-        """创建 Model"""
-        logger.info(f"创建 Model: {catalog_id}/{schema_name}/{data.name}, type={data.model_type}")
+        """Create Model"""
+        logger.info(f"Creating Model: {catalog_id}/{schema_name}/{data.name}, type={data.model_type}")
         schema_path = self.catalog_service.get_schema_path(catalog_id, schema_name)
         if not schema_path:
-            logger.warning(f"Schema 不存在: {catalog_id}/{schema_name}")
-            raise ValueError(f"Schema '{schema_name}' 不存在")
+            logger.warning(f"Schema  does not exist: {catalog_id}/{schema_name}")
+            raise ValueError(f"Schema '{schema_name}' does not exist")
         
         models_dir = schema_path / MODELS_DIR
         models_dir.mkdir(parents=True, exist_ok=True)
         
         model_path = models_dir / f"{data.name}.yaml"
         if model_path.exists():
-            logger.warning(f"Model 已存在: {data.name}")
-            raise ValueError(f"Model '{data.name}' 已存在")
+            logger.warning(f"Model  already exists: {data.name}")
+            raise ValueError(f"Model '{data.name}' already exists")
         
         baseinfo = self._create_baseinfo(data.name, data.display_name, data.description, data.tags, data.owner or "admin")
         
@@ -122,7 +122,7 @@ class ModelService(BaseService):
             "model_type": data.model_type.value if hasattr(data.model_type, 'value') else data.model_type,
         }
         
-        # 添加可选字段
+        # Add optional fields
         optional_fields = [
             ("local_provider", data.local_provider),
             ("local_source", data.local_source),
@@ -140,19 +140,19 @@ class ModelService(BaseService):
                 config[key] = value.value if hasattr(value, 'value') else value
         
         self._save_yaml(model_path, config)
-        logger.info(f"Model 创建成功: {data.name}")
+        logger.info(f"Model created successfully: {data.name}")
         return self._load_model(catalog_id, schema_name, model_path)
     
     def update_model(self, catalog_id: str, schema_name: str, model_name: str, update: ModelUpdate) -> Optional[Model]:
-        """更新 Model"""
-        logger.info(f"更新 Model: {catalog_id}/{schema_name}/{model_name}")
+        """Update Model"""
+        logger.info(f"Updating Model: {catalog_id}/{schema_name}/{model_name}")
         models_dir = self._get_models_dir(catalog_id, schema_name)
         if not models_dir:
             return None
         
         model_path = models_dir / f"{model_name}.yaml"
         if not model_path.exists():
-            logger.warning(f"Model 不存在: {model_name}")
+            logger.warning(f"Model  does not exist: {model_name}")
             return None
         
         config = self._load_yaml(model_path) or {}
@@ -161,7 +161,7 @@ class ModelService(BaseService):
         baseinfo = self._update_baseinfo(baseinfo, update.display_name, update.description, update.tags)
         config["baseinfo"] = baseinfo
         
-        # 更新可选字段
+        # Update optional fields
         if update.api_key is not None:
             config["api_key"] = update.api_key
         if update.api_base_url is not None:
@@ -170,18 +170,18 @@ class ModelService(BaseService):
             config["model_id"] = update.model_id
         
         self._save_yaml(model_path, config)
-        logger.info(f"Model 更新成功: {model_name}")
+        logger.info(f"Model updated successfully: {model_name}")
         return self._load_model(catalog_id, schema_name, model_path)
     
     def delete_model(self, catalog_id: str, schema_name: str, model_name: str) -> bool:
-        """删除 Model"""
-        logger.info(f"删除 Model: {catalog_id}/{schema_name}/{model_name}")
+        """Delete Model"""
+        logger.info(f"Deleting Model: {catalog_id}/{schema_name}/{model_name}")
         models_dir = self._get_models_dir(catalog_id, schema_name)
         if not models_dir:
             return False
         result = self._delete_file(models_dir / f"{model_name}.yaml")
         if result:
-            logger.info(f"Model 删除成功: {model_name}")
+            logger.info(f"Model deleted successfully: {model_name}")
         else:
-            logger.warning(f"Model 不存在: {model_name}")
+            logger.warning(f"Model  does not exist: {model_name}")
         return result

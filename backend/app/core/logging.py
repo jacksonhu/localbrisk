@@ -1,11 +1,11 @@
 """
-日志配置模块
+Logging configuration module.
 
-提供统一的日志配置，支持：
-- 开发模式：输出详细 DEBUG 日志
-- 生产模式：输出 INFO 级别日志
-- 日志文件：输出到 ~/Library/Logs/LocalBrisk/app.log
-- 按天滚动，保留近7日日志
+Provides unified logging configuration with support for:
+- Development mode: detailed DEBUG logs
+- Production mode: INFO level logs
+- Log file: output to ~/Library/Logs/LocalBrisk/app.log
+- Daily rotation, retaining the last 7 days
 """
 
 import os
@@ -16,23 +16,23 @@ from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 
 
-# 日志目录
+# Log directory
 LOG_DIR = Path.home() / "Library" / "Logs" / "LocalBrisk"
 LOG_FILE = LOG_DIR / "app.log"
 
-# 日志格式
+# Log formats
 DETAILED_FORMAT = (
     "%(asctime)s | %(levelname)-8s | %(name)-40s | "
     "%(filename)s:%(lineno)d | %(funcName)s | %(message)s"
 )
 SIMPLE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
-# 是否为开发模式
+# Whether in development mode
 _is_dev_mode = os.environ.get("LOCALBRISK_DEV_MODE", "").lower() in ("1", "true", "yes")
 
 
 def is_dev_mode() -> bool:
-    """检查是否为开发模式"""
+    """Check if running in development mode."""
     return _is_dev_mode
 
 
@@ -41,81 +41,81 @@ def setup_logging(
     log_level: str = None,
     log_to_console: bool = True,
     log_to_file: bool = True,
-    backup_count: int = 7,  # 保留7天日志
+    backup_count: int = 7,  # Retain 7 days of logs
 ) -> None:
-    """设置日志配置
+    """Configure logging.
     
     Args:
-        dev_mode: 是否为开发模式（None 则使用环境变量判断）
-        log_level: 日志级别（None 则根据模式自动选择）
-        log_to_console: 是否输出到控制台
-        log_to_file: 是否输出到文件
-        backup_count: 保留的日志文件数量（天数）
+        dev_mode: Whether in development mode (None uses environment variable)
+        log_level: Log level (None auto-selects based on mode)
+        log_to_console: Whether to output to console
+        log_to_file: Whether to output to file
+        backup_count: Number of log files to retain (days)
     """
     global _is_dev_mode
     
-    # 确定模式
+    # Determine mode
     if dev_mode is not None:
         _is_dev_mode = dev_mode
     
-    # 确定日志级别
+    # Determine log level
     if log_level:
         level = getattr(logging, log_level.upper(), logging.INFO)
     else:
         level = logging.DEBUG if _is_dev_mode else logging.INFO
     
-    # 选择格式
+    # Select format
     log_format = DETAILED_FORMAT if _is_dev_mode else SIMPLE_FORMAT
     
-    # 创建日志目录
+    # Create log directory
     if log_to_file:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
     
-    # 配置根日志记录器
+    # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     
-    # 清除现有处理器
+    # Clear existing handlers
     root_logger.handlers.clear()
     
-    # 创建格式化器
+    # Create formatter
     formatter = logging.Formatter(log_format, datefmt="%Y-%m-%d %H:%M:%S")
     
-    # 控制台处理器
+    # Console handler
     if log_to_console:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(level)
         console_handler.setFormatter(formatter)
         root_logger.addHandler(console_handler)
     
-    # 文件处理器 - 按天滚动
+    # File handler - daily rotation
     if log_to_file:
         file_handler = TimedRotatingFileHandler(
             LOG_FILE,
-            when="midnight",     # 每天午夜滚动
-            interval=1,          # 间隔1天
-            backupCount=backup_count,  # 保留7天
+            when="midnight",     # Rotate at midnight
+            interval=1,          # Every 1 day
+            backupCount=backup_count,  # Retain 7 days
             encoding="utf-8",
         )
-        # 设置滚动后的文件名后缀格式
+        # Set rotated file name suffix format
         file_handler.suffix = "%Y-%m-%d"
         file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
     
-    # 设置第三方库日志级别（减少噪音）
+    # Set third-party library log levels (reduce noise)
     _configure_third_party_loggers(_is_dev_mode)
     
-    # 输出启动信息
+    # Output startup info
     mode_str = "DEV" if _is_dev_mode else "PROD"
     logging.info(f"="*60)
-    logging.info(f"LocalBrisk 日志系统初始化 | 模式: {mode_str} | 级别: {logging.getLevelName(level)}")
-    logging.info(f"日志文件: {LOG_FILE} (按天滚动，保留{backup_count}天)")
+    logging.info(f"LocalBrisk logging initialized | mode: {mode_str} | level: {logging.getLevelName(level)}")
+    logging.info(f"Log file: {LOG_FILE} (daily rotation, {backup_count}-day retention)")
     logging.info(f"="*60)
 
 
 def _configure_third_party_loggers(dev_mode: bool):
-    """配置第三方库的日志级别"""
+    """Configure log levels for third-party libraries."""
     third_party_loggers = [
         "uvicorn",
         "uvicorn.access",
@@ -128,8 +128,8 @@ def _configure_third_party_loggers(dev_mode: bool):
         "langgraph",
     ]
     
-    # 开发模式下，第三方库使用 INFO 级别
-    # 生产模式下，使用 WARNING 级别
+    # Dev mode: third-party libs use INFO level
+    # Prod mode: use WARNING level
     third_party_level = logging.INFO if dev_mode else logging.WARNING
     
     for logger_name in third_party_loggers:
@@ -137,21 +137,21 @@ def _configure_third_party_loggers(dev_mode: bool):
 
 
 def get_logger(name: str) -> logging.Logger:
-    """获取日志记录器
+    """Get a logger instance.
     
     Args:
-        name: 日志记录器名称（通常使用 __name__）
+        name: Logger name (typically __name__)
         
     Returns:
-        配置好的日志记录器
+        Configured logger instance
     """
     return logging.getLogger(name)
 
 
 class LogContext:
-    """日志上下文管理器
+    """Log context manager.
     
-    用于在日志中添加上下文信息，方便追踪请求链路
+    Adds contextual information to log entries for request tracing.
     
     Usage:
         with LogContext(agent_name="my_agent", execution_id="123"):
@@ -175,25 +175,25 @@ class LogContext:
     
     @classmethod
     def get(cls, key: str, default=None):
-        """获取上下文值"""
+        """Get a context value."""
         return cls._context.get(key, default)
     
     @classmethod
     def get_all(cls) -> dict:
-        """获取所有上下文"""
+        """Get all context values."""
         return cls._context.copy()
     
     @classmethod
     def format_context(cls) -> str:
-        """格式化上下文为字符串"""
+        """Format context as a string."""
         if not cls._context:
             return ""
         return " | " + " | ".join(f"{k}={v}" for k, v in cls._context.items())
 
 
-# 方便的日志函数（带上下文）
+# Convenience logging function (with context)
 def log_with_context(logger: logging.Logger, level: int, message: str, **kwargs):
-    """带上下文的日志输出"""
+    """Log a message with context."""
     context_str = LogContext.format_context()
     if kwargs:
         extra_str = " | " + " | ".join(f"{k}={v}" for k, v in kwargs.items())

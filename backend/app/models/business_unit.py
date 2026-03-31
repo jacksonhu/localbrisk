@@ -1,31 +1,31 @@
 """
-业务单元数据模型
-定义 BusinessUnit、AssetBundle、Agent、Model、MCP 等核心数据结构
+Business unit data models.
+Defines core data structures: BusinessUnit, AssetBundle, Agent, Model, MCP, etc.
 
-设计原则：
-1. 所有实体的基础属性统一放在 yaml 文件的 baseinfo 节下
-2. 各实体特有配置与 baseinfo 同级
+Design principles:
+1. All entity base attributes are placed under the 'baseinfo' section in YAML files
+2. Entity-specific configurations are at the same level as baseinfo
 
-baseinfo 标准字段：
-- name: 名称（唯一标识）
-- display_name: 展示名称
-- description: 描述
-- tags: 标签列表
-- owner: 所有者
-- created_at: 创建时间
-- updated_at: 更新时间
+baseinfo standard fields:
+- name: Name (unique identifier)
+- display_name: Display name
+- description: Description
+- tags: Tag list
+- owner: Owner
+- created_at: Creation time
+- updated_at: Update time
 
-树形结构：
-├── BusinessUnit (业务单元)
+Directory tree structure:
+├── BusinessUnit
 │   ├── agents/{agent_name}/
 │   │   ├── agent_spec.yaml
 │   │   ├── prompts/
 │   │   ├── skills/
-│   │   ├── models/                    # Model 配置目录
+│   │   ├── models/                    # Model config directory
 │   │   │   └── {model_name}.yaml
-│   │   ├── mcps/                      # MCP 配置目录
+│   │   ├── mcps/                      # MCP config directory
 │   │   │   └── {mcp_name}.yaml
-│   │   └── output/                  # 工作记录目录
+│   │   └── output/                    # Work output directory
 │   │       └── {session_id}/
 │   └── asset_bundles/{bundle_name}/
 │       ├── bundle.yaml
@@ -40,10 +40,10 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
-# ==================== 枚举类型 ====================
+# ==================== Enum Types ====================
 
 class EntityType(str, Enum):
-    """实体类型"""
+    """Entity type."""
     BUSINESS_UNIT = "business_unit"
     ASSET_BUNDLE = "asset_bundle"
     AGENT = "agent"
@@ -59,7 +59,7 @@ class EntityType(str, Enum):
 
 
 class ConnectionType(str, Enum):
-    """数据库连接类型"""
+    """Database connection type."""
     MYSQL = "mysql"
     POSTGRESQL = "postgresql"
     SQLITE = "sqlite"
@@ -67,13 +67,13 @@ class ConnectionType(str, Enum):
 
 
 class AssetBundleType(str, Enum):
-    """AssetBundle 类型"""
+    """AssetBundle type."""
     LOCAL = "local"
     EXTERNAL = "external"
 
 
 class AssetType(str, Enum):
-    """资产类型"""
+    """Asset type."""
     TABLE = "table"
     VOLUME = "volume"
     AGENT = "agent"
@@ -81,19 +81,19 @@ class AssetType(str, Enum):
 
 
 class VolumeType(str, Enum):
-    """Volume 存储类型"""
+    """Volume storage type."""
     LOCAL = "local"
     S3 = "s3"
 
 
 class ModelType(str, Enum):
-    """模型类型"""
+    """Model type."""
     LOCAL = "local"
     ENDPOINT = "endpoint"
 
 
 class LocalModelProvider(str, Enum):
-    """本地模型提供商"""
+    """Local model provider."""
     QIANWEN = "qianwen"
     DEEPSEEK = "deepseek"
     LLAMA = "llama"
@@ -106,13 +106,13 @@ class LocalModelProvider(str, Enum):
 
 
 class LocalModelSource(str, Enum):
-    """本地模型来源"""
+    """Local model source."""
     VOLUME = "volume"
     HUGGINGFACE = "huggingface"
 
 
 class EndpointProvider(str, Enum):
-    """API 端点提供商"""
+    """API endpoint provider."""
     OPENAI = "openai"
     CLAUDE = "claude"
     QIANWEN = "qianwen"
@@ -125,18 +125,18 @@ class EndpointProvider(str, Enum):
 
 
 class MCPType(str, Enum):
-    """MCP 类型"""
-    PYTHON_FUNCTION = "python_function"    # Python 函数
+    """MCP type."""
+    PYTHON_FUNCTION = "python_function"    # Python function
     MCP_SERVER = "mcp_server"              # MCP Server
-    REMOTE_API = "remote_api"              # 远程 API
+    REMOTE_API = "remote_api"              # Remote API
 
 
-# ==================== BaseInfo 模型 ====================
+# ==================== BaseInfo Models ====================
 
 class BaseInfo(BaseModel):
     """
-    基础信息模型 - 对应 yaml 文件中的 baseinfo 节
-    所有实体共享的基础属性
+    Base info model - corresponds to the 'baseinfo' section in YAML files.
+    Shared base attributes for all entities.
     """
     name: str
     display_name: Optional[str] = None
@@ -151,7 +151,7 @@ class BaseInfo(BaseModel):
 
 
 class BaseInfoCreate(BaseModel):
-    """创建实体时的 baseinfo 请求模型"""
+    """Request model for creating entity baseinfo."""
     name: str = Field(..., min_length=1, max_length=100)
     display_name: Optional[str] = None
     description: Optional[str] = None
@@ -160,16 +160,16 @@ class BaseInfoCreate(BaseModel):
 
 
 class BaseInfoUpdate(BaseModel):
-    """更新实体时的 baseinfo 请求模型"""
+    """Request model for updating entity baseinfo."""
     display_name: Optional[str] = None
     description: Optional[str] = None
     tags: Optional[List[str]] = None
 
 
-# ==================== Connection 配置 ====================
+# ==================== Connection Config ====================
 
 class ConnectionConfig(BaseModel):
-    """数据库连接配置"""
+    """Database connection configuration."""
     type: ConnectionType
     host: str = "127.0.0.1"
     port: int
@@ -181,21 +181,21 @@ class ConnectionConfig(BaseModel):
         use_enum_values = True
 
 
-# ==================== AssetBundle 模型 ====================
+# ==================== AssetBundle Models ====================
 
 class AssetBundleCreate(BaseInfoCreate):
-    """创建 AssetBundle 请求"""
+    """Create AssetBundle request."""
     bundle_type: str = Field(default="local", pattern="^(local|external)$")
     connection: Optional[ConnectionConfig] = None
 
 
 class AssetBundleUpdate(BaseInfoUpdate):
-    """更新 AssetBundle 请求"""
+    """Update AssetBundle request."""
     connection: Optional[ConnectionConfig] = None
 
 
 class AssetBundle(BaseModel):
-    """AssetBundle 数据模型"""
+    """AssetBundle data model."""
     id: str
     name: str
     display_name: Optional[str] = None
@@ -215,20 +215,20 @@ class AssetBundle(BaseModel):
         use_enum_values = True
 
 
-# ==================== BusinessUnit 模型 ====================
+# ==================== BusinessUnit Models ====================
 
 class BusinessUnitCreate(BaseInfoCreate):
-    """创建 BusinessUnit 请求"""
+    """Create BusinessUnit request."""
     pass
 
 
 class BusinessUnitUpdate(BaseInfoUpdate):
-    """更新 BusinessUnit 请求"""
+    """Update BusinessUnit request."""
     pass
 
 
 class BusinessUnit(BaseModel):
-    """BusinessUnit 数据模型"""
+    """BusinessUnit data model."""
     id: str
     name: str
     display_name: Optional[str] = None
@@ -243,19 +243,19 @@ class BusinessUnit(BaseModel):
     agents: List["Agent"] = Field(default_factory=list)
 
 
-# ==================== Asset 模型 ====================
+# ==================== Asset Models ====================
 
 class AssetCreate(BaseInfoCreate):
-    """创建 Asset 请求"""
+    """Create Asset request."""
     asset_type: AssetType
-    # Volume 字段
+    # Volume fields
     volume_type: Optional[str] = Field(default="local", pattern="^(local|s3)$")
     storage_location: Optional[str] = None
     s3_endpoint: Optional[str] = None
     s3_bucket: Optional[str] = None
     s3_access_key: Optional[str] = None
     s3_secret_key: Optional[str] = None
-    # Table 字段
+    # Table fields
     format: Optional[str] = Field(default=None, pattern="^(parquet|csv|json|delta)$")
     
     class Config:
@@ -263,7 +263,7 @@ class AssetCreate(BaseInfoCreate):
 
 
 class Asset(BaseModel):
-    """通用资产模型"""
+    """Generic asset model."""
     id: str
     name: str
     display_name: Optional[str] = None
@@ -281,40 +281,40 @@ class Asset(BaseModel):
         use_enum_values = True
 
 
-# ==================== MCP 模型 ====================
+# ==================== MCP Models ====================
 
 class MCPPythonFunctionConfig(BaseModel):
-    """Python 函数 MCP 配置"""
-    function_file: str                    # Python 文件路径（相对于 mcps 目录）
-    function_name: str                    # 函数名
-    parameters: Dict[str, Any] = Field(default_factory=dict)  # 参数配置
+    """Python function MCP configuration."""
+    function_file: str                    # Python file path (relative to mcps directory)
+    function_name: str                    # Function name
+    parameters: Dict[str, Any] = Field(default_factory=dict)  # Parameter configuration
 
 
 class MCPServerConfig(BaseModel):
-    """MCP Server 配置"""
-    server_command: str                   # 启动命令
-    server_args: List[str] = Field(default_factory=list)      # 启动参数
-    env: Dict[str, str] = Field(default_factory=dict)         # 环境变量
-    tools: List[str] = Field(default_factory=list)            # 可用工具列表
+    """MCP Server configuration."""
+    server_command: str                   # Start command
+    server_args: List[str] = Field(default_factory=list)      # Start arguments
+    env: Dict[str, str] = Field(default_factory=dict)         # Environment variables
+    tools: List[str] = Field(default_factory=list)            # Available tools list
 
 
 class MCPRemoteAPIConfig(BaseModel):
-    """远程 API MCP 配置"""
-    api_url: str                          # API 基础 URL
-    api_key: Optional[str] = None         # API 密钥
-    headers: Dict[str, str] = Field(default_factory=dict)     # 自定义请求头
-    endpoints: List[Dict[str, Any]] = Field(default_factory=list)  # 端点配置
+    """Remote API MCP configuration."""
+    api_url: str                          # API base URL
+    api_key: Optional[str] = None         # API key
+    headers: Dict[str, str] = Field(default_factory=dict)     # Custom request headers
+    endpoints: List[Dict[str, Any]] = Field(default_factory=list)  # Endpoint configuration
 
 
 class MCPCreate(BaseInfoCreate):
-    """创建 MCP 请求"""
+    """Create MCP request."""
     mcp_type: MCPType
     enabled: bool = True
-    # Python 函数配置
+    # Python function config
     python_config: Optional[MCPPythonFunctionConfig] = None
-    # MCP Server 配置
+    # MCP Server config
     server_config: Optional[MCPServerConfig] = None
-    # 远程 API 配置
+    # Remote API config
     api_config: Optional[MCPRemoteAPIConfig] = None
     
     class Config:
@@ -322,7 +322,7 @@ class MCPCreate(BaseInfoCreate):
 
 
 class MCPUpdate(BaseInfoUpdate):
-    """更新 MCP 请求"""
+    """Update MCP request."""
     enabled: Optional[bool] = None
     python_config: Optional[MCPPythonFunctionConfig] = None
     server_config: Optional[MCPServerConfig] = None
@@ -330,20 +330,20 @@ class MCPUpdate(BaseInfoUpdate):
 
 
 class MCP(BaseModel):
-    """MCP 数据模型"""
+    """MCP data model."""
     id: str
     name: str
     display_name: Optional[str] = None
     description: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
-    agent_id: str                         # 所属 Agent
+    agent_id: str                         # Owning Agent
     entity_type: EntityType = EntityType.MCP
     mcp_type: MCPType
     enabled: bool = True
     path: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    # 配置
+    # Configuration
     python_config: Optional[MCPPythonFunctionConfig] = None
     server_config: Optional[MCPServerConfig] = None
     api_config: Optional[MCPRemoteAPIConfig] = None
@@ -352,25 +352,25 @@ class MCP(BaseModel):
         use_enum_values = True
 
 
-# ==================== Agent 模型 ====================
+# ==================== Agent Models ====================
 
 class AgentLLMConfig(BaseModel):
-    """Agent LLM 运行配置"""
-    llm_model: Optional[str] = None       # 引用 Agent 下的 Model 名称
+    """Agent LLM runtime configuration."""
+    llm_model: Optional[str] = None       # References a Model name under this Agent
 
 
 class AgentCreate(BaseInfoCreate):
-    """创建 Agent 请求"""
+    """Create Agent request."""
     pass
 
 
 class AgentUpdate(BaseInfoUpdate):
-    """更新 Agent 请求"""
+    """Update Agent request."""
     llm_config: Optional[AgentLLMConfig] = None
 
 
 class Agent(BaseModel):
-    """Agent 数据模型"""
+    """Agent data model."""
     id: str
     name: str
     display_name: Optional[str] = None
@@ -382,9 +382,9 @@ class Agent(BaseModel):
     path: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    # Agent 特有配置
+    # Agent-specific configuration
     llm_config: Optional[AgentLLMConfig] = None
-    # 目录扫描结果
+    # Directory scan results
     skills: List[str] = Field(default_factory=list)
     memories: List[str] = Field(default_factory=list)
     models: List[str] = Field(default_factory=list)
@@ -393,24 +393,24 @@ class Agent(BaseModel):
 
     @property
     def prompts(self) -> List[str]:
-        """兼容旧代码：prompts 等价于 memories（仅内部访问）"""
+        """Backward compatibility: prompts is equivalent to memories (internal access only)."""
         return self.memories
 
 
-# ==================== Memory 模型 ====================
+# ==================== Memory Models ====================
 
 class MemoryCreate(BaseInfoCreate):
-    """创建 Memory 请求"""
+    """Create Memory request."""
     content: str = ""
 
 
 class MemoryUpdate(BaseInfoUpdate):
-    """更新 Memory 请求"""
+    """Update Memory request."""
     content: Optional[str] = None
 
 
 class Memory(BaseModel):
-    """Memory 数据模型"""
+    """Memory data model."""
     name: str
     display_name: Optional[str] = None
     description: Optional[str] = None
@@ -423,41 +423,41 @@ class Memory(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-# ==================== Model 模型 ====================
+# ==================== Model Models ====================
 
 class ModelCreate(BaseInfoCreate):
-    """创建 Model 请求"""
+    """Create Model request."""
     model_type: ModelType
     enabled: bool = False
-    # 本地模型字段
+    # Local model fields
     local_provider: Optional[LocalModelProvider] = None
     local_source: Optional[LocalModelSource] = None
     volume_reference: Optional[str] = None
     huggingface_repo: Optional[str] = None
     huggingface_filename: Optional[str] = None
-    # API 端点字段
+    # API endpoint fields
     endpoint_provider: Optional[EndpointProvider] = None
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None
     model_id: Optional[str] = None
-    # 运行时参数
-    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="温度参数，范围 0.0 到 2.0")
+    # Runtime parameters
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="Temperature parameter, range 0.0 to 2.0")
     
     class Config:
         use_enum_values = True
 
 
 class ModelUpdate(BaseInfoUpdate):
-    """更新 Model 请求"""
+    """Update Model request."""
     enabled: Optional[bool] = None
     api_key: Optional[str] = None
     api_base_url: Optional[str] = None
     model_id: Optional[str] = None
-    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0, description="温度参数，范围 0.0 到 2.0")
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0, description="Temperature parameter, range 0.0 to 2.0")
 
 
 class Model(BaseModel):
-    """Model 数据模型 - 属于 Agent"""
+    """Model data model - belongs to Agent."""
     id: str
     name: str
     display_name: Optional[str] = None
@@ -470,28 +470,28 @@ class Model(BaseModel):
     updated_at: Optional[datetime] = None
     model_type: ModelType
     enabled: bool = False
-    # 本地模型字段
+    # Local model fields
     local_provider: Optional[str] = None
     local_source: Optional[str] = None
     volume_reference: Optional[str] = None
     huggingface_repo: Optional[str] = None
     huggingface_filename: Optional[str] = None
-    # API 端点字段
+    # API endpoint fields
     endpoint_provider: Optional[str] = None
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None
     model_id: Optional[str] = None
-    # 运行时参数
-    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="温度参数，范围 0.0 到 2.0")
+    # Runtime parameters
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="Temperature parameter, range 0.0 to 2.0")
     
     class Config:
         use_enum_values = True
 
 
-# ==================== Output 模型 ====================
+# ==================== Output Models ====================
 
 class WorkSession(BaseModel):
-    """工作会话"""
+    """Work session."""
     id: str
     name: str
     agent_id: str
@@ -499,11 +499,11 @@ class WorkSession(BaseModel):
     updated_at: Optional[datetime] = None
     status: str = "active"                # active, completed, archived
     summary: Optional[str] = None
-    outputs: List[str] = Field(default_factory=list)  # 输出文件列表
+    outputs: List[str] = Field(default_factory=list)  # Output file list
 
 
 class WorkOutput(BaseModel):
-    """工作输出"""
+    """Work output."""
     id: str
     session_id: str
     name: str
@@ -514,10 +514,10 @@ class WorkOutput(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-# ==================== 导航树模型 ====================
+# ==================== Navigation Tree Models ====================
 
 class BusinessUnitTreeNode(BaseModel):
-    """导航树节点 (BusinessUnit 树)"""
+    """Navigation tree node (BusinessUnit tree)."""
     id: str
     name: str
     display_name: str

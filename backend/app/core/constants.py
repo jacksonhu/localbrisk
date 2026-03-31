@@ -1,72 +1,73 @@
 """
-全局常量定义
+Global constants.
 
-定义系统中使用的文件名、目录名等常量，确保全局一致性。
+Defines file names, directory names, and other constants used throughout the system
+to ensure global consistency.
 
-树形结构定义：
-├── BusinessUnit (业务单元)
-│   ├── config.yaml                          # BusinessUnit 配置文件
-│   ├── agents/{agent_name}/                 # Agent 智能体目录
-│   │   ├── agent_spec.yaml                  # Agent 配置文件
-│   │   ├── memories/                        # 提示词目录
-│   │   ├── skills/                          # 技能目录
-│   │   ├── models/                          # Model 配置目录
+Directory tree structure:
+├── BusinessUnit
+│   ├── config.yaml                          # BusinessUnit config file
+│   ├── agents/{agent_name}/                 # Agent directory
+│   │   ├── agent_spec.yaml                  # Agent config file
+│   │   ├── memories/                        # Memory/prompt directory
+│   │   ├── skills/                          # Skills directory
+│   │   ├── models/                          # Model config directory
 │   │   │   └── {model_name}.yaml
-│   │   ├── mcps/                            # MCP 配置目录
+│   │   ├── mcps/                            # MCP config directory
 │   │   │   └── {mcp_name}.yaml
-│   │   └── output/                        # 工作记录目录
+│   │   └── output/                          # Work output directory
 │   │       └── {session_id}/
-│   └── asset_bundles/{bundle_name}/         # 资源包目录
-│       ├── bundle.yaml                      # 资源包配置
-│       ├── tables/                          # 表映射目录
-│       ├── functions/                       # 自定义函数目录
-│       └── volumes/                         # 文档存储目录
+│   └── asset_bundles/{bundle_name}/         # Asset bundle directory
+│       ├── bundle.yaml                      # Asset bundle config
+│       ├── tables/                          # Table mapping directory
+│       ├── functions/                       # Custom function directory
+│       └── volumes/                         # Document storage directory
 """
 
 # ============================================================
-# 配置文件名常量
+# Config file name constants
 # ============================================================
 
-# BusinessUnit 层配置文件
+# BusinessUnit level config file
 BUSINESS_UNIT_CONFIG_FILE = "config.yaml"
 
-# Agent 层配置文件
+# Agent level config file
 AGENT_CONFIG_FILE = "agent_spec.yaml"
 
-# AssetBundle 层配置文件
+# AssetBundle level config file
 ASSET_BUNDLE_CONFIG_FILE = "bundle.yaml"
 
-# 资产文件扩展名
+# Asset file extension
 ASSET_FILE_SUFFIX = ".yaml"
 
 
 # ============================================================
-# 目录名称常量
+# Directory name constants
 # ============================================================
 
-# BusinessUnit 下的一级目录
-AGENTS_DIR = "agents"                    # Agent 目录
-ASSET_BUNDLES_DIR = "asset_bundles"      # 资源包目录
+# Top-level directories under BusinessUnit
+AGENTS_DIR = "agents"                    # Agent directory
+ASSET_BUNDLES_DIR = "asset_bundles"      # Asset bundle directory
 
-# AssetBundle 下的资产目录（按资产类型分类）
-TABLES_DIR = "tables"                    # 表映射目录
-VOLUMES_DIR = "volumes"                  # 文档存储目录
-FUNCTIONS_DIR = "functions"              # 自定义函数目录
-NOTES_DIR = "notes"                      # 笔记目录
+# Asset directories under AssetBundle (by asset type)
+TABLES_DIR = "tables"                    # Table mapping directory
+VOLUMES_DIR = "volumes"                  # Document storage directory
+FUNCTIONS_DIR = "functions"              # Custom function directory
+NOTES_DIR = "notes"                      # Notes directory
 
-# Agent 下的子目录
-AGENT_MEMORIES_DIR = "memories"          # 提示词目录
-AGENT_SKILLS_DIR = "skills"              # 技能目录
-AGENT_MODELS_DIR = "models"              # Model 配置目录
-AGENT_MCPS_DIR = "mcps"                  # MCP 配置目录
-AGENT_OUTPUT_DIR = "output"          # 工作记录目录
+# Subdirectories under Agent
+AGENT_MEMORIES_DIR = "memories"          # Memory/prompt directory
+AGENT_SKILLS_DIR = "skills"              # Skills directory
+AGENT_MODELS_DIR = "models"              # Model config directory
+AGENT_MCPS_DIR = "mcps"                  # MCP config directory
+AGENT_OUTPUT_DIR = "output"              # Work output directory
 
 
 # ============================================================
-# 资产类型映射
+# Asset type mappings
 # ============================================================
 
-# AssetBundle 下的资产类型字符串 -> 目录名
+# AssetBundle asset type string -> directory name
 BUNDLE_ASSET_TYPE_TO_DIR = {
     "table": TABLES_DIR,
     "volume": VOLUMES_DIR,
@@ -74,7 +75,7 @@ BUNDLE_ASSET_TYPE_TO_DIR = {
     "note": NOTES_DIR,
 }
 
-# Agent 下的子资源类型 -> 目录名
+# Agent sub-resource type -> directory name
 AGENT_RESOURCE_TYPE_TO_DIR = {
     "prompt": AGENT_MEMORIES_DIR,
     "skill": AGENT_SKILLS_DIR,
@@ -85,7 +86,7 @@ AGENT_RESOURCE_TYPE_TO_DIR = {
 
 
 # ============================================================
-# MCP 类型常量
+# MCP type constants
 # ============================================================
 
 MCP_TYPE_PYTHON_FUNCTION = "python_function"
@@ -100,7 +101,7 @@ MCP_TYPES = [
 
 
 # ============================================================
-# 工作会话状态
+# Work session status
 # ============================================================
 
 WORK_SESSION_STATUS_ACTIVE = "active"
@@ -115,7 +116,7 @@ WORK_SESSION_STATUSES = [
 
 
 # ============================================================
-# 输出类型常量
+# Output type constants
 # ============================================================
 
 OUTPUT_TYPE_TEXT = "text"

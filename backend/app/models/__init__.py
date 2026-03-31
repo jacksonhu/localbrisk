@@ -1,38 +1,38 @@
 """
-Models 模块初始化
-定义 BusinessUnit、AssetBundle、Agent、Model、MCP 等核心数据结构
+Models module initialization.
+Defines core data structures: BusinessUnit, AssetBundle, Agent, Model, MCP, etc.
 """
 
 from app.models.business_unit import (
-    # 基础模型
+    # Base models
     BaseInfo,
     BaseInfoCreate,
     BaseInfoUpdate,
     EntityType,
-    # BusinessUnit 相关
+    # BusinessUnit
     BusinessUnit,
     BusinessUnitCreate,
     BusinessUnitUpdate,
     BusinessUnitTreeNode,
-    # AssetBundle 相关
+    # AssetBundle
     AssetBundle,
     AssetBundleCreate,
     AssetBundleUpdate,
     AssetBundleType,
-    # 连接相关
+    # Connection
     ConnectionConfig,
     ConnectionType,
-    # Asset 相关
+    # Asset
     Asset,
     AssetCreate,
     AssetType,
     VolumeType,
-    # Agent 相关
+    # Agent
     Agent,
     AgentCreate,
     AgentUpdate,
     AgentLLMConfig,
-    # Model 相关
+    # Model
     Model,
     ModelCreate,
     ModelUpdate,
@@ -40,7 +40,7 @@ from app.models.business_unit import (
     LocalModelProvider,
     LocalModelSource,
     EndpointProvider,
-    # MCP 相关
+    # MCP
     MCP,
     MCPCreate,
     MCPUpdate,
@@ -48,45 +48,45 @@ from app.models.business_unit import (
     MCPPythonFunctionConfig,
     MCPServerConfig,
     MCPRemoteAPIConfig,
-    # Output 相关
+    # Output
     WorkSession,
     WorkOutput,
-    # Memory 相关
+    # Memory
     Memory,
     MemoryCreate,
     MemoryUpdate,
 )
 
 __all__ = [
-    # 基础模型
+    # Base models
     "BaseInfo",
     "BaseInfoCreate",
     "BaseInfoUpdate",
     "EntityType",
-    # BusinessUnit 相关
+    # BusinessUnit
     "BusinessUnit",
     "BusinessUnitCreate",
     "BusinessUnitUpdate",
     "BusinessUnitTreeNode",
-    # AssetBundle 相关
+    # AssetBundle
     "AssetBundle",
     "AssetBundleCreate",
     "AssetBundleUpdate",
     "AssetBundleType",
-    # 连接相关
+    # Connection
     "ConnectionConfig",
     "ConnectionType",
-    # Asset 相关
+    # Asset
     "Asset",
     "AssetCreate",
     "AssetType",
     "VolumeType",
-    # Agent 相关
+    # Agent
     "Agent",
     "AgentCreate",
     "AgentUpdate",
     "AgentLLMConfig",
-    # Model 相关
+    # Model
     "Model",
     "ModelCreate",
     "ModelUpdate",
@@ -94,7 +94,7 @@ __all__ = [
     "LocalModelProvider",
     "LocalModelSource",
     "EndpointProvider",
-    # MCP 相关
+    # MCP
     "MCP",
     "MCPCreate",
     "MCPUpdate",
@@ -102,10 +102,10 @@ __all__ = [
     "MCPPythonFunctionConfig",
     "MCPServerConfig",
     "MCPRemoteAPIConfig",
-    # Output 相关
+    # Output
     "WorkSession",
     "WorkOutput",
-    # Memory 相关
+    # Memory
     "Memory",
     "MemoryCreate",
     "MemoryUpdate",

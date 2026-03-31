@@ -1,18 +1,18 @@
 """
-Markdown 输出协议（替代结构化 JSON response format）
+Markdown output protocol (replaces structured JSON response format)
 
-说明：
-- Agent 最终输出统一为 Markdown 文本。
-- 本模块仅保留最小类型定义，避免继续依赖 JSON block schema。
+Notes:
+- Agent final output is unified as Markdown text.
+- This module retains minimal type definitions, avoiding JSON block schema dependency.
 """
 
 from pydantic import BaseModel, Field
 
 
 class MarkdownResponse(BaseModel):
-    """Markdown 文本响应"""
+    """Markdown text response"""
 
-    markdown: str = Field(..., description="完整 Markdown 内容")
+    markdown: str = Field(..., description="Complete Markdown content")
 
 
 __all__ = [

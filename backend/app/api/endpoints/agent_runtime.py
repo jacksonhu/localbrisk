@@ -1,8 +1,8 @@
 """
-Agent 运行时 API
-提供 Agent 启动、停止、状态查询等运行时管理接口
+Agent Runtime API
+Provides runtime management endpoints for Agent start, stop, status query, etc.
 
-使用 StreamMessage 协议，支持 THOUGHT/TASK_LIST/ARTIFACT/STATUS/ERROR/DONE 消息包
+Uses StreamMessage protocol, supports THOUGHT/TASK_LIST/ARTIFACT/STATUS/ERROR/DONE message packets
 """
 
 import logging
@@ -19,22 +19,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ==================== 请求/响应模型 ====================
+# ==================== Request/Response Models ====================
 
 class AgentLoadRequest(BaseModel):
-    """加载 Agent 请求"""
+    """Load Agent request"""
     business_unit_id: str = Field(..., description="BusinessUnit ID")
-    agent_name: str = Field(..., description="Agent 名称")
+    agent_name: str = Field(..., description="Agent name")
 
 
 class AgentExecuteRequest(BaseModel):
-    """执行 Agent 请求"""
-    input: str = Field(..., description="用户输入")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="执行上下文")
+    """Execute Agent request"""
+    input: str = Field(..., description="User input")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Execution context")
 
 
 class LoadResponse(BaseModel):
-    """加载响应"""
+    """Load response"""
     message: str
     agent_name: str
     business_unit_id: str
@@ -42,7 +42,7 @@ class LoadResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    """状态响应"""
+    """Status response"""
     execution_id: Optional[str] = None
     status: str
     started_at: Optional[str] = None
@@ -51,58 +51,58 @@ class StatusResponse(BaseModel):
 
 
 class CancelResponse(BaseModel):
-    """取消响应"""
+    """Cancel response"""
     message: str
     success: bool
 
 
 class UnloadResponse(BaseModel):
-    """卸载响应"""
+    """Unload response"""
     message: str
     success: bool
 
 
 class ClearContextResponse(BaseModel):
-    """清理上下文响应"""
+    """Clear context response"""
     message: str
     success: bool
 
 
 class ConversationHistoryResponse(BaseModel):
-    """会话历史响应"""
+    """Conversation history response"""
     agent_name: str
     thread_id: str
     history_file: str
     turns: list[dict[str, Any]]
 
 
-# ==================== API 端点 ====================
+# ==================== API Endpoints ====================
 
 @router.post("/{business_unit_id}/agents/{agent_name}/load", response_model=LoadResponse)
 async def load_agent(business_unit_id: str, agent_name: str):
-    """加载 Agent"""
-    logger.info(f"加载 Agent: {business_unit_id}/{agent_name}")
+    """Load Agent"""
+    logger.info(f"Loading Agent: {business_unit_id}/{agent_name}")
 
     try:
         service = get_agent_runtime_service()
         state = await service.load_agent(business_unit_id, agent_name)
 
         return LoadResponse(
-            message=f"Agent {agent_name} 加载成功",
+            message=f"Agent {agent_name} loaded successfully",
             agent_name=agent_name,
             business_unit_id=business_unit_id,
             status=state.status.value,
         )
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"Agent 配置不存在: {e}")
+        raise HTTPException(status_code=404, detail=f"Agent config not found: {e}")
     except ImportError as e:
-        raise HTTPException(status_code=503, detail=f"缺少依赖: {e}")
+        raise HTTPException(status_code=503, detail=f"Missing dependencies: {e}")
     except Exception as e:
-        logger.exception(f"加载 Agent 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"加载 Agent 失败: {e}")
+        logger.exception(f"Failed to load  Agent failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Load Agent failed: {e}")
 
 
-# ==================== 流式端点（StreamMessage 协议） ====================
+# ==================== Streaming Endpoints (StreamMessage Protocol) ====================
 
 @router.post("/{business_unit_id}/agents/{agent_name}/execute/stream")
 async def execute_agent_streaming(
@@ -110,17 +110,17 @@ async def execute_agent_streaming(
     agent_name: str,
     request: AgentExecuteRequest
 ):
-    """流式执行 Agent
+    """Stream execution of Agent
 
-    使用 StreamMessage 协议，前端根据 type 字段分流处理:
-    - THOUGHT  → 左侧思考面板（打字机效果）
-    - TASK_LIST → 左侧任务列表
-    - ARTIFACT → 右侧制品展示
-    - STATUS   → 瞬时状态提示
-    - ERROR    → 错误信息
-    - DONE     → 执行完成
+    Uses StreamMessage protocol, frontend dispatches by type field:
+    - THOUGHT  → left thought panel (typewriter effect)
+    - TASK_LIST → left task list
+    - ARTIFACT → right artifact display
+    - STATUS   → transient status hint
+    - ERROR    → error message
+    - DONE     → execution completed
     """
-    logger.info(f"流式执行 Agent: {business_unit_id}/{agent_name}")
+    logger.info(f"Streaming execution of Agent: {business_unit_id}/{agent_name}")
 
     async def event_generator():
         try:
@@ -135,7 +135,7 @@ async def execute_agent_streaming(
                 yield message.to_sse()
 
         except Exception as e:
-            logger.exception(f"流式执行失败: {e}")
+            logger.exception(f"Streaming execution failed: {e}")
             import time
             error_data = {
                 "type": "ERROR",
@@ -161,7 +161,7 @@ async def execute_agent_streaming(
     )
 
 
-# ==================== 重连快照端点 ====================
+# ==================== Reconnection Snapshot Endpoints ====================
 
 @router.get("/{business_unit_id}/agents/{agent_name}/execution/{execution_id}/snapshot")
 async def get_execution_snapshot(
@@ -169,12 +169,12 @@ async def get_execution_snapshot(
     agent_name: str,
     execution_id: str
 ):
-    """获取执行快照（用于断线重连）
+    """Get execution snapshot (for reconnection)
 
-    返回指定执行 ID 的全量快照，包含已有的思考记录、任务列表和制品列表。
-    前端重连后调用此接口恢复状态。
+    Returns full snapshot for specified execution ID, including thought records, task list, and artifacts.
+    Frontend calls this endpoint after reconnection to restore state.
     """
-    logger.info(f"获取执行快照: {execution_id}")
+    logger.info(f"Fetching execution snapshot: {execution_id}")
 
     try:
         service = get_agent_runtime_service()
@@ -183,7 +183,7 @@ async def get_execution_snapshot(
         if not snapshot:
             raise HTTPException(
                 status_code=404,
-                detail=f"未找到执行 ID {execution_id} 的快照"
+                detail=f"Snapshot not found for execution ID {execution_id} "
             )
 
         return snapshot
@@ -191,15 +191,15 @@ async def get_execution_snapshot(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"获取快照失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取快照失败: {e}")
+        logger.exception(f"Failed to get snapshot: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get snapshot: {e}")
 
 
-# ==================== 管理端点 ====================
+# ==================== Management Endpoints ====================
 
 @router.get("/{business_unit_id}/agents/{agent_name}/status", response_model=StatusResponse)
 async def get_agent_status(business_unit_id: str, agent_name: str):
-    """获取 Agent 执行状态"""
+    """Get Agent Execute状态"""
     try:
         service = get_agent_runtime_service()
         status = await service.get_agent_status(business_unit_id, agent_name)
@@ -211,36 +211,36 @@ async def get_agent_status(business_unit_id: str, agent_name: str):
             completed_at=status.get("last_execution_at"),
         )
     except Exception as e:
-        logger.exception(f"获取状态失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取状态失败: {e}")
+        logger.exception(f"Failed to get 状态failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Get状态failed: {e}")
 
 
 @router.post("/{business_unit_id}/agents/{agent_name}/cancel", response_model=CancelResponse)
 async def cancel_agent(business_unit_id: str, agent_name: str):
-    """取消 Agent 执行"""
-    logger.info(f"取消 Agent 执行: {business_unit_id}/{agent_name}")
+    """Cancel Agent execution"""
+    logger.info(f"Cancelling Agent execution: {business_unit_id}/{agent_name}")
 
     try:
         service = get_agent_runtime_service()
         success = await service.cancel_agent(business_unit_id, agent_name)
 
         return CancelResponse(
-            message="取消请求已发送" if success else "没有正在执行的任务",
+            message="cancel request sent" if success else "no running task",
             success=success,
         )
     except Exception as e:
-        logger.exception(f"取消执行失败: {e}")
-        raise HTTPException(status_code=500, detail=f"取消执行失败: {e}")
+        logger.exception(f"Failed to cancel execution: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to cancel execution: {e}")
 
 
 @router.get("/{business_unit_id}/agents/{agent_name}/history", response_model=ConversationHistoryResponse)
 async def get_conversation_history(
     business_unit_id: str,
     agent_name: str,
-    thread_id: Optional[str] = Query(default=None, description="会话线程ID，不传则使用 agent_name"),
+    thread_id: Optional[str] = Query(default=None, description="Conversation thread ID; defaults to agent_name if not provided"),
 ):
-    """获取 Agent 本地会话历史。"""
-    logger.info(f"获取 Agent 会话历史: {business_unit_id}/{agent_name}, thread_id={thread_id or agent_name}")
+    """Get Agent 本地会话历史."""
+    logger.info(f"Fetching Agent conversation history: {business_unit_id}/{agent_name}, thread_id={thread_id or agent_name}")
 
     try:
         service = get_agent_runtime_service()
@@ -251,57 +251,57 @@ async def get_conversation_history(
         )
         return ConversationHistoryResponse(**history)
     except Exception as e:
-        logger.exception(f"获取 Agent 会话历史失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取 Agent 会话历史失败: {e}")
+        logger.exception(f"Failed to get  Agent 会话历史failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Get Agent 会话历史failed: {e}")
 
 
 @router.delete("/{business_unit_id}/agents/{agent_name}/context", response_model=ClearContextResponse)
 async def clear_agent_context(
     business_unit_id: str,
     agent_name: str,
-    thread_id: Optional[str] = Query(default=None, description="会话线程ID，不传则使用 agent_name"),
+    thread_id: Optional[str] = Query(default=None, description="Conversation thread ID; defaults to agent_name if not provided"),
 ):
-    """清理 Agent 对话上下文与本地历史。"""
-    logger.info(f"清理 Agent 对话上下文: {business_unit_id}/{agent_name}, thread_id={thread_id or agent_name}")
+    """Clear Agent conversation context and local history."""
+    logger.info(f"Clearing Agent conversation context: {business_unit_id}/{agent_name}, thread_id={thread_id or agent_name}")
 
     try:
         service = get_agent_runtime_service()
         success = await service.clear_agent_context(business_unit_id, agent_name, thread_id)
 
         return ClearContextResponse(
-            message="对话上下文已清理" if success else "未找到可清理的上下文",
+            message="conversation context cleared" if success else "No clearable context found",
             success=success,
         )
     except Exception as e:
-        logger.exception(f"清理 Agent 对话上下文失败: {e}")
-        raise HTTPException(status_code=500, detail=f"清理 Agent 对话上下文失败: {e}")
+        logger.exception(f"清理 Agent 对话Contextfailed: {e}")
+        raise HTTPException(status_code=500, detail=f"清理 Agent 对话Contextfailed: {e}")
 
 
 @router.delete("/{business_unit_id}/agents/{agent_name}/unload", response_model=UnloadResponse)
 async def unload_agent(business_unit_id: str, agent_name: str):
-    """卸载 Agent"""
-    logger.info(f"卸载 Agent: {business_unit_id}/{agent_name}")
+    """Unload Agent"""
+    logger.info(f"Unloading Agent: {business_unit_id}/{agent_name}")
 
     try:
         service = get_agent_runtime_service()
         success = await service.unload_agent(business_unit_id, agent_name)
 
         return UnloadResponse(
-            message="Agent 已卸载" if success else "Agent 未加载",
+            message="Agent unloaded" if success else "Agent not loaded",
             success=success,
         )
     except Exception as e:
-        logger.exception(f"卸载 Agent 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"卸载 Agent 失败: {e}")
+        logger.exception(f"卸载 Agent failed: {e}")
+        raise HTTPException(status_code=500, detail=f"卸载 Agent failed: {e}")
 
 
 @router.get("/agents/loaded")
 async def list_loaded_agents():
-    """列出已加载的 Agent"""
+    """List loaded Agents"""
     try:
         service = get_agent_runtime_service()
         agents = service.list_loaded_agents()
         return agents
     except Exception as e:
-        logger.exception(f"获取列表失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取列表失败: {e}")
+        logger.exception(f"Failed to get 列表failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Get列表failed: {e}")

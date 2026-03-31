@@ -1,13 +1,13 @@
 """
-Agent 引擎异常定义
-定义各种专用异常类，提供详细的错误信息和处理建议
+Agent Engine Exception Definitions
+Defines specialized exception classes with detailed error messages and suggestions
 """
 
 from typing import Optional, Dict, Any
 
 
 class AgentEngineError(Exception):
-    """Agent 引擎基础异常"""
+    """Agent engine base exception"""
     
     def __init__(
         self,
@@ -23,7 +23,7 @@ class AgentEngineError(Exception):
         self.suggestion = suggestion
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式"""
+        """Convert to dict format"""
         return {
             "error": self.error_code,
             "message": self.message,
@@ -33,7 +33,7 @@ class AgentEngineError(Exception):
 
 
 class AgentConfigError(AgentEngineError):
-    """Agent 配置错误"""
+    """Agent config error"""
     
     def __init__(
         self,
@@ -52,12 +52,12 @@ class AgentConfigError(AgentEngineError):
             message=message,
             error_code="AGENT_CONFIG_ERROR",
             details=details,
-            suggestion="请检查 agent_spec.yaml 配置文件的格式和内容"
+            suggestion="Please check the agent_spec.yaml config file format and content"
         )
 
 
 class AgentExecutionError(AgentEngineError):
-    """Agent 执行错误"""
+    """Agent execution error"""
     
     def __init__(
         self,
@@ -79,12 +79,12 @@ class AgentExecutionError(AgentEngineError):
             message=message,
             error_code="AGENT_EXECUTION_ERROR",
             details=details,
-            suggestion="请检查 Agent 配置和输入数据，或查看详细日志"
+            suggestion="Please check Agent config and input data, or review detailed logs"
         )
 
 
 class AgentTimeoutError(AgentEngineError):
-    """Agent 执行超时错误"""
+    """Agent execution timeout error"""
     
     def __init__(
         self,
@@ -103,12 +103,12 @@ class AgentTimeoutError(AgentEngineError):
             message=message,
             error_code="AGENT_TIMEOUT_ERROR",
             details=details,
-            suggestion="考虑增加超时时间或优化 Agent 执行逻辑"
+            suggestion="Consider increasing the timeout or optimizing Agent execution logic"
         )
 
 
 class ModelNotFoundError(AgentEngineError):
-    """模型未找到错误"""
+    """Model not found error"""
     
     def __init__(
         self,
@@ -122,15 +122,15 @@ class ModelNotFoundError(AgentEngineError):
             details["catalog_id"] = catalog_id
         
         super().__init__(
-            message=f"模型 '{model_reference}' 未找到",
+            message=f"Model '{model_reference}' not found",
             error_code="MODEL_NOT_FOUND",
             details=details,
-            suggestion="请确认模型引用格式为 'schema.model_name'，且模型已正确配置"
+            suggestion="Please verify the model reference format is 'schema.model_name' and the model is configured correctly"
         )
 
 
 class SkillLoadError(AgentEngineError):
-    """技能加载错误"""
+    """Skill load error"""
     
     def __init__(
         self,
@@ -147,15 +147,15 @@ class SkillLoadError(AgentEngineError):
             details["reason"] = reason
         
         super().__init__(
-            message=f"技能 '{skill_name}' 加载失败: {reason or '未知原因'}",
+            message=f"Skill '{skill_name}' load failed: {reason or 'unknown reason'}",
             error_code="SKILL_LOAD_ERROR",
             details=details,
-            suggestion="请检查技能配置文件和依赖是否正确"
+            suggestion="Please check the skill config file and dependencies"
         )
 
 
 class PromptTemplateError(AgentEngineError):
-    """提示词模板错误"""
+    """Prompt template error"""
     
     def __init__(
         self,
@@ -172,15 +172,15 @@ class PromptTemplateError(AgentEngineError):
             details["reason"] = reason
         
         super().__init__(
-            message=f"提示词模板 '{template_name}' 错误: {reason or '未知原因'}",
+            message=f"Prompt template '{template_name}' error: {reason or 'unknown reason'}",
             error_code="PROMPT_TEMPLATE_ERROR",
             details=details,
-            suggestion="请检查 prompts 目录下的模板文件"
+            suggestion="Please check template files in the prompts directory"
         )
 
 
 class DaemonServiceError(AgentEngineError):
-    """守护进程服务错误"""
+    """Daemon服务error"""
     
     def __init__(
         self,
@@ -199,5 +199,5 @@ class DaemonServiceError(AgentEngineError):
             message=message,
             error_code="DAEMON_SERVICE_ERROR",
             details=details,
-            suggestion="请检查服务状态和系统资源"
+            suggestion="Please check service status and system resources"
         )
