@@ -1,11 +1,15 @@
-# LocalBrisk — 本地化全能 AI 智能体工作站
+# LocalBrisk — 你的电脑，就是一个 Agent 公司
+
+<p align="center">
+  <strong>🌍 开源共建 · 邀请全球开发者参与 · 一起定义本地 AI 的未来</strong>
+</p>
 
 [English](README.md) | **中文** | [Development Guide](DEVELOPMENT.md) | [开发指南](DEVELOPMENT_zh.md)
 
-> **Local-First, Privacy-Safe, All-in-One AI Agent Workstation.**
+> **Local-First, Privacy-Safe — 把你的笔记本变成一家全自主运转的 AI 智能体公司。**
 
-LocalBrisk 是一款主打**「本地安全」「本体建模」与「极速体验」**的跨平台桌面 AI 助手。它将智能体、数据资产、大语言模型与本地计算能力整合在一个应用中，让你在无需云端依赖的前提下完成数据分析、知识管理与智能对话。
-
+LocalBrisk 是一款跨平台桌面工作站，让你在**自己的设备上**构建、编排并运行 AI 智能体。通过**本体建模（Ontology Modeling）**，它将本地文件、云端数据库与领域知识统一为一张语义图谱，供智能体推理调用。数据不出设备、无需云端依赖——一个应用，让你的电脑化身为自治的 AI 组织。
+![LocalBrisk Overview](./img.png)
 ### 为什么选择 LocalBrisk？
 
 - **本地 Agent 运行沙箱**：每个 Agent 在完全隔离的本地沙箱中运行（独立 venv + 文件系统后端 + 工具权限边界），代码执行和数据处理**永不离开你的设备**。
