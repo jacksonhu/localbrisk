@@ -1,62 +1,64 @@
-# LocalBrisk 开发指南
+# LocalBrisk Development Guide
 
-## 项目结构
+[English](DEVELOPMENT.md) | [中文](DEVELOPMENT_zh.md)
+
+## Project Structure
 
 ```
 LocalBrisk/
-├── frontend/               # 前端 UI 代码
-│   ├── src/                # Vue 3 前端源码
-│   │   ├── components/     # UI 组件
-│   │   ├── views/          # 页面视图
-│   │   ├── services/       # API 服务
-│   │   │   ├── api.ts      # Python 后端 API
-│   │   │   └── tauri.ts    # Tauri 命令调用
-│   │   ├── types/          # TypeScript 类型定义
-│   │   └── styles/         # 全局样式
-│   ├── public/             # 静态资源
-│   ├── index.html          # 入口 HTML
-│   ├── package.json        # 前端依赖配置
-│   ├── vite.config.ts      # Vite 配置
-│   ├── tsconfig.json       # TypeScript 配置
-│   ├── tailwind.config.js  # Tailwind CSS 配置
-│   └── postcss.config.js   # PostCSS 配置
-├── src-tauri/              # Tauri (Rust) 桌面外壳
+├── frontend/               # Frontend UI code
+│   ├── src/                # Vue 3 source
+│   │   ├── components/     # UI components
+│   │   ├── views/          # Page views
+│   │   ├── services/       # API services
+│   │   │   ├── api.ts      # Python backend API
+│   │   │   └── tauri.ts    # Tauri command invocations
+│   │   ├── types/          # TypeScript type definitions
+│   │   └── styles/         # Global styles
+│   ├── public/             # Static assets
+│   ├── index.html          # Entry HTML
+│   ├── package.json        # Frontend dependencies
+│   ├── vite.config.ts      # Vite config
+│   ├── tsconfig.json       # TypeScript config
+│   ├── tailwind.config.js  # Tailwind CSS config
+│   └── postcss.config.js   # PostCSS config
+├── src-tauri/              # Tauri (Rust) desktop shell
 │   ├── src/
-│   │   └── main.rs         # Rust 主程序（含 Sidecar 管理）
-│   ├── binaries/           # 打包后的 Python 后端
-│   ├── capabilities/       # Tauri 权限配置
+│   │   └── main.rs         # Rust main entry (incl. Sidecar management)
+│   ├── binaries/           # Packaged Python backend
+│   ├── capabilities/       # Tauri permission config
 │   ├── Cargo.toml
-│   └── tauri.conf.json     # Tauri 配置
-├── backend/                # Python FastAPI 后端
+│   └── tauri.conf.json     # Tauri config
+├── backend/                # Python FastAPI backend
 │   ├── app/
-│   │   ├── api/            # API 端点
-│   │   ├── core/           # 核心配置
-│   │   └── models/         # 数据模型
-│   ├── main.py             # FastAPI 入口
-│   ├── run.py              # 打包入口
-│   ├── localbrisk-backend.spec  # PyInstaller 配置
+│   │   ├── api/            # API endpoints
+│   │   ├── core/           # Core configuration
+│   │   └── models/         # Data models
+│   ├── main.py             # FastAPI entry
+│   ├── run.py              # Packaging entry
+│   ├── localbrisk-backend.spec  # PyInstaller config
 │   └── requirements.txt
-├── build.sh                # macOS/Linux 构建脚本
-├── build.bat               # Windows 构建脚本
-└── dev.sh                  # 开发启动脚本
+├── build.sh                # macOS/Linux build script
+├── build.bat               # Windows build script
+└── dev.sh                  # Development launch script
 ```
 
-## 环境要求
+## Prerequisites
 
 - **Node.js** >= 18
 - **Rust** >= 1.70
 - **Python** >= 3.10
 
-## 快速开始
+## Quick Start
 
-### 1. 安装前端依赖
+### 1. Install Frontend Dependencies
 
 ```bash
 cd frontend
 npm install
 ```
 
-### 2. 安装 Python 依赖
+### 2. Install Python Dependencies
 
 ```bash
 cd backend
@@ -66,44 +68,44 @@ pip install -r requirements.txt
 cd ..
 ```
 
-### 3. 开发模式
+### 3. Development Mode
 
-**方式一：分别启动（推荐开发时使用）**
+**Option 1: Start separately (recommended for development)**
 
 ```bash
-# 终端 1: 启动 Python 后端
+# Terminal 1: Start Python backend
 cd backend
 source venv/bin/activate
 python main.py
 
-# 终端 2: 启动 Tauri 前端
+# Terminal 2: Start Tauri frontend
 cd frontend
 npm run tauri:dev
 ```
 
-**方式二：一键启动**
+**Option 2: One-click start**
 
 ```bash
 # macOS/Linux
 ./dev.sh
 
-# 或使用 npm (在 frontend 目录下)
+# Or using npm (in frontend directory)
 cd frontend
 npm run fulldev
 ```
 
-### 4. 纯前端开发（不需要后端）
+### 4. Frontend-Only Development (no backend needed)
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-访问 http://localhost:1420
+Visit http://localhost:1420
 
-## 构建发布
+## Build for Release
 
-### 一键打包
+### One-Click Build
 
 ```bash
 # macOS/Linux
@@ -113,31 +115,31 @@ npm run dev
 build.bat
 ```
 
-### 分步构建
+### Step-by-Step Build
 
 ```bash
-# 1. 打包 Python 后端
+# 1. Package Python backend
 cd backend
 source venv/bin/activate
 pyinstaller --clean --noconfirm localbrisk-backend.spec
 
-# 2. 复制到 Tauri binaries 目录
+# 2. Copy to Tauri binaries directory
 mkdir -p ../src-tauri/binaries
 cp dist/localbrisk-backend ../src-tauri/binaries/localbrisk-backend-$(rustc -vV | grep host | cut -d ' ' -f2)
 
-# 3. 构建 Tauri 应用
+# 3. Build Tauri application
 cd ../frontend
 npm run tauri:build
 ```
 
-### 生成应用图标
+### Generate App Icons
 
 ```bash
 cd frontend
 npm run tauri:icon
 ```
 
-## 构建产物位置
+## Build Artifacts
 
 - **macOS**: `src-tauri/target/release/bundle/macos/`
 - **macOS DMG**: `src-tauri/target/release/bundle/dmg/`
@@ -146,32 +148,32 @@ npm run tauri:icon
 - **Linux AppImage**: `src-tauri/target/release/bundle/appimage/`
 - **Linux DEB**: `src-tauri/target/release/bundle/deb/`
 
-## 技术栈
+## Tech Stack
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| UI 层 | Vue 3 + Vite + Tailwind CSS | 响应式前端界面 |
-| 桌面外壳 | Tauri 2.0 (Rust) | 窗口管理、Sidecar 调度 |
-| 后端服务 | Python FastAPI | 本地 Web 服务 |
-| 数据处理 | Polars | 高性能数据分析 |
-| 存储 | DuckDB | 本地向量/结构化存储 |
-| 打包 | PyInstaller + Tauri Bundler | 跨平台打包 |
+| Layer | Technology | Description |
+|-------|-----------|-------------|
+| UI | Vue 3 + Vite + Tailwind CSS | Responsive frontend UI |
+| Desktop Shell | Tauri 2.0 (Rust) | Window management, Sidecar scheduling |
+| Backend | Python FastAPI | Local web service |
+| Data Processing | Polars | High-performance data analysis |
+| Storage | DuckDB | Local analytical storage |
+| Packaging | PyInstaller + Tauri Bundler | Cross-platform packaging |
 
-## 架构说明
+## Architecture
 
-### Sidecar 机制
+### Sidecar Mechanism
 
-LocalBrisk 使用 Tauri 的 Sidecar 机制来管理 Python 后端：
+LocalBrisk uses Tauri's Sidecar mechanism to manage the Python backend:
 
-1. **启动流程**：Tauri 应用启动时自动调用打包好的 Python 可执行文件
-2. **通信方式**：前端通过 HTTP 请求与 Python FastAPI 通信（端口 8765）
-3. **生命周期**：窗口关闭时自动终止 Python 进程
+1. **Startup**: Tauri app automatically launches the packaged Python executable on startup
+2. **Communication**: Frontend communicates with Python FastAPI via HTTP (port 8765)
+3. **Lifecycle**: Python process is automatically terminated when the window closes
 
-### 前后端通信
+### Frontend-Backend Communication
 
 ```
 ┌─────────────────┐     HTTP      ┌─────────────────┐
-│   Vue 3 前端    │ ──────────────▶ │  Python FastAPI │
+│   Vue 3 Frontend│ ──────────────▶ │  Python FastAPI │
 │  (localhost:1420)│ ◀────────────── │  (localhost:8765)│
 └─────────────────┘               └─────────────────┘
          │                                  ▲
@@ -179,20 +181,20 @@ LocalBrisk 使用 Tauri 的 Sidecar 机制来管理 Python 后端：
          ▼                                  │
 ┌─────────────────┐    spawn/kill   ┌─────────────────┐
 │   Rust Tauri    │ ───────────────▶ │  Python Sidecar │
-│   (主进程)       │                  │  (子进程)        │
+│  (Main Process) │                  │  (Child Process) │
 └─────────────────┘                  └─────────────────┘
 ```
 
-## 常见问题
+## FAQ
 
-### Q: Tauri 开发模式下后端连接失败？
+### Q: Backend connection fails in Tauri dev mode?
 
-A: 确保先启动 Python 后端服务（端口 8765），再启动 Tauri 开发模式。
+A: Make sure to start the Python backend service (port 8765) before launching Tauri dev mode.
 
-### Q: PyInstaller 打包失败？
+### Q: PyInstaller packaging fails?
 
-A: 检查 Python 版本（需要 3.10+）和依赖是否正确安装。某些依赖可能需要添加到 `hiddenimports` 中。
+A: Check Python version (3.10+ required) and ensure all dependencies are correctly installed. Some dependencies may need to be added to `hiddenimports`.
 
-### Q: macOS 构建提示签名问题？
+### Q: macOS build prompts signing issues?
 
-A: 开发测试时可以忽略签名。正式发布需要 Apple Developer 证书。
+A: You can ignore signing during development testing. Official releases require an Apple Developer certificate.

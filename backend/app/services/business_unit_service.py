@@ -106,7 +106,7 @@ class BusinessUnitService(BaseService):
         baseinfo = self._extract_baseinfo(config, bu_path.name)
         
         return BusinessUnit(
-            id=baseinfo.get("name") or bu_path.name,
+            id=bu_path.name,
             name=bu_path.name,
             display_name=baseinfo.get("display_name") or bu_path.name,
             description=baseinfo.get("description"),
