@@ -1,11 +1,15 @@
-# LocalBrisk — Local-First All-in-One AI Agent Workstation
+# LocalBrisk — Your Laptop, Your Agent Company
+
+<p align="center">
+  <strong>🚀 Early Stage & Actively Evolving — Looking for Founding Contributors to Build the Future of Local AI Together</strong>
+</p>
 
 **English** | [中文](README_zh.md) | [Development Guide](DEVELOPMENT.md) | [开发指南](DEVELOPMENT_zh.md)
 
-> **Local-First, Privacy-Safe, All-in-One AI Agent Workstation.**
+> **Local-First, Privacy-Safe — Turn your laptop into a fully autonomous AI agent company.**
 
-LocalBrisk is a cross-platform desktop AI assistant focused on **local security**, **ontology modeling**, and **blazing-fast experience**. It integrates agents, data assets, large language models, and local compute into a single application — enabling data analysis, knowledge management, and intelligent conversations without any cloud dependency.
-![img.png](img.png)
+LocalBrisk is a cross-platform desktop workstation that lets you build, orchestrate, and run AI agents **entirely on your own machine**. Through **ontology modeling**, it unifies local files, cloud databases, and domain knowledge into a single semantic graph that agents can reason over. No data leaves your device, no cloud dependency required — just one app that transforms your laptop into a self-contained AI organization.
+![LocalBrisk Overview](./img.png)
 ### Why LocalBrisk?
 
 - **Local Agent Sandbox**: Every Agent runs inside an isolated local sandbox with its own virtual environment, file system backend, and tool permissions — your code execution and data processing never leave your machine.
