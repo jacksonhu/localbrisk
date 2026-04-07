@@ -181,6 +181,7 @@ class ErrorPayload(BaseModel):
     """ERROR message payload — error information"""
     message: str = Field(..., description="Error message")
     error_type: Optional[str] = Field(None, description="Error type")
+    error_code: Optional[str] = Field(None, description="Stable application error code")
     task_id: Optional[str] = Field(None, description="Associated task ID")
     traceback: Optional[str] = Field(None, description="Error traceback")
     suggestion: Optional[str] = Field(None, description="Fix suggestion")
@@ -385,6 +386,7 @@ class StreamMessageBuilder:
         self,
         message: str,
         error_type: Optional[str] = None,
+        error_code: Optional[str] = None,
         task_id: Optional[str] = None,
         suggestion: Optional[str] = None,
         retryable: bool = False,
@@ -394,6 +396,7 @@ class StreamMessageBuilder:
         payload = ErrorPayload(
             message=message,
             error_type=error_type,
+            error_code=error_code,
             task_id=task_id,
             suggestion=suggestion,
             retryable=retryable,

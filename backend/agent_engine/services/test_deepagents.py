@@ -115,7 +115,7 @@ if __name__ == '__main__':
     logger.info("Starting test")
     import asyncio
     #asyncio.run(execute_agent_streaming("myunit", "Data_analyst", "分析一下腾讯股价？"))
-    asyncio.run(execute_agent_streaming("myunit", "Data_analyst", "帮我总结一下让DataAgent更可信的统一语义层.pdf的内容"))
+    asyncio.run(execute_agent_streaming("myunit", "Data_analyst", "分析一下当前有多少未删除的租户"))
     #asyncio.run(execute_agent_streaming("myunit", "Data_analyst","https://docs.wechatpy.org/zh-cn/master/quickstart.html,帮我总结一下这个网页的内容"))
     #asyncio.run(execute_agent_streaming("myunit", "Data_analyst", "你好"))
     #asyncio.run(debug_raw_stream("myunit", "Data_analyst", "你好"))
