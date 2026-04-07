@@ -13,7 +13,7 @@ langgraph>=0.2.0
 langchain>=0.2.0
 langchain-core>=0.2.0
 langchain-openai>=0.1.0
-deepagents>=0.4.5
+deepagents>=0.4.12
 langgraph-checkpoint-sqlite>=3.0.0
 langgraph-checkpoint>=2.1.0
 

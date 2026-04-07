@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from agent_engine.core.exceptions import serialize_exception
 from agent_engine.services import get_agent_runtime_service
 
 

@@ -112,6 +112,7 @@ export interface ToolCallPayload {
 export interface ErrorPayload {
   message: string;
   error_type?: string;
+  error_code?: string;
   task_id?: string;
   traceback?: string;
   suggestion?: string;

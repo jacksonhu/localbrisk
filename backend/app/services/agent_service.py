@@ -28,6 +28,8 @@ from app.models.business_unit import (
 )
 from app.services.base_service import BaseService
 
+from agent_engine.engine.default_prompt import AGENT_DEFAULT_PROMPT
+
 if TYPE_CHECKING:
     from app.services.business_unit_service import BusinessUnitService
 
@@ -205,9 +207,13 @@ class AgentService(BaseService):
         for directory in AGENT_BASE_SUBDIRS:
             (agent_path / directory).mkdir(exist_ok=True)
 
-        output_dir = agent_path / AGENT_OUTPUT_DIR
         for system_dir in AGENT_OUTPUT_SYSTEM_SUBDIRS:
-            (output_dir / system_dir).mkdir(exist_ok=True)
+            (agent_path / system_dir).mkdir(exist_ok=True)
+        """initialize default AGENTS.md"""
+        agents_md_path = agent_path / AGENT_MEMORIES_DIR / "AGENTS.md"
+        if not agents_md_path.exists():
+            default_prompt = AGENT_DEFAULT_PROMPT.replace("{{cwd}}", str(agent_path))
+            agents_md_path.write_text(default_prompt)
 
     def create_agent(self, business_unit_id: str, data: AgentCreate) -> Agent:
         """Create Agent"""

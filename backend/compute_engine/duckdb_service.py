@@ -1,4 +1,4 @@
-"""DuckDB compute engine service (persistent mode)."""
+"""DuckDB compute engine service with lightweight SQL audit logging."""
 
 from __future__ import annotations
 
@@ -10,9 +10,11 @@ from typing import Any, Dict, List, Optional
 
 import duckdb
 
+from agent_engine.monitoring import emit_audit_event
+
 
 class DuckDBService:
-    """Manages persistent DuckDB connections and executes SQL scripts."""
+    """Manage a persistent DuckDB connection and execute SQL scripts."""
 
     _QUERY_SQL_PREFIXES = ("SELECT", "WITH", "SHOW", "DESCRIBE", "PRAGMA")
 
@@ -69,9 +71,21 @@ class DuckDBService:
             """
         )
 
+    @staticmethod
+    def _statement_type(script: str) -> str:
+        normalized = (script or "").strip().split(None, 1)
+        return normalized[0].upper() if normalized else "UNKNOWN"
+
+    @staticmethod
+    def _summarize_sql(script: str, limit: int = 240) -> str:
+        compact = " ".join((script or "").strip().split())
+        if len(compact) <= limit:
+            return compact
+        return compact[: limit - 3] + "..."
+
     def upsert_registry(self, name: str, value: Dict[str, Any]) -> None:
         if not name.strip():
-            raise ValueError("name 不能为空")
+            raise ValueError("Registry name must not be empty")
 
         self.initialize()
         payload = json.dumps(value, ensure_ascii=False)
@@ -97,9 +111,9 @@ class DuckDBService:
         max_rows: int = 500,
     ) -> Dict[str, Any]:
         if not script or not script.strip():
-            raise ValueError("SQL script不能为空")
+            raise ValueError("SQL script must not be empty")
         if max_rows <= 0:
-            raise ValueError("max_rows 必须大于 0")
+            raise ValueError("max_rows must be greater than zero")
 
         self.initialize()
 
@@ -134,8 +148,8 @@ class DuckDBService:
                     affected_rows = max(cursor.rowcount, 0)
 
             success = True
-        except Exception as e:
-            error_message = str(e)
+        except Exception as exc:
+            error_message = str(exc)
             raise
         finally:
             elapsed_ms = (time.perf_counter() - start) * 1000
@@ -156,14 +170,14 @@ class DuckDBService:
         params: Optional[List[Any]] = None,
         max_rows: int = 500,
     ) -> Dict[str, Any]:
-        """Execute查询类 SQL script, 并返回表格数据."""
+        """Execute a query-only SQL script and return tabular data."""
         normalized_script = (script or "").strip()
         if not normalized_script:
-            raise ValueError("SQL script不能为空")
+            raise ValueError("SQL script must not be empty")
 
         upper_script = normalized_script.upper()
         if not upper_script.startswith(self._QUERY_SQL_PREFIXES):
-            raise ValueError("仅支持查询类 SQL (SELECT/WITH/SHOW/DESCRIBE/PRAGMA)")
+            raise ValueError("Only query SQL is allowed (SELECT/WITH/SHOW/DESCRIBE/PRAGMA)")
 
         result = self.execute_sql_script(
             script=normalized_script,
@@ -192,6 +206,16 @@ class DuckDBService:
         execution_ms: float,
         affected_rows: int,
     ) -> None:
+        emit_audit_event(
+            "sql.executed",
+            source="duckdb_service",
+            statement_type=self._statement_type(script),
+            sql_preview=self._summarize_sql(script),
+            success=success,
+            error_message=error_message,
+            duration_ms=round(execution_ms, 3),
+            affected_rows=affected_rows,
+        )
         with self._lock:
             if self._conn is None:
                 return
@@ -213,6 +237,7 @@ _service: Optional[DuckDBService] = None
 _service_lock = threading.Lock()
 
 
+
 def init_duckdb_service(db_path: Path) -> DuckDBService:
     global _service
     with _service_lock:
@@ -222,10 +247,12 @@ def init_duckdb_service(db_path: Path) -> DuckDBService:
         return _service
 
 
+
 def get_duckdb_service() -> DuckDBService:
     if _service is None:
         raise RuntimeError("DuckDBService has not been initialized")
     return _service
+
 
 
 def close_duckdb_service() -> None:

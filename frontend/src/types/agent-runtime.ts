@@ -163,6 +163,7 @@ export interface ErrorBlock {
   type: "error";
   message: string;
   error_type?: string;
+  error_code?: string;
   traceback?: string;
   suggestion?: string;
 }
