@@ -136,8 +136,8 @@ LocalBrisk is a cross-platform desktop workstation that lets you build, orchestr
 │  │         Python FastAPI Backend  :8765         │               │
 │  │  ┌───────────┐ ┌───────────┐ ┌────────────┐ │               │
 │  │  │  Business  │ │  Agent    │ │  Compute   │ │               │
-│  │  │  Services  │ │  Engine   │ │  Engine    │ │               │
-│  │  │  (CRUD)   │ │(LangGraph)│ │ (DuckDB)   │ │               │
+│  │  │  Services  │ │  Runtime  │ │  Engine    │ │               │
+│  │  │  (CRUD)    │ │ (OpenAI)  │ │ (DuckDB)   │ │               │
 │  │  └───────────┘ └───────────┘ └────────────┘ │               │
 │  └─────────────────────────────────────────────┘               │
 │                         │                                        │
@@ -160,12 +160,44 @@ LocalBrisk is a cross-platform desktop workstation that lets you build, orchestr
 |-------|-----------|----------------|
 | **UI** | Vue 3 + Vite + Tailwind CSS + Radix-Vue + vue-i18n + CodeMirror + ECharts + Mermaid | Responsive UI, config editing, data visualization, document preview |
 | **Desktop Shell** | Tauri 2.0 (Rust) | Window management, native menus, Sidecar process scheduling, file operations, settings persistence |
-| **Backend** | Python FastAPI + LangGraph + LangChain + DeepAgents + Polars + DuckDB | AI Agent engine, data compute, asset management, model gateway |
+| **Backend** | Python FastAPI + OpenAI Agents SDK + shared agent context loader + legacy DeepAgents compatibility + Polars + DuckDB | AI agent runtime, data compute, asset management, model gateway |
 
 ### Packaging & Distribution
 
 - **Python backend** → PyInstaller bundles into a single executable
 - **Full application** → Tauri Bundler outputs `.app` / `.dmg` (macOS), `.msi` / `.exe` (Windows), `.AppImage` / `.deb` (Linux)
+
+---
+
+## Agent Runtime Framework
+
+### What runs in production today
+
+- **Primary runtime**: `AgentRuntimeService` now builds agents through `OpenAIAgentsEngine` by default.
+- **Shared build context**: `agent_context_loader.py` resolves `agent_spec.yaml`, active model, enabled memories, enabled skills, mounted asset bundles, and the writable `output/` workspace.
+- **Session-aware execution**: each agent persists OpenAI SDK sessions in `output/.openai_sessions.sqlite`, while conversation history is written to `output/.chathistory/`.
+- **Compatibility path**: `DeepAgentsEngine` still exists for staged cleanup, test migration, and compatibility work, but it is no longer the default runtime path.
+
+### How config reload works
+
+- Runtime state stores a `config_fingerprint` for every loaded agent.
+- Before reusing a loaded runtime, LocalBrisk recomputes a fingerprint from `agent_spec.yaml`, `models/`, `memories/`, `skills/`, `prompts/`, and BusinessUnit `asset_bundles/` metadata.
+- If the fingerprint changes and the agent is **READY**, the runtime is rebuilt automatically on the next request.
+- If the agent is **RUNNING**, the current execution is preserved and the new configuration takes effect on the following request.
+
+### Handoffs, tools, and streaming
+
+- Built-in tools are mounted against the agent workspace backend.
+- Built-in subagents are adapted into **OpenAI Agents handoffs** through `handoff_registry.py`.
+- Streaming responses are normalized into the `StreamMessage` protocol so the frontend can keep rendering `THOUGHT`, `TASK_LIST`, `ARTIFACT`, `STATUS`, `ERROR`, and `DONE` consistently.
+
+### Related docs
+
+- `backend/architecture.md` — backend architecture and runtime boundaries
+- `docs/agent_engine_design.md` — agent framework design and build flow
+- `docs/API.md` — current backend API overview, including runtime endpoints
+- `docs/deepagents_sdk_guide.md` — legacy DeepAgents compatibility notes and migration mapping
+- `docs/agent_spec_example.yaml` — up-to-date agent spec example
 
 ---
 
@@ -178,10 +210,10 @@ BusinessUnit
 │   ├── skills/            # Skill directory
 │   ├── models/            # Model configs (.yaml) — local or API endpoint
 │   ├── mcps/              # MCP tool configs — Python function / MCP Server / Remote API
-│   └── output/            # Work records & conversation history
-│       ├── .conversation_history/
-│       ├── .checkpoints/
-│       └── {session}/
+│   └── output/            # Work records, sessions, tasks, and conversation history
+│       ├── .chathistory/
+│       ├── .openai_sessions.sqlite
+│       └── .task/
 └── AssetBundle (local | external)
     ├── tables/            # Table mappings (Parquet / CSV / JSON / Delta / Remote DB)
     ├── volumes/           # Document storage (local / S3)
@@ -423,7 +455,7 @@ LocalBrisk/
 │   │   └── services/           # Business service layer + DB connectors
 │   ├── agent_engine/           # AI Agent Engine
 │   │   ├── core/               # Stream protocol (StreamMessage), config models
-│   │   ├── engine/             # DeepAgentsEngine (LangGraph)
+│   │   ├── engine/             # OpenAIAgentsEngine + shared loaders + legacy DeepAgents path
 │   │   ├── services/           # AgentRuntimeService (lifecycle management)
 │   │   ├── llm/                # LLMClientFactory + Provider registry
 │   │   └── tools/              # Runtime toolset
@@ -443,7 +475,7 @@ LocalBrisk/
 
 - Each Agent runs inside an **isolated local sandbox** — dedicated Python venv, file system backend (`CompositeBackend`), and tool permission boundaries
 - Code execution (`LocalShellBackend`) is confined to the Agent's `output/` directory; skills, memories, and asset volumes are mounted as **read-only virtual paths**
-- All intermediate results, conversation history, and checkpoints persist locally — nothing is sent to any cloud service
+- All intermediate results, conversation history, task files, and persisted runtime sessions stay local — nothing is sent to any cloud service
 - Sandbox environment variables and PATH are fully isolated per Agent
 
 ### Federated Local + Remote Analysis

@@ -2,16 +2,10 @@ AGENT_DEFAULT_PROMPT = """
 # Current Working Directory
 The current filesystem backend is running at: `{{cwd}}`
 
-## Filesystem & Paths
-**IMPORTANT - Path Handling:**
-- All file paths must be absolute paths (e.g., `{{cwd}}/file.txt`)
-- Use the working directory to construct absolute paths
-- Example: To create a file in the working directory, use `{{cwd}}/src/Main.java`
-
 # Core Workflow (must be strictly followed)
 1. Task Parsing & Tracking
    - The first step must identify the user's task type: information-only (answer only) / execution (requires code delivery) / composite (research first, then code)
-   - For composite tasks, you must use the `write_todos` tool to break down steps. After executing each step, **you must first execute, then reflect** — reflection must not be skipped
+   - For composite tasks, you must use the task board tools (`task_create`, `task_update`, `task_list`, `claim_task`) to break down and track steps. After executing each step, **you must first execute, then reflect** — reflection must not be skipped
 2. Final Result Delivery
    - Final results must be output to the `./output/` directory
 

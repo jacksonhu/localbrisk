@@ -1,120 +1,88 @@
-"""
-Virtual Path Resolution Utility
+"""Helpers for resolving virtual workspace paths into real filesystem paths."""
 
-Converts virtual paths managed by CompositeBackend to real OS file paths,
-for use by custom tools (e.g., OfficeReaderTool).
-
-CompositeBackend routing mechanism:
-  virtual path → _get_backend_and_key() → (backend, stripped_key)
-  stripped_key → backend._resolve_path() → real OS path
-
-Example:
-  virtual path: /asset_bundles_myasset_volumes_localvolume/汇总.xlsx
-  匹配路由: /asset_bundles_myasset_volumes_localvolume/
-  stripped_key: /汇总.xlsx
-  backend.root_dir: /Users/xxx/Downloads/analysis
-  真实路径: /Users/xxx/Downloads/analysis/汇总.xlsx
-"""
+from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_virtual_path(composite_backend, virtual_path: str) -> str:
-    """将 CompositeBackend 的virtual pathParse为真实的文件系统路径.
 
-    利用 CompositeBackend._get_backend_and_key() 做路由匹配, 
-    再通过 FilesystemBackend._resolve_path() 得到真实 OS 路径.
+def resolve_virtual_path(backend: object, virtual_path: str) -> str:
+    """Resolve one virtual path using the first supported backend interface."""
+    if backend is None:
+        raise ValueError("backend is required")
 
-    Args:
-        composite_backend: CompositeBackend (或 FilesystemBackend / LocalShellBackend)实例
-        virtual_path: virtual path, 如 '/asset_bundles_myasset_volumes_localvolume/汇总.xlsx'
-
-    Returns:
-        真实的操作系统路径 string
-
-    Raises:
-        ValueError: 路径Iterate攻击 (.. 等)被拒绝
-        FileNotFoundError: Parse后的文件 does not exist
-    """
-    from deepagents.backends.filesystem import FilesystemBackend
-    from deepagents.backends.composite import CompositeBackend as _CompositeBackend
-
-    # 如果 backend 本身就是 FilesystemBackend (非组合模式), 直接Parse
-    if isinstance(composite_backend, FilesystemBackend) and not isinstance(composite_backend, _CompositeBackend):
-        resolved = composite_backend._resolve_path(virtual_path)
+    direct_resolver = getattr(backend, "resolve_virtual_path", None)
+    if callable(direct_resolver):
+        resolved = direct_resolver(virtual_path)
         return str(resolved)
 
-    # CompositeBackend: 先路由匹配, 再Parse
-    if isinstance(composite_backend, _CompositeBackend):
-        backend, stripped_key = composite_backend._get_backend_and_key(virtual_path)
+    try:
+        from deepagents.backends.composite import CompositeBackend as _CompositeBackend
+        from deepagents.backends.filesystem import FilesystemBackend
+    except ImportError:
+        _CompositeBackend = None
+        FilesystemBackend = None
 
-        if isinstance(backend, FilesystemBackend):
-            resolved = backend._resolve_path(stripped_key)
+    if FilesystemBackend is not None and isinstance(backend, FilesystemBackend):
+        resolved = backend._resolve_path(virtual_path)
+        return str(resolved)
+
+    if _CompositeBackend is not None and isinstance(backend, _CompositeBackend):
+        selected_backend, stripped_key = backend._get_backend_and_key(virtual_path)
+        if FilesystemBackend is not None and isinstance(selected_backend, FilesystemBackend):
+            resolved = selected_backend._resolve_path(stripped_key)
             return str(resolved)
-
-        # Other类型的 backend (如远程存储), 无法Parse为本地路径
         logger.warning(
-            f"Backend 类型 {type(backend).__name__} 不支持本地路径Parse, "
-            f"virtual_path={virtual_path}"
+            "Backend route %s does not expose a local filesystem path for %s",
+            type(selected_backend).__name__,
+            virtual_path,
         )
         return virtual_path
 
-    # 未知 backend 类型, 返回原路径
-    logger.warning(f"未知的 backend 类型: {type(composite_backend).__name__}")
+    logger.warning("Backend type %s does not support virtual path resolution", type(backend).__name__)
     return virtual_path
 
 
-def resolve_virtual_path_safe(composite_backend, virtual_path: str) -> Optional[str]:
-    """安全版本的virtual pathParse, 出错时返回 None 而非抛异常.
 
-    Args:
-        composite_backend: CompositeBackend 实例
-        virtual_path: virtual path
-
-    Returns:
-        真实的文件系统路径, 或 None (Parsefailed时)
-    """
+def resolve_virtual_path_safe(backend: object, virtual_path: str) -> Optional[str]:
+    """Resolve one virtual path and return ``None`` instead of raising on failure."""
     try:
-        return resolve_virtual_path(composite_backend, virtual_path)
-    except Exception as e:
-        logger.error(f"virtual pathParsefailed: {virtual_path}, error={e}")
+        return resolve_virtual_path(backend, virtual_path)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.error("Failed to resolve virtual path %s: %s", virtual_path, exc)
         return None
 
 
-def list_backend_routes(composite_backend) -> dict[str, str]:
-    """列出 CompositeBackend 的所有路由及其真实根directory.
 
-    用于调试和日志记录.
+def list_backend_routes(backend: object) -> dict[str, str]:
+    """Return the currently visible backend routes for debugging."""
+    list_mounts = getattr(backend, "list_mounts", None)
+    if callable(list_mounts):
+        result = list_mounts()
+        return result if isinstance(result, dict) else {}
 
-    Args:
-        composite_backend: CompositeBackend 实例
+    try:
+        from deepagents.backends.composite import CompositeBackend as _CompositeBackend
+        from deepagents.backends.filesystem import FilesystemBackend
+    except ImportError:
+        _CompositeBackend = None
+        FilesystemBackend = None
 
-    Returns:
-        {虚拟前缀: 真实根directory} 的字典
-    """
-    from deepagents.backends.filesystem import FilesystemBackend
-    from deepagents.backends.composite import CompositeBackend as _CompositeBackend
-
-    result = {}
-
-    if not isinstance(composite_backend, _CompositeBackend):
-        if isinstance(composite_backend, FilesystemBackend):
-            result["/"] = str(composite_backend.cwd)
+    result: dict[str, str] = {}
+    if FilesystemBackend is not None and isinstance(backend, FilesystemBackend):
+        result["/"] = str(backend.cwd)
         return result
 
-    for prefix, backend in composite_backend.sorted_routes:
-        if isinstance(backend, FilesystemBackend):
-            result[prefix] = str(backend.cwd)
-        else:
-            result[prefix] = f"<{type(backend).__name__}>"
-
-    # default backend
-    default = composite_backend.default
-    if isinstance(default, FilesystemBackend):
-        result["(default)"] = str(default.cwd)
-
+    if _CompositeBackend is not None and isinstance(backend, _CompositeBackend):
+        for prefix, routed_backend in backend.sorted_routes:
+            if FilesystemBackend is not None and isinstance(routed_backend, FilesystemBackend):
+                result[prefix.rstrip("/") or "/"] = str(routed_backend.cwd)
+            else:
+                result[prefix.rstrip("/") or "/"] = f"<{type(routed_backend).__name__}>"
+        default_backend = backend.default
+        if FilesystemBackend is not None and isinstance(default_backend, FilesystemBackend):
+            result["/"] = str(default_backend.cwd)
     return result

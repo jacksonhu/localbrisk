@@ -1,19 +1,13 @@
-"""
-Agent Execution Engine Module
+"""Agent execution engine exports.
 
-Smart agent engine based on LangChain DeepAgents SDK, supports:
-- Loading Agent config from agent_spec.yaml
-- Loading skills, prompts, models directory configs
-- Multiple system prompt concatenation
-- FilesystemBackend filesystem backend
+Primary runtime:
+- ``openai_agents_engine``: OpenAI Agents SDK runtime assembly and session-aware wrapper.
 
-Main modules:
-- deepagents_engine: DeepAgents SDK 集成的核心引擎
-- agent_loader: Agent 配置Load和Parse
+Supporting modules:
+- ``agent_loader``: filesystem-backed agent config inspection helpers.
+- ``agent_context_loader``: normalized runtime definition loader shared by engines.
 
-依赖Notes:
-- agent_loader: 仅需要 pyyaml, 可独立使用
-- deepagents_engine: 需要 langchain-core, langchain-openai, deepagents
+Legacy modules remain available only for staged cleanup and test migration.
 """
 
 # Agent configuration loader (无 langchain 依赖)
@@ -27,16 +21,24 @@ from .agent_loader import (
     load_agent_config,
 )
 
-# DeepAgents 引擎 (有依赖, 延迟Import)
+# DeepAgents runtime (legacy path)
 from .deepagents_engine import (
     DeepAgentsEngine,
     AgentBuildContext,
-    get_deepagents_engine,
     check_dependencies,
+    get_deepagents_engine,
+)
+
+# OpenAI Agents runtime (new path)
+from .openai_agents_engine import (
+    OpenAIAgentRuntime,
+    OpenAIAgentsEngine,
+    check_openai_agents_dependencies,
+    get_openai_agents_engine,
 )
 
 __all__ = [
-    # ConfigLoad器 (无依赖)
+    # Config loader (no runtime dependency)
     "AgentConfig",
     "AgentConfigLoader",
     "ModelInfo",
@@ -44,9 +46,15 @@ __all__ = [
     "SkillInfo",
     "get_agent_config_loader",
     "load_agent_config",
-    # DeepAgents 引擎
-    "DeepAgentsEngine",
+    # Shared context
     "AgentBuildContext",
+    # DeepAgents runtime
+    "DeepAgentsEngine",
     "get_deepagents_engine",
     "check_dependencies",
+    # OpenAI Agents runtime
+    "OpenAIAgentRuntime",
+    "OpenAIAgentsEngine",
+    "get_openai_agents_engine",
+    "check_openai_agents_dependencies",
 ]

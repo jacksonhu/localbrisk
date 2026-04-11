@@ -10,6 +10,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 
+import yaml
+
 
 class TestAgentRuntimeServiceImport:
     """测试 AgentRuntimeService 导入"""
@@ -126,13 +128,39 @@ class TestMessageTranslator:
         args = {
             "todos": json.dumps([
                 {"id": "1", "content": "任务A", "status": "running"},
+                {"id": "2", "content": "任务B", "status": "in_progress"},
             ])
         }
         tasks = MessageTranslator.parse_todo_args(args)
 
-        assert len(tasks) == 1
+        assert len(tasks) == 2
         assert tasks[0].title == "任务A"
         assert tasks[0].status.value == "running"
+        assert tasks[1].status.value == "running"
+
+    def test_sync_tasks_from_internal_task_tools(self):
+        """测试新 task board 工具的任务同步"""
+        from agent_engine.services import MessageTranslator
+
+        tasks = MessageTranslator.sync_tasks_from_internal_tool(
+            "task_create",
+            tool_output='{"id": 1, "subject": "修复流式问题", "status": "pending"}',
+        )
+        tasks = MessageTranslator.sync_tasks_from_internal_tool(
+            "claim_task",
+            tool_args={"task_id": 1, "owner": "lead"},
+            existing_tasks=tasks,
+        )
+        tasks = MessageTranslator.sync_tasks_from_internal_tool(
+            "task_update",
+            tool_args={"task_id": 1, "status": "completed"},
+            existing_tasks=tasks,
+        )
+
+        assert tasks is not None
+        assert len(tasks) == 1
+        assert tasks[0].title == "修复流式问题"
+        assert tasks[0].status.value == "completed"
 
     def test_parse_todo_args_empty(self):
         """测试空任务列表"""
@@ -158,12 +186,27 @@ class TestAgentRuntimeServiceSingleton:
     def test_service_initialization(self):
         """测试服务初始化"""
         from agent_engine.services import AgentRuntimeService
+        from agent_engine.services.runtime_event_adapter import RuntimeEventAdapter
         
         service = AgentRuntimeService()
         
         assert service is not None
         assert service._agents == {}
         assert service._engine is None
+        assert isinstance(service._runtime_event_adapter, RuntimeEventAdapter)
+
+    def test_ensure_runtime_event_adapter_rebuilds_missing_field(self):
+        """测试旧实例缺少 runtime adapter 字段时可自动重建"""
+        from agent_engine.services import AgentRuntimeService
+        from agent_engine.services.runtime_event_adapter import RuntimeEventAdapter
+
+        service = AgentRuntimeService()
+        delattr(service, "_runtime_event_adapter")
+
+        adapter = service._ensure_runtime_event_adapter()
+
+        assert isinstance(adapter, RuntimeEventAdapter)
+        assert service._runtime_event_adapter is adapter
 
 
 class TestAgentKeyGeneration:
@@ -384,6 +427,28 @@ class TestAgentRuntimeServiceCancel:
 
 class TestAgentRuntimeServiceClearContext:
     """测试 Agent 上下文清理功能"""
+
+    @pytest.mark.asyncio
+    async def test_clear_agent_context_uses_runtime_clear_session(self, temp_agent_dir):
+        from agent_engine.services import AgentRuntimeService
+
+        service = AgentRuntimeService()
+        mock_agent = MagicMock()
+        mock_agent.is_openai_runtime = True
+        mock_agent.clear_session = AsyncMock(return_value=True)
+
+        mock_engine = MagicMock()
+        mock_engine.build_agent = AsyncMock(return_value=mock_agent)
+
+        with patch.object(service, '_ensure_engine', return_value=mock_engine):
+            await service.load_agent("test_unit", "test_agent", temp_agent_dir["agent_path"])
+            service._snapshots["test_agent"] = MagicMock()
+
+            ok = await service.clear_agent_context("test_unit", "test_agent")
+
+            assert ok is True
+            mock_agent.clear_session.assert_awaited_once_with("test_agent")
+            assert "test_agent" not in service._snapshots
 
     @pytest.mark.asyncio
     async def test_clear_agent_context_calls_delete_thread(self, temp_agent_dir):
