@@ -30,6 +30,7 @@ class AgentRuntimeState:
     status: AgentStatus = AgentStatus.IDLE
     agent_instance: Any = None
     current_execution_id: Optional[str] = None
+    config_fingerprint: Optional[str] = None
     loaded_at: Optional[str] = None
     last_execution_at: Optional[str] = None
     execution_count: int = 0

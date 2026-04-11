@@ -8,8 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from .deepagents_backend import create_backend as create_deepagents_backend
-from .deepagents_context import (
+from .agent_context_loader import (
     AgentBuildContext,
     AssetBundleBackendConfig,
     SkillConfig,
@@ -21,6 +20,7 @@ from .deepagents_context import (
     load_skills,
     load_volumes_config,
 )
+from .deepagents_backend import create_backend as create_deepagents_backend
 from .deepagents_resources import AgentResourceRegistry
 from .subagents import create_builtin_subagents
 
@@ -134,6 +134,46 @@ def log_dependency_status() -> None:
 log_dependency_status()
 
 
+def _build_asset_bundle_prompt(asset_bundles: List[AssetBundleBackendConfig]) -> str:
+    """Build safe asset bundle instructions for the agent system prompt."""
+    if not asset_bundles:
+        return "- Asset bundles: none."
+
+    mounted_entries: List[str] = []
+    for bundle in asset_bundles:
+        bundle_mount = f"{bundle.mount_path.rstrip('/')}/"
+        if bundle.bundle_type == "external":
+            mounted_entries.append(
+                f"- Bundle `{bundle.bundle_name}` tables: `{bundle_mount}`"
+            )
+            continue
+
+        if bundle.bundle_type != "local":
+            continue
+
+        for volume in bundle.volumes:
+            volume_name = str(volume.get("name") or "").strip()
+            volume_type = str(volume.get("volume_type") or "local").strip()
+            if volume_type != "local" or not volume_name:
+                continue
+            mounted_entries.append(
+                f"- Bundle `{bundle.bundle_name}` volume `{volume_name}`: `{bundle.mount_path}_{volume_name}/`"
+            )
+
+    if not mounted_entries:
+        mounted_entries.append("- No asset bundle mounts are currently available.")
+
+    logger.info("Prepared %s asset bundle mount instruction(s)", len(mounted_entries))
+    instructions = [
+        "- Asset bundles are exposed through virtual mount paths only.",
+        "- Never access `../../asset_bundles`, never use `..`, and never guess real OS paths.",
+        "- Use only the mounted paths below when reading bundle tables or files:",
+        *mounted_entries,
+        "- User queries and bundle names may be in Chinese, English, or mixed language. Automatically identify the relevant bundle(s) and choose the best match for the user's request.",
+    ]
+    return "\n".join(instructions)
+
+
 class DeepAgentsEngine:
     """Build DeepAgents runtime instances from agent directories."""
 
@@ -195,7 +235,7 @@ class DeepAgentsEngine:
 
         from agent_engine.tools import get_builtin_tools
 
-        task_root = str(Path(context.agent_path) / ".task")
+        task_root = str(Path(context.output_path) / ".task")
         Path(task_root).mkdir(parents=True, exist_ok=True)
         builtin_tools = get_builtin_tools(backend=backend, task_root=task_root)
         all_tools = builtin_tools + (tools if tools else [])
@@ -222,11 +262,12 @@ class DeepAgentsEngine:
                 len(context.memories),
                 len(subagents),
             )
+            asset_bundle_prompt = _build_asset_bundle_prompt(context.asset_bundles)
             system_prompt=f"""
             - Your Role:{context.agent_name}
             - Working Directory: {context.agent_path}/
             - Date: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-            - Available asset bundles: `{context.agent_path}/../../asset_bundles/`. Each bundle is defined in `bundle.yaml` and may include `tables` and `volumes` (files). User queries and bundle names may be in Chinese, English, or mixed language. Automatically identify the relevant bundle(s) and choose the best match for the user's request.
+            {asset_bundle_prompt}
             - You must think and act in the Thought, Action, Observation format.
             """
             create_kwargs = {

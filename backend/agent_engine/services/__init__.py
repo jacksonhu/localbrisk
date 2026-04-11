@@ -11,11 +11,16 @@ from .agent_runtime_service import (
     MessageTranslator,
     get_agent_runtime_service,
 )
+from .runtime_event_adapter import RuntimeEventAdapter
+from .workspace_service import WorkspaceMount, WorkspaceService
 
 __all__ = [
     "AgentRuntimeService",
     "AgentRuntimeState",
     "AgentStatus",
     "MessageTranslator",
+    "RuntimeEventAdapter",
+    "WorkspaceMount",
+    "WorkspaceService",
     "get_agent_runtime_service",
 ]

@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from ..core.exceptions import serialize_exception
+from ..engine.agent_context_loader import compute_agent_context_fingerprint
 from ..core.stream_protocol import MessageType, SnapshotPayload, StreamMessage, StreamMessageBuilder, TaskStatus
 from ..monitoring import emit_runtime_event, get_logging_context, scoped_logging_context
 from .execution_stream import AgentExecutionStreamer
 from .history_store import ConversationHistoryStore
 from .message_translator import MessageTranslator
+from .runtime_event_adapter import RuntimeEventAdapter
 from .runtime_state import AgentRuntimeState, AgentStatus, ExecutionSnapshot
 
 logger = logging.getLogger(__name__)
@@ -33,17 +35,67 @@ class AgentRuntimeService:
         self._snapshots: Dict[str, ExecutionSnapshot] = {}
         self._translator = MessageTranslator()
         self._execution_streamer = AgentExecutionStreamer(self._translator)
+        self._runtime_event_adapter = RuntimeEventAdapter(self._translator)
         self._history_store = ConversationHistoryStore(self._get_agent_path)
 
     def _get_agent_key(self, business_unit_id: str, agent_name: str) -> str:
         return f"{business_unit_id}/{agent_name}"
 
+    @staticmethod
+    def _resolve_agent_load_path(
+        business_unit_id: str,
+        agent_name: str,
+        agent_path: Optional[str] = None,
+    ) -> str:
+        if agent_path:
+            return agent_path
+
+        from app.core.config import settings
+
+        return str(settings.CATALOGS_DIR / business_unit_id / "agents" / agent_name)
+
+    def _compute_agent_config_fingerprint(self, agent_path: str, business_unit_id: str) -> str:
+        """Compute the current runtime config fingerprint for one agent directory."""
+        return compute_agent_context_fingerprint(agent_path, business_unit_id)
+
+    async def _close_agent_resources(self, key: str, agent_instance: Any) -> None:
+        """Release build-time resources held by one loaded agent instance."""
+        if agent_instance is None:
+            return
+
+        engine = self._engine or self._ensure_engine()
+        close_resources = getattr(engine, "close_agent_resources", None)
+        if not callable(close_resources):
+            return
+
+        try:
+            result = close_resources(agent_instance)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as exc:
+            logger.warning("Failed to close agent resources for %s: %s", key, exc)
+            emit_runtime_event(
+                "agent.unload.resource_cleanup_failed",
+                level=logging.WARNING,
+                error_type=type(exc).__name__,
+                message=str(exc),
+            )
+
     def _ensure_engine(self):
         if self._engine is None:
-            from ..engine.deepagents_engine import get_deepagents_engine
+            from ..engine.openai_agents_engine import get_openai_agents_engine
 
-            self._engine = get_deepagents_engine()
+            self._engine = get_openai_agents_engine()
         return self._engine
+
+    def _ensure_runtime_event_adapter(self) -> RuntimeEventAdapter:
+        """Return a runtime event adapter, rebuilding it when old singleton instances miss the field."""
+        adapter = getattr(self, "_runtime_event_adapter", None)
+        if adapter is None:
+            logger.info("Rebuilding missing RuntimeEventAdapter on AgentRuntimeService instance")
+            adapter = RuntimeEventAdapter(getattr(self, "_translator", None))
+            self._runtime_event_adapter = adapter
+        return adapter
 
     def _resolve_thread_id(self, agent_name: str, context: Optional[Dict[str, Any]]) -> str:
         if isinstance(context, dict):
@@ -61,6 +113,28 @@ class AgentRuntimeService:
             return None
         text = str(raw).strip()
         return text or None
+
+    @staticmethod
+    def _uses_openai_runtime(agent: Any) -> bool:
+        return getattr(agent, "is_openai_runtime", False) is True
+
+    @staticmethod
+    def _resolve_thread_id_from_config(config: Optional[Dict[str, Any]]) -> Optional[str]:
+        if not isinstance(config, dict):
+            return None
+        configurable = config.get("configurable")
+        if not isinstance(configurable, dict):
+            return None
+        raw = configurable.get("thread_id")
+        if raw is None:
+            return None
+        text = str(raw).strip()
+        return text or None
+
+    def _build_runtime_input(self, agent: Any, user_input: str) -> Any:
+        if self._uses_openai_runtime(agent):
+            return user_input
+        return {"messages": [{"role": "user", "content": user_input}]}
 
     def _build_observability_context(
         self,
@@ -141,51 +215,71 @@ class AgentRuntimeService:
     ) -> AgentRuntimeState:
         """Load an agent instance into runtime."""
         key = self._get_agent_key(business_unit_id, agent_name)
+        resolved_agent_path = self._resolve_agent_load_path(business_unit_id, agent_name, agent_path)
+        current_fingerprint = self._compute_agent_config_fingerprint(resolved_agent_path, business_unit_id)
         operation_context = self._build_observability_context(
             business_unit_id=business_unit_id,
             agent_name=agent_name,
             component="agent_runtime.load",
         )
 
+        previous_agent_instance: Any = None
         with scoped_logging_context(**operation_context):
-            emit_runtime_event("agent.load.started", agent_path=agent_path)
+            emit_runtime_event("agent.load.started", agent_path=resolved_agent_path)
             async with self._lock:
-                if key in self._agents:
-                    state = self._agents[key]
-                    if state.status in (AgentStatus.READY, AgentStatus.RUNNING):
-                        logger.info("Agent already loaded: %s", key)
-                        emit_runtime_event("agent.load.reused", status=state.status.value)
-                        return state
+                existing_state = self._agents.get(key)
+                previous_execution_count = existing_state.execution_count if existing_state else 0
+                previous_error_count = existing_state.error_count if existing_state else 0
 
-                if not agent_path:
-                    from app.core.config import settings
+                if existing_state and existing_state.status in (AgentStatus.READY, AgentStatus.RUNNING):
+                    if existing_state.config_fingerprint == current_fingerprint:
+                        logger.info("Agent already loaded with unchanged config: %s", key)
+                        emit_runtime_event("agent.load.reused", status=existing_state.status.value)
+                        return existing_state
+                    if existing_state.status == AgentStatus.RUNNING:
+                        logger.info("Agent config changed but runtime is busy, keeping current instance: %s", key)
+                        emit_runtime_event(
+                            "agent.load.reused",
+                            status=existing_state.status.value,
+                            config_changed=True,
+                        )
+                        return existing_state
 
-                    agent_path = str(settings.CATALOGS_DIR / business_unit_id / "agents" / agent_name)
+                    logger.info("Detected config change, rebuilding agent runtime: %s", key)
+                    emit_runtime_event("agent.load.reloading", previous_status=existing_state.status.value)
+                    previous_agent_instance = existing_state.agent_instance
 
                 state = AgentRuntimeState(
                     business_unit_id=business_unit_id,
                     agent_name=agent_name,
-                    agent_path=agent_path,
+                    agent_path=resolved_agent_path,
                     status=AgentStatus.LOADING,
+                    execution_count=previous_execution_count,
+                    error_count=previous_error_count,
+                    config_fingerprint=current_fingerprint,
                 )
                 self._agents[key] = state
 
             try:
+                if previous_agent_instance is not None:
+                    await self._close_agent_resources(key, previous_agent_instance)
+
                 engine = self._ensure_engine()
-                logger.info("Loading agent %s from %s", key, agent_path)
+                logger.info("Loading agent %s from %s", key, resolved_agent_path)
                 agent = await engine.build_agent(
-                    agent_path=agent_path,
+                    agent_path=resolved_agent_path,
                     business_unit_id=business_unit_id,
                     debug=False,
                 )
 
-                task_dir = Path(agent_path) / "output" / ".task"
+                task_dir = Path(resolved_agent_path) / "output" / ".task"
                 task_dir.mkdir(parents=True, exist_ok=True)
 
                 async with self._lock:
                     state.agent_instance = agent
                     state.status = AgentStatus.READY
                     state.loaded_at = datetime.now().isoformat()
+                    state.config_fingerprint = current_fingerprint
 
                 logger.info("Agent loaded successfully: %s", key)
                 emit_runtime_event("agent.load.completed", status=state.status.value)
@@ -297,7 +391,7 @@ class AgentRuntimeService:
                 agent = state.agent_instance
                 yield record_stream_message(builder.status("Agent is ready, starting execution...", icon="play"))
 
-                input_data = {"messages": [{"role": "user", "content": user_input}]}
+                input_data = self._build_runtime_input(agent, user_input)
                 config = self._build_runnable_config(thread_id, agent_name)
                 async for message in self._stream_execution(
                     agent,
@@ -400,7 +494,7 @@ class AgentRuntimeService:
     async def _stream_execution(
         self,
         agent: Any,
-        input_data: Dict[str, Any],
+        input_data: Any,
         config: Dict[str, Any],
         execution_id: str,
         agent_name: str,
@@ -409,8 +503,35 @@ class AgentRuntimeService:
         snapshot: ExecutionSnapshot,
     ) -> AsyncIterator[StreamMessage]:
         del execution_id, agent_name
-        async for message in self._execution_streamer.stream_execution(agent, input_data, config, state.agent_name, state, builder, snapshot):
+        if self._uses_openai_runtime(agent):
+            session_id = self._resolve_thread_id_from_config(config)
+            runtime_event_adapter = self._ensure_runtime_event_adapter()
+            async for message in runtime_event_adapter.stream_runtime(
+                agent,
+                input_data,
+                builder,
+                snapshot,
+                session_id=session_id,
+            ):
+                yield message
+                if state.cancel_requested:
+                    break
+            if state.cancel_requested:
+                raise asyncio.CancelledError()
+            return
+
+        async for message in self._execution_streamer.stream_execution(
+            agent,
+            input_data,
+            config,
+            state.agent_name,
+            state,
+            builder,
+            snapshot,
+        ):
             yield message
+        if state.cancel_requested:
+            raise asyncio.CancelledError()
 
     async def execute_agent(
         self,
@@ -450,7 +571,7 @@ class AgentRuntimeService:
                 state = await self._ensure_ready_agent(business_unit_id, agent_name)
                 await self._mark_agent_running(state, execution_id)
 
-                input_data = {"messages": [{"role": "user", "content": user_input}]}
+                input_data = self._build_runtime_input(state.agent_instance, user_input)
                 config = self._build_runnable_config(thread_id, agent_name)
                 yield builder.thought("Processing request...", mode="replace", phase="analyzing", icon="brain")
                 output = await self._invoke_non_stream(state.agent_instance, input_data, config)
@@ -509,7 +630,11 @@ class AgentRuntimeService:
                     total_time_ms=int((time.time() - start_time) * 1000),
                 )
 
-    async def _invoke_non_stream(self, agent: Any, input_data: Dict[str, Any], config: Dict[str, Any]) -> str:
+    async def _invoke_non_stream(self, agent: Any, input_data: Any, config: Dict[str, Any]) -> str:
+        if self._uses_openai_runtime(agent):
+            session_id = self._resolve_thread_id_from_config(config)
+            run_result = await agent.run(input_data, session_id=session_id, run_config=None)
+            return self._ensure_runtime_event_adapter().extract_final_output(run_result)
         return await self._execution_streamer.invoke_non_stream(agent, input_data, config)
 
     def _emit_final_output(
@@ -592,24 +717,36 @@ class AgentRuntimeService:
         with scoped_logging_context(**operation_context):
             context_cleared = True
             if state and state.agent_instance:
-                checkpointer = getattr(state.agent_instance, "checkpointer", None)
-                if not checkpointer:
-                    logger.warning("Agent checkpointer missing, skipping context cleanup: %s", key)
-                    context_cleared = False
-                else:
-                    delete_thread = getattr(checkpointer, "delete_thread", None)
-                    async_delete_thread = getattr(checkpointer, "adelete_thread", None)
-                    if callable(delete_thread):
-                        result = delete_thread(resolved_thread_id)
+                runtime = state.agent_instance
+                if self._uses_openai_runtime(runtime):
+                    clear_session = getattr(runtime, "clear_session", None)
+                    if callable(clear_session):
+                        result = clear_session(resolved_thread_id)
                         if asyncio.iscoroutine(result):
-                            await result
-                    elif callable(async_delete_thread):
-                        result = async_delete_thread(resolved_thread_id)
-                        if asyncio.iscoroutine(result):
-                            await result
+                            result = await result
+                        context_cleared = bool(result)
                     else:
-                        logger.warning("Checkpointer does not support thread deletion: %s", key)
+                        logger.warning("OpenAI runtime does not support session cleanup: %s", key)
                         context_cleared = False
+                else:
+                    checkpointer = getattr(runtime, "checkpointer", None)
+                    if not checkpointer:
+                        logger.warning("Agent checkpointer missing, skipping context cleanup: %s", key)
+                        context_cleared = False
+                    else:
+                        delete_thread = getattr(checkpointer, "delete_thread", None)
+                        async_delete_thread = getattr(checkpointer, "adelete_thread", None)
+                        if callable(delete_thread):
+                            result = delete_thread(resolved_thread_id)
+                            if asyncio.iscoroutine(result):
+                                await result
+                        elif callable(async_delete_thread):
+                            result = async_delete_thread(resolved_thread_id)
+                            if asyncio.iscoroutine(result):
+                                await result
+                        else:
+                            logger.warning("Checkpointer does not support thread deletion: %s", key)
+                            context_cleared = False
 
             self._snapshots.pop(resolved_thread_id, None)
 
@@ -652,21 +789,7 @@ class AgentRuntimeService:
 
                 agent_instance = state.agent_instance
                 if agent_instance is not None:
-                    engine = self._engine or self._ensure_engine()
-                    close_resources = getattr(engine, "close_agent_resources", None)
-                    if callable(close_resources):
-                        try:
-                            result = close_resources(agent_instance)
-                            if asyncio.iscoroutine(result):
-                                await result
-                        except Exception as exc:
-                            logger.warning("Failed to close agent resources for %s: %s", key, exc)
-                            emit_runtime_event(
-                                "agent.unload.resource_cleanup_failed",
-                                level=logging.WARNING,
-                                error_type=type(exc).__name__,
-                                message=str(exc),
-                            )
+                    await self._close_agent_resources(key, agent_instance)
 
                 state.agent_instance = None
                 state.status = AgentStatus.UNLOADED

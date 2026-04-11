@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class AgentExecutionStreamer:
     """Handle runtime execution streaming and final output extraction."""
 
-    INTERNAL_TOOL_NAMES = frozenset({"write_todos", "todo_write"})
+    INTERNAL_TOOL_NAMES = MessageTranslator.INTERNAL_TASK_TOOL_NAMES
 
     def __init__(self, translator: Optional[MessageTranslator] = None):
         self._translator = translator or MessageTranslator()
@@ -77,6 +78,11 @@ class AgentExecutionStreamer:
                     if isinstance(text, str):
                         parts.append(text)
             return "".join(parts)
+        if isinstance(content, dict):
+            text = content.get("text") or content.get("content")
+            if isinstance(text, str):
+                return text
+            return json.dumps(content, ensure_ascii=False)
         return str(content) if content is not None else ""
 
     def summarize_tool_content(self, content: Any, limit: int = 500) -> str:
@@ -226,14 +232,20 @@ class AgentExecutionStreamer:
                         if known_name in self.INTERNAL_TOOL_NAMES or call_name in self.INTERNAL_TOOL_NAMES:
                             if call_id:
                                 filtered_tool_ids.add(call_id)
-                            if isinstance(call_args, dict) and call_args:
-                                tasks = translator.parse_todo_args(call_args)
-                                if tasks:
-                                    snapshot.tasks = tasks
-                                    completed = sum(1 for task in tasks if task.status == TaskStatus.COMPLETED)
-                                    progress = completed / len(tasks) if tasks else 0
-                                    current_id = next((task.id for task in tasks if task.status == TaskStatus.RUNNING), None)
-                                    yield builder.task_list(tasks=tasks, current_task_id=current_id, progress=progress)
+                            internal_name = known_name or call_name
+                            tool_args = call_args if isinstance(call_args, dict) and call_args else None
+                            tasks = translator.sync_tasks_from_internal_tool(
+                                internal_name,
+                                tool_args=tool_args,
+                                existing_tasks=snapshot.tasks,
+                            )
+                            if tasks is not None:
+                                snapshot.tasks = tasks
+                                yield builder.task_list(
+                                    tasks=tasks,
+                                    current_task_id=translator.current_task_id(tasks),
+                                    progress=translator.progress_from_tasks(tasks),
+                                )
                             continue
 
                         if call_id and call_id in filtered_tool_ids:
@@ -255,10 +267,30 @@ class AgentExecutionStreamer:
 
                 if chunk_type == "tool":
                     tool_call_id = getattr(message_chunk, "tool_call_id", "")
-                    if tool_call_id in filtered_tool_ids or (tool_call_id and tool_call_id in completed_tool_ids):
-                        continue
                     tool_content = getattr(message_chunk, "content", "")
                     matched_name = tool_call_names.get(tool_call_id, "") or getattr(message_chunk, "name", "") or "unknown"
+                    tool_output = self.extract_text_from_content(tool_content)
+
+                    if matched_name in self.INTERNAL_TOOL_NAMES:
+                        if tool_call_id:
+                            filtered_tool_ids.add(tool_call_id)
+                            completed_tool_ids.add(tool_call_id)
+                        tasks = translator.sync_tasks_from_internal_tool(
+                            matched_name,
+                            tool_output=tool_output,
+                            existing_tasks=snapshot.tasks,
+                        )
+                        if tasks is not None:
+                            snapshot.tasks = tasks
+                            yield builder.task_list(
+                                tasks=tasks,
+                                current_task_id=translator.current_task_id(tasks),
+                                progress=translator.progress_from_tasks(tasks),
+                            )
+                        continue
+
+                    if tool_call_id in filtered_tool_ids or (tool_call_id and tool_call_id in completed_tool_ids):
+                        continue
                     result_summary = self.summarize_tool_content(tool_content)
                     yield builder.tool_call(
                         tool_name=matched_name,
@@ -299,14 +331,20 @@ class AgentExecutionStreamer:
                                 if known_name in self.INTERNAL_TOOL_NAMES or call_name in self.INTERNAL_TOOL_NAMES:
                                     if call_id:
                                         filtered_tool_ids.add(call_id)
-                                    if isinstance(call_args, dict) and call_args:
-                                        tasks = translator.parse_todo_args(call_args)
-                                        if tasks:
-                                            snapshot.tasks = tasks
-                                            completed = sum(1 for task in tasks if task.status == TaskStatus.COMPLETED)
-                                            progress = completed / len(tasks) if tasks else 0
-                                            current_id = next((task.id for task in tasks if task.status == TaskStatus.RUNNING), None)
-                                            yield builder.task_list(tasks=tasks, current_task_id=current_id, progress=progress)
+                                    internal_name = known_name or call_name
+                                    tool_args = call_args if isinstance(call_args, dict) and call_args else None
+                                    tasks = translator.sync_tasks_from_internal_tool(
+                                        internal_name,
+                                        tool_args=tool_args,
+                                        existing_tasks=snapshot.tasks,
+                                    )
+                                    if tasks is not None:
+                                        snapshot.tasks = tasks
+                                        yield builder.task_list(
+                                            tasks=tasks,
+                                            current_task_id=translator.current_task_id(tasks),
+                                            progress=translator.progress_from_tasks(tasks),
+                                        )
                                     continue
 
                                 if call_id and call_id in filtered_tool_ids:
@@ -329,12 +367,32 @@ class AgentExecutionStreamer:
                         if msg_type == "tool":
                             tool_call_id = getattr(message, "tool_call_id", None) if not isinstance(message, dict) else message.get("tool_call_id")
                             tool_call_id = tool_call_id or ""
-                            if tool_call_id and (tool_call_id in filtered_tool_ids or tool_call_id in completed_tool_ids):
-                                continue
                             tool_name = tool_call_names.get(tool_call_id, "") or (
                                 getattr(message, "name", None) if not isinstance(message, dict) else message.get("name")
                             ) or "unknown"
                             tool_content = getattr(message, "content", None) if not isinstance(message, dict) else message.get("content")
+                            tool_output = self.extract_text_from_content(tool_content)
+
+                            if tool_name in self.INTERNAL_TOOL_NAMES:
+                                if tool_call_id:
+                                    filtered_tool_ids.add(tool_call_id)
+                                    completed_tool_ids.add(tool_call_id)
+                                tasks = translator.sync_tasks_from_internal_tool(
+                                    tool_name,
+                                    tool_output=tool_output,
+                                    existing_tasks=snapshot.tasks,
+                                )
+                                if tasks is not None:
+                                    snapshot.tasks = tasks
+                                    yield builder.task_list(
+                                        tasks=tasks,
+                                        current_task_id=translator.current_task_id(tasks),
+                                        progress=translator.progress_from_tasks(tasks),
+                                    )
+                                continue
+
+                            if tool_call_id and (tool_call_id in filtered_tool_ids or tool_call_id in completed_tool_ids):
+                                continue
                             result_summary = self.summarize_tool_content(tool_content)
                             emit_audit_event(
                                 "tool.completed",

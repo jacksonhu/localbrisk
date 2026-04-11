@@ -8,13 +8,14 @@ Loads and parses config from Agent directories, supports:
 - Skill configs under skills/ directory
 """
 
-import os
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 
 import yaml
+
+from .agent_context_loader import ensure_output_dir, load_agent_spec, resolve_agent_path
 
 logger = logging.getLogger(__name__)
 
@@ -232,14 +233,11 @@ class AgentConfigLoader:
         Returns:
             AgentConfig: Complete Agent configuration
         """
-        agent_path = os.path.expanduser(agent_path)
-        path = Path(agent_path)
-        
-        if not path.exists():
-            raise ValueError(f"Agent directory does not exist: {agent_path}")
-        
+        path = resolve_agent_path(agent_path)
+        agent_path = str(path)
+
         logger.info(f"Loading Agent 配置: {agent_path}")
-        
+
         # 1. Load agent_spec.yaml
         spec = self._load_spec(path)
         
@@ -262,8 +260,7 @@ class AgentConfigLoader:
         skills = self._load_skills(path)
         
         # 6. 确定 output
-        output = str(path / "output")
-        os.makedirs(output, exist_ok=True)
+        output = ensure_output_dir(path)
         
         config = AgentConfig(
             name=name,
@@ -289,13 +286,8 @@ class AgentConfigLoader:
         return config
     
     def _load_spec(self, path: Path) -> Dict[str, Any]:
-        """Load  agent_spec.yaml"""
-        spec_path = path / "agent_spec.yaml"
-        if not spec_path.exists():
-            raise ValueError(f"agent_spec.yaml does not exist: {spec_path}")
-        
-        with open(spec_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f) or {}
+        """Load ``agent_spec.yaml`` via the shared runtime helper."""
+        return load_agent_spec(path)
     
     def _load_models(self, path: Path) -> Dict[str, ModelInfo]:
         """Load 所有model config"""
