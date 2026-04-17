@@ -65,18 +65,16 @@ def build_openai_handoffs(
     parent_model: Any,
     parent_model_settings: Any = None,
     parent_tools: List[Any],
-    parent_backend: Any,
     business_unit_path: Optional[str] = None,
     asset_bundles: Optional[Sequence[Any]] = None,
     registry: Any = None,
 ) -> OpenAIHandoffCollection:
-    """Build OpenAI SDK handoffs from the legacy built-in subagent registry."""
+    """Build OpenAI SDK handoffs from the built-in subagent registry."""
     check_openai_handoff_dependencies(raise_error=True)
 
     collection = build_builtin_subagents(
         parent_model=parent_model,
         parent_tools=parent_tools,
-        parent_backend=parent_backend,
         business_unit_path=business_unit_path,
         asset_bundles=asset_bundles,
         registry=registry,

@@ -1,51 +1,77 @@
-"""Centralized tool registry and workspace-aware tool injection helpers."""
+"""Centralized tool registry and simple runtime tool factories."""
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence
 
-from .local_file_keyword_search import LocalFileKeywordSearchTool, create_local_file_keyword_search_tool
-from .office_reader import OfficeReaderTool, create_office_reader_tool, get_available_formats
+from .assetbundle_link import AssetBundleLinkTool, create_assetbundle_link_tool
+from .file_operater import (
+    FileReadTool,
+    FileWriteTool,
+    create_file_read_tool,
+    create_file_write_tool,
+    get_available_formats,
+)
+from .file_search import FileSearchTool, create_file_search_tool
+from .shell import RunCommandTool, create_run_command_tool
 from .task_board import ProjectTaskBoard
 from .task_tools import create_task_tools
 
 
 class ToolRegistry:
-    """Create and configure built-in runtime tools."""
+    """Create the built-in tools used by the runtime."""
 
     @staticmethod
-    def build_builtin_tools(workspace_backend: Optional[Any] = None, task_root: Optional[str] = None) -> List[Any]:
-        """Build runtime tools and inject the shared workspace backend when present."""
-        tools: List[Any] = []
+    def build_builtin_tools(
+        agent_path: Optional[str] = None,
+        task_root: Optional[str] = None,
+        business_unit_path: Optional[str] = None,
+        asset_bundles: Optional[Sequence[Any]] = None,
+    ) -> List[object]:
+        """Build runtime tools bound to one agent directory."""
+        return [
+            create_file_read_tool(base_path=agent_path),
+            create_file_write_tool(base_path=agent_path),
+            create_run_command_tool(agent_path=agent_path),
+            create_file_search_tool(base_path=agent_path),
+            create_assetbundle_link_tool(
+                business_unit_path=business_unit_path,
+                asset_bundles=asset_bundles,
+            ),
+            *create_task_tools(task_root=task_root),
+        ]
 
-        office_tool = create_office_reader_tool()
-        if workspace_backend is not None:
-            office_tool._backend = workspace_backend
-        tools.append(office_tool)
-
-        local_file_search_tool = create_local_file_keyword_search_tool()
-        if workspace_backend is not None:
-            local_file_search_tool._backend = workspace_backend
-        tools.append(local_file_search_tool)
-
-        tools.extend(create_task_tools(task_root=task_root))
-        return tools
 
 
-
-def build_builtin_tools(workspace_backend: Optional[Any] = None, task_root: Optional[str] = None) -> List[Any]:
+def build_builtin_tools(
+    agent_path: Optional[str] = None,
+    task_root: Optional[str] = None,
+    business_unit_path: Optional[str] = None,
+    asset_bundles: Optional[Sequence[Any]] = None,
+) -> List[object]:
     """Build built-in tools using the default registry behavior."""
-    return ToolRegistry.build_builtin_tools(workspace_backend=workspace_backend, task_root=task_root)
+    return ToolRegistry.build_builtin_tools(
+        agent_path=agent_path,
+        task_root=task_root,
+        business_unit_path=business_unit_path,
+        asset_bundles=asset_bundles,
+    )
 
 
 __all__ = [
-    "OfficeReaderTool",
-    "LocalFileKeywordSearchTool",
+    "AssetBundleLinkTool",
+    "FileReadTool",
+    "FileWriteTool",
+    "FileSearchTool",
     "ProjectTaskBoard",
+    "RunCommandTool",
     "ToolRegistry",
     "build_builtin_tools",
-    "create_office_reader_tool",
-    "create_local_file_keyword_search_tool",
+    "create_assetbundle_link_tool",
+    "create_file_read_tool",
+    "create_file_write_tool",
+    "create_file_search_tool",
+    "create_run_command_tool",
     "create_task_tools",
     "get_available_formats",
 ]

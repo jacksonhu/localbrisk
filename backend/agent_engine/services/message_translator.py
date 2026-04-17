@@ -74,8 +74,13 @@ class MessageTranslator:
             "web_search": "search",
             "code_executor": "code",
             "python_repl": "code",
+            "run_command": "code",
+            "shell": "code",
+            "file_read": "file",
+            "file_write": "file",
             "file_reader": "file",
-            "office_reader": "file",
+            "file_operater": "file",
+            "assetbundle_link": "database",
             "sql_executor": "database",
         }.items():
             if key in tool_name.lower():

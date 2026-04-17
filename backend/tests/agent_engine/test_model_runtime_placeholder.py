@@ -77,19 +77,3 @@ class TestLocalModelPlaceholder:
         failed_state = next(event for event in events if event.get("status") == "failed")
         assert failed_state["event_type"] == "state_change"
 
-    def test_local_client_factory_raises_placeholder_error(self):
-        from agent_engine.core.config import AgentRuntimeConfig
-        from agent_engine.core.exceptions import LocalModelNotImplementedError
-        from agent_engine.llm.client_factory import LLMClientFactory
-
-        factory = LLMClientFactory()
-        runtime_config = AgentRuntimeConfig(agent_name="agent-a", business_unit_id="unit-a")
-
-        with pytest.raises(LocalModelNotImplementedError) as exc_info:
-            factory._create_local_client(
-                {"local_provider": "qwen2", "model_id": "qwen2-7b"},
-                runtime_config,
-            )
-
-        assert exc_info.value.error_code == "LOCAL_MODEL_NOT_IMPLEMENTED"
-        assert exc_info.value.details["model_type"] == "local"

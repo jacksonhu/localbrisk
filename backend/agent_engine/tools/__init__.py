@@ -1,27 +1,51 @@
 """Agent tool exports and default tool factory helpers."""
 
-from typing import Optional
+from typing import Any, Optional, Sequence
 
-from .local_file_keyword_search import LocalFileKeywordSearchTool, create_local_file_keyword_search_tool
-from .office_reader import OfficeReaderTool, create_office_reader_tool, get_available_formats
+from .assetbundle_link import AssetBundleLinkTool, create_assetbundle_link_tool
+from .file_operater import (
+    FileReadTool,
+    FileWriteTool,
+    create_file_read_tool,
+    create_file_write_tool,
+    get_available_formats,
+)
+from .file_search import FileSearchTool, create_file_search_tool
 from .registry import ToolRegistry, build_builtin_tools
+from .shell import RunCommandTool, create_run_command_tool
 from .task_board import ProjectTaskBoard
 from .task_tools import create_task_tools
 
 __all__ = [
-    "OfficeReaderTool",
-    "LocalFileKeywordSearchTool",
+    "AssetBundleLinkTool",
+    "FileReadTool",
+    "FileWriteTool",
+    "FileSearchTool",
     "ProjectTaskBoard",
+    "RunCommandTool",
     "ToolRegistry",
     "build_builtin_tools",
-    "create_office_reader_tool",
-    "create_local_file_keyword_search_tool",
+    "create_assetbundle_link_tool",
+    "create_file_read_tool",
+    "create_file_write_tool",
+    "create_file_search_tool",
+    "create_run_command_tool",
     "create_task_tools",
     "get_available_formats",
     "get_builtin_tools",
 ]
 
 
-def get_builtin_tools(backend=None, task_root: Optional[str] = None) -> list:
-    """Compatibility wrapper returning built-in tools with optional workspace injection."""
-    return build_builtin_tools(workspace_backend=backend, task_root=task_root)
+def get_builtin_tools(
+    agent_path: Optional[str] = None,
+    task_root: Optional[str] = None,
+    business_unit_path: Optional[str] = None,
+    asset_bundles: Optional[Sequence[Any]] = None,
+) -> list:
+    """Compatibility wrapper returning built-in tools bound to one agent directory."""
+    return build_builtin_tools(
+        agent_path=agent_path,
+        task_root=task_root,
+        business_unit_path=business_unit_path,
+        asset_bundles=asset_bundles,
+    )

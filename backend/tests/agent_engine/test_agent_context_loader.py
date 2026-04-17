@@ -151,6 +151,24 @@ class TestAgentContextLoader:
 
         assert updated_fingerprint != initial_fingerprint
 
+    def test_compute_agent_context_fingerprint_ignores_unselected_skills(self, temp_agent_dir):
+        from agent_engine.engine.agent_context_loader import compute_agent_context_fingerprint, load_agent_spec
+
+        agent_path = Path(temp_agent_dir["agent_path"])
+        spec = load_agent_spec(agent_path)
+        spec["capabilities"] = {"native_skills": [{"name": "test_skill"}]}
+        (agent_path / "agent_spec.yaml").write_text(
+            yaml.safe_dump(spec, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        baseline = compute_agent_context_fingerprint(agent_path, "test_unit")
+        ignored_skill_dir = agent_path / "skills" / "ignored_skill"
+        ignored_skill_dir.mkdir(parents=True, exist_ok=True)
+        (ignored_skill_dir / "SKILL.md").write_text("# Ignored Skill\n\nShould not affect runtime.", encoding="utf-8")
+
+        assert compute_agent_context_fingerprint(agent_path, "test_unit") == baseline
+
     def test_load_memories_prefers_instruction_templates(self, temp_agent_dir):
         from agent_engine.engine.agent_context_loader import load_memories, load_agent_spec
 
@@ -166,7 +184,7 @@ class TestAgentContextLoader:
         spec["instruction"] = {
             "user_prompt_templates": [
                 {"name": "project"},
-                {"name": "AGENTS"},
+                {"name": "AGENTS.md"},
             ]
         }
         spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
@@ -175,14 +193,41 @@ class TestAgentContextLoader:
 
         assert memories == ["/memories/project.md", "/memories/AGENTS.md"]
 
-    def test_load_skills_prefers_native_skills(self, temp_agent_dir):
+    def test_load_skills_returns_empty_when_native_skills_not_declared(self, temp_agent_dir):
+        from agent_engine.engine.agent_context_loader import load_skills
+
+        agent_path = Path(temp_agent_dir["agent_path"])
+        skills = load_skills(agent_path)
+
+        assert skills == []
+
+    def test_load_skills_reads_only_declared_native_skills(self, temp_agent_dir):
         from agent_engine.engine.agent_context_loader import load_agent_spec, load_skills
 
         agent_path = Path(temp_agent_dir["agent_path"])
         skills_dir = agent_path / "skills"
         extra_skill_dir = skills_dir / "extra_skill"
         extra_skill_dir.mkdir(parents=True, exist_ok=True)
-        (extra_skill_dir / "SKILL.md").write_text("# Extra Skill", encoding="utf-8")
+        (extra_skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: extra_skill\n"
+            "description: Generate diagrams from structured specifications.\n"
+            "license: Proprietary\n"
+            "---\n\n"
+            "# Extra Skill\n\nPerform chart generation.",
+            encoding="utf-8",
+        )
+        (extra_skill_dir / "extra_skill.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "display_name": "Charts Skill",
+                    "description": "This YAML description should be ignored.",
+                },
+                allow_unicode=True,
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
 
         spec_path = agent_path / "agent_spec.yaml"
         spec = load_agent_spec(agent_path)
@@ -196,4 +241,10 @@ class TestAgentContextLoader:
         skills = load_skills(agent_path, agent_spec=load_agent_spec(agent_path))
 
         assert [skill.name for skill in skills] == ["extra_skill"]
-        assert skills[0].mount_path == "/skills/extra_skill/"
+        assert skills[0].skill_path == str(extra_skill_dir)
+        assert skills[0].display_name == "Charts Skill"
+        assert skills[0].description == "Generate diagrams from structured specifications."
+        assert skills[0].tool_name == "skill_extra_skill"
+        assert skills[0].instructions.startswith("# Extra Skill")
+        assert "Perform chart generation." in skills[0].instructions
+        assert "description:" not in skills[0].instructions

@@ -99,7 +99,10 @@ class TestMessageTranslator:
 
         assert MessageTranslator.tool_icon("web_search") == "search"
         assert MessageTranslator.tool_icon("python_repl") == "code"
-        assert MessageTranslator.tool_icon("office_reader") == "file"
+        assert MessageTranslator.tool_icon("run_command") == "code"
+        assert MessageTranslator.tool_icon("file_read") == "file"
+        assert MessageTranslator.tool_icon("file_write") == "file"
+        assert MessageTranslator.tool_icon("assetbundle_link") == "database"
         assert MessageTranslator.tool_icon("sql_executor") == "database"
         assert MessageTranslator.tool_icon("unknown_tool") == "tool"
 
@@ -263,6 +266,39 @@ class TestAgentRuntimeServiceLoad:
             assert state.business_unit_id == "test_unit"
             assert state.agent_instance is mock_agent
             assert (Path(temp_agent_dir["agent_path"]) / "output" / ".task").exists()
+
+    @pytest.mark.asyncio
+    async def test_ensure_ready_agent_reloads_when_config_changes(self, temp_agent_dir):
+        """Reload the runtime automatically when agent files changed after initial load."""
+        from agent_engine.services import AgentRuntimeService
+
+        service = AgentRuntimeService()
+        first_agent = MagicMock(name="first_agent")
+        second_agent = MagicMock(name="second_agent")
+        mock_engine = MagicMock()
+        mock_engine.build_agent = AsyncMock(side_effect=[first_agent, second_agent])
+        spec_path = Path(temp_agent_dir["agent_path"]) / "agent_spec.yaml"
+
+        with patch.object(service, '_ensure_engine', return_value=mock_engine):
+            initial_state = await service.load_agent(
+                "test_unit",
+                "test_agent",
+                temp_agent_dir["agent_path"]
+            )
+            initial_fingerprint = initial_state.config_fingerprint
+
+            config = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+            config.setdefault("baseinfo", {})["description"] = "Updated description"
+            spec_path.write_text(
+                yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
+                encoding="utf-8",
+            )
+
+            state = await service._ensure_ready_agent("test_unit", "test_agent")
+
+            assert state.agent_instance is second_agent
+            assert state.config_fingerprint != initial_fingerprint
+            assert mock_engine.build_agent.await_count == 2
 
 
 class TestAgentRuntimeServiceStream:

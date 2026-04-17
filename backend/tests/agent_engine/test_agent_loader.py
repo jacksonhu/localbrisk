@@ -96,7 +96,7 @@ class TestAgentConfigLoader:
         """测试加载不存在的 Agent"""
         from agent_engine.engine.agent_loader import load_agent_config
         
-        with pytest.raises(ValueError, match="目录不存在"):
+        with pytest.raises(ValueError, match="Agent directory does not exist"):
             load_agent_config("/nonexistent/path/to/agent")
     
     def test_load_agent_without_spec(self, temp_agent_dir):

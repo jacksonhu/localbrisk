@@ -5,12 +5,10 @@ Primary runtime:
 
 Supporting modules:
 - ``agent_loader``: filesystem-backed agent config inspection helpers.
-- ``agent_context_loader``: normalized runtime definition loader shared by engines.
-
-Legacy modules remain available only for staged cleanup and test migration.
+- ``agent_context_loader``: normalized runtime definition loader shared by the runtime stack.
 """
 
-# Agent configuration loader (无 langchain 依赖)
+from .agent_context_loader import AgentBuildContext, AssetBundleBackendConfig, SkillConfig
 from .agent_loader import (
     AgentConfig,
     AgentConfigLoader,
@@ -20,16 +18,6 @@ from .agent_loader import (
     get_agent_config_loader,
     load_agent_config,
 )
-
-# DeepAgents runtime (legacy path)
-from .deepagents_engine import (
-    DeepAgentsEngine,
-    AgentBuildContext,
-    check_dependencies,
-    get_deepagents_engine,
-)
-
-# OpenAI Agents runtime (new path)
 from .openai_agents_engine import (
     OpenAIAgentRuntime,
     OpenAIAgentsEngine,
@@ -38,7 +26,6 @@ from .openai_agents_engine import (
 )
 
 __all__ = [
-    # Config loader (no runtime dependency)
     "AgentConfig",
     "AgentConfigLoader",
     "ModelInfo",
@@ -46,13 +33,9 @@ __all__ = [
     "SkillInfo",
     "get_agent_config_loader",
     "load_agent_config",
-    # Shared context
     "AgentBuildContext",
-    # DeepAgents runtime
-    "DeepAgentsEngine",
-    "get_deepagents_engine",
-    "check_dependencies",
-    # OpenAI Agents runtime
+    "AssetBundleBackendConfig",
+    "SkillConfig",
     "OpenAIAgentRuntime",
     "OpenAIAgentsEngine",
     "get_openai_agents_engine",

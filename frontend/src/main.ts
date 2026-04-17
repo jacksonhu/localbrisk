@@ -24,6 +24,11 @@ const router = createRouter({
       name: "home",
       component: () => import("./views/HomeView.vue"),
     },
+    {
+      path: "/foreman",
+      name: "foreman",
+      component: () => import("./views/ForemanView.vue"),
+    },
   ],
 });
 

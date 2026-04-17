@@ -166,14 +166,17 @@ class TestOpenAIAgentRuntime:
 class TestOpenAIAgentsEngineBuild:
     """Runtime build entry tests."""
 
-    def test_build_instructions_embeds_memory_and_skill_content(self, openai_runtime_context):
+    def test_build_instructions_embed_memory_but_not_inline_skill_prompt(self, openai_runtime_context):
         from agent_engine.engine import openai_agents_engine as engine_module
 
         memory_path = "/memories/default.md"
         skill_config = engine_module.SkillConfig(
             name="analysis_skill",
-            absolute_path=str(openai_runtime_context["agent_dir"] / "skills" / "analysis_skill"),
-            mount_path="/skills/analysis_skill/",
+            skill_path=str(openai_runtime_context["agent_dir"] / "skills" / "analysis_skill"),
+            display_name="Data Analyst Skill",
+            description="Analyze data-oriented subtasks.",
+            tool_name="skill_analysis_skill",
+            instructions="Use tabular reasoning when data is present.",
         )
         context = engine_module.AgentBuildContext(
             business_unit_path=str(openai_runtime_context["business_unit_dir"]),
@@ -196,13 +199,22 @@ class TestOpenAIAgentsEngineBuild:
         assert "Analyze business data." in instructions
         assert "Always explain your reasoning." in instructions
         assert "Remember to verify results before responding." in instructions
-        assert "Use tabular reasoning when data is present." in instructions
+        assert "Use tabular reasoning when data is present." not in instructions
 
     @pytest.mark.asyncio
-    async def test_build_agent_adapts_tools_and_returns_runtime(self, openai_runtime_context, monkeypatch):
+    async def test_build_agent_adapts_tools_and_exposes_native_skills_as_tools(self, openai_runtime_context, monkeypatch):
         from agent_engine.engine import openai_agents_engine as engine_module
 
         captured: dict = {}
+        asset_bundles = [
+            engine_module.AssetBundleBackendConfig(
+                bundle_name="sales_bundle",
+                bundle_type="external",
+                bundle_path=str(openai_runtime_context["business_unit_dir"] / "asset_bundles" / "sales_bundle"),
+                mount_path="/sales_bundle",
+                volumes=[],
+            )
+        ]
         context = engine_module.AgentBuildContext(
             business_unit_path=str(openai_runtime_context["business_unit_dir"]),
             agent_path=str(openai_runtime_context["agent_dir"]),
@@ -211,6 +223,7 @@ class TestOpenAIAgentsEngineBuild:
             agent_spec={
                 "baseinfo": {"name": "test_agent", "description": "Analyze business data."},
                 "llm_config": {"temperature": 0.4, "max_tokens": 2048},
+                "capabilities": {"native_skills": [{"name": "analysis_skill"}]},
             },
             model_config={
                 "model_id": "gpt-4o-mini",
@@ -222,18 +235,35 @@ class TestOpenAIAgentsEngineBuild:
             skills=[
                 engine_module.SkillConfig(
                     name="analysis_skill",
-                    absolute_path=str(openai_runtime_context["agent_dir"] / "skills" / "analysis_skill"),
-                    mount_path="/skills/analysis_skill/",
+                    skill_path=str(openai_runtime_context["agent_dir"] / "skills" / "analysis_skill"),
+                    display_name="Data Analyst Skill",
+                    description="Analyze data-oriented subtasks.",
+                    tool_name="skill_analysis_skill",
+                    instructions="Use tabular reasoning when data is present.",
                 )
             ],
             output_path=str(openai_runtime_context["output_dir"]),
+            asset_bundles=asset_bundles,
         )
 
         class FakeAgent:
             def __init__(self, **kwargs):
-                captured["agent_kwargs"] = kwargs
                 self.kwargs = kwargs
                 self.name = kwargs["name"]
+                if self.name == "test_agent":
+                    captured["main_agent_kwargs"] = kwargs
+                else:
+                    captured.setdefault("skill_agent_kwargs", []).append(kwargs)
+
+            def as_tool(self, *, tool_name, tool_description):
+                payload = {
+                    "tool_name": tool_name,
+                    "tool_description": tool_description,
+                    "source_agent": self.name,
+                    "shared_tools": list(self.kwargs.get("tools", [])),
+                }
+                captured.setdefault("skill_tools", []).append(payload)
+                return payload
 
         class FakeModelBundle:
             model = "sdk-model"
@@ -254,16 +284,18 @@ class TestOpenAIAgentsEngineBuild:
             captured["handoff_kwargs"] = kwargs
             return FakeHandoffCollection()
 
+        def fake_build_builtin_tools(*, agent_path, task_root, business_unit_path, asset_bundles):
+            captured["agent_path"] = agent_path
+            captured["task_root"] = task_root
+            captured["business_unit_path"] = business_unit_path
+            captured["asset_bundles"] = asset_bundles
+            return ["builtin-tool", agent_path]
+
         engine = engine_module.OpenAIAgentsEngine()
         engine._load_agent_context = AsyncMock(return_value=context)
 
         monkeypatch.setattr(engine_module, "_OPENAI_AGENTS_AVAILABLE", True)
         monkeypatch.setattr(engine_module, "Agent", FakeAgent)
-        monkeypatch.setattr(engine_module, "create_workspace_backend", lambda _context: "workspace-backend")
-        def fake_build_builtin_tools(workspace_backend, task_root):
-            captured["task_root"] = task_root
-            return ["builtin-tool", workspace_backend]
-
         monkeypatch.setattr(engine_module, "build_builtin_tools", fake_build_builtin_tools)
         monkeypatch.setattr(engine_module, "build_openai_model_bundle", fake_build_openai_model_bundle)
         monkeypatch.setattr(engine_module, "build_openai_handoffs", fake_build_openai_handoffs)
@@ -272,22 +304,33 @@ class TestOpenAIAgentsEngineBuild:
         runtime = await engine.build_agent(str(openai_runtime_context["agent_dir"]), "test_unit", tools=["extra-tool"])
 
         assert isinstance(runtime, engine_module.OpenAIAgentRuntime)
-        assert runtime.tools == ["builtin-tool", "workspace-backend", "extra-tool"]
-        assert runtime.sdk_tools == ["sdk-tool", "builtin-tool", "workspace-backend", "extra-tool"]
-        assert runtime.workspace == "workspace-backend"
+        assert runtime.tools == ["builtin-tool", str(openai_runtime_context["agent_dir"]), "extra-tool"]
+        assert runtime.sdk_tools[:-1] == ["sdk-tool", "builtin-tool", str(openai_runtime_context["agent_dir"]), "extra-tool"]
+        assert runtime.sdk_tools[-1]["tool_name"] == "skill_analysis_skill"
         assert runtime.model == "sdk-model"
         assert runtime.handoffs == ["handoff-agent"]
         assert runtime.provider == "openai"
+        assert captured["agent_path"] == str(openai_runtime_context["agent_dir"])
+        assert captured["business_unit_path"] == str(openai_runtime_context["business_unit_dir"])
+        assert captured["asset_bundles"] == asset_bundles
         assert captured["model_bundle_kwargs"]["agent_name"] == "test_agent"
-        assert captured["handoff_kwargs"]["parent_tools"] == ["builtin-tool", "workspace-backend", "extra-tool"]
+        assert captured["handoff_kwargs"]["parent_tools"] == ["builtin-tool", str(openai_runtime_context["agent_dir"]), "extra-tool"]
         assert captured["handoff_kwargs"]["parent_model_settings"] == {"temperature": 0.4, "max_tokens": 2048}
         assert captured["task_root"].endswith("output/.task")
-        assert captured["agent_kwargs"]["name"] == "test_agent"
-        assert captured["agent_kwargs"]["model"] == "sdk-model"
-        assert captured["agent_kwargs"]["model_settings"] == {"temperature": 0.4, "max_tokens": 2048}
-        assert captured["agent_kwargs"]["handoffs"] == ["handoff-agent"]
-        assert captured["agent_kwargs"]["tools"] == ["sdk-tool", "builtin-tool", "workspace-backend", "extra-tool"]
-        assert "Remember to verify results before responding." in captured["agent_kwargs"]["instructions"]
+        assert captured["main_agent_kwargs"]["name"] == "test_agent"
+        assert captured["main_agent_kwargs"]["model"] == "sdk-model"
+        assert captured["main_agent_kwargs"]["model_settings"] == {"temperature": 0.4, "max_tokens": 2048}
+        assert captured["main_agent_kwargs"]["handoffs"] == ["handoff-agent"]
+        assert captured["main_agent_kwargs"]["tools"] == runtime.sdk_tools
+        assert "Remember to verify results before responding." in captured["main_agent_kwargs"]["instructions"]
+        assert "Use tabular reasoning when data is present." not in captured["main_agent_kwargs"]["instructions"]
+        assert captured["skill_agent_kwargs"][0]["name"] == "Data Analyst Skill"
+        assert captured["skill_agent_kwargs"][0]["model"] == "sdk-model"
+        assert captured["skill_agent_kwargs"][0]["model_settings"] == {"temperature": 0.4, "max_tokens": 2048}
+        assert captured["skill_agent_kwargs"][0]["tools"] == ["sdk-tool", "builtin-tool", str(openai_runtime_context["agent_dir"]), "extra-tool"]
+        assert "You are invoked as a tool by another agent." in captured["skill_agent_kwargs"][0]["instructions"]
+        assert "Use tabular reasoning when data is present." in captured["skill_agent_kwargs"][0]["instructions"]
+        assert captured["skill_tools"][0]["tool_description"] == "Analyze data-oriented subtasks."
         assert id(runtime) in engine._text2sql_services
 
     @pytest.mark.asyncio

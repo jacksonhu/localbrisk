@@ -39,7 +39,6 @@ class BuiltinSubagentContext:
 
     parent_model: Any
     parent_tools: List[Any]
-    parent_backend: Any
     business_unit_path: Optional[str] = None
     asset_bundles: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -168,14 +167,10 @@ def _normalise_bundle_configs(asset_bundles: Optional[Sequence[Any]]) -> List[Di
     return [_normalise_bundle_config(bundle) for bundle in asset_bundles]
 
 
-def _resolve_table_analysis_tools(
-    context: BuiltinSubagentContext,
-) -> tuple[List[Any], Optional[Any]]:
+def _resolve_table_analysis_tools(context: BuiltinSubagentContext) -> tuple[List[Any], Optional[Any]]:
     """Resolve dedicated tools for the table analysis subagent when possible."""
     if not context.business_unit_path:
-        logger.debug(
-            "business_unit_path not provided, data_analysis_agent will use parent tools"
-        )
+        logger.debug("business_unit_path not provided, data_analysis_agent will use parent tools")
         return context.parent_tools, None
 
     try:
@@ -249,7 +244,6 @@ def build_builtin_subagents(
     *,
     parent_model: Any,
     parent_tools: List[Any],
-    parent_backend: Any,
     business_unit_path: Optional[str] = None,
     asset_bundles: Optional[Sequence[Any]] = None,
     registry: Optional[SubagentRegistry] = None,
@@ -258,7 +252,6 @@ def build_builtin_subagents(
     context = BuiltinSubagentContext(
         parent_model=parent_model,
         parent_tools=parent_tools,
-        parent_backend=parent_backend,
         business_unit_path=business_unit_path,
         asset_bundles=_normalise_bundle_configs(asset_bundles),
     )
@@ -286,7 +279,6 @@ def create_builtin_subagents(
     *,
     parent_model: Any,
     parent_tools: List[Any],
-    parent_backend: Any,
     business_unit_path: Optional[str] = None,
     asset_bundles: Optional[Sequence[Any]] = None,
     registry: Optional[SubagentRegistry] = None,
@@ -295,7 +287,6 @@ def create_builtin_subagents(
     collection = build_builtin_subagents(
         parent_model=parent_model,
         parent_tools=parent_tools,
-        parent_backend=parent_backend,
         business_unit_path=business_unit_path,
         asset_bundles=asset_bundles,
         registry=registry,

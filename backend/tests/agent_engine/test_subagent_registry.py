@@ -62,7 +62,6 @@ class TestSubagentRegistry:
         collection = build_builtin_subagents(
             parent_model="mock-model",
             parent_tools=["generic-tool"],
-            parent_backend=None,
             registry=registry,
         )
 
@@ -97,7 +96,6 @@ class TestBuiltinSubagentCompatibility:
         subagents, text2sql_service = create_builtin_subagents(
             parent_model="mock-model",
             parent_tools=["generic-tool"],
-            parent_backend=None,
             business_unit_path="/tmp/test_unit",
             asset_bundles=[{"bundle_name": "sales_bundle"}],
         )
@@ -136,7 +134,6 @@ class TestBuiltinSubagentCompatibility:
         subagents, text2sql_service = create_builtin_subagents(
             parent_model="mock-model",
             parent_tools=["generic-tool"],
-            parent_backend=None,
             business_unit_path="/tmp/test_unit",
             asset_bundles=[
                 BundleConfig(

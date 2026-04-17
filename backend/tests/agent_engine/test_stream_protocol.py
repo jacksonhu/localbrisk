@@ -1,7 +1,6 @@
-"""Unit tests for stream protocol helpers and default prompt template."""
+"""Unit tests for stream protocol helpers."""
 
 from agent_engine.core.stream_protocol import MessageType, StreamMessageBuilder
-from agent_engine.engine.default_prompt import AGENT_DEFAULT_PROMPT
 
 
 class TestStreamMessageBuilderError:
@@ -25,11 +24,3 @@ class TestStreamMessageBuilderError:
         assert message.payload["error_code"] == "LOCAL_MODEL_NOT_IMPLEMENTED"
         assert message.payload["suggestion"] == "Switch to a supported provider."
         assert message.payload["retryable"] is False
-
-
-class TestDefaultPromptTemplate:
-    """Regression tests for the default prompt template."""
-
-    def test_rules_block_is_closed(self):
-        assert AGENT_DEFAULT_PROMPT.count("<rules>") == 1
-        assert AGENT_DEFAULT_PROMPT.count("</rules>") == 1

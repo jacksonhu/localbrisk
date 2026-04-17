@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronRight, Folder, Database, Table, FolderOpen, Bot, FileText, PlugZap, Code, Cpu, Layers, File } from "lucide-vue-next";
+import { ChevronRight, Folder, Database, Table, FolderOpen, User, FileText, PlugZap, Code, Cpu, Layers, File } from "lucide-vue-next";
 import type { BusinessUnitItem } from "@/types/catalog";
 
 const props = defineProps<{
@@ -84,7 +84,7 @@ const getIcon = (type: string) => {
     volume: FolderOpen,
     function: Code,
     model: Cpu,
-    agent: Bot,
+    agent: User,
     note: FileText,
     placeholder: FileText,
     folder: Folder,

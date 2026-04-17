@@ -58,6 +58,14 @@ class AgentRuntimeService:
         """Compute the current runtime config fingerprint for one agent directory."""
         return compute_agent_context_fingerprint(agent_path, business_unit_id)
 
+    def _has_runtime_config_changed(self, state: Optional[AgentRuntimeState]) -> bool:
+        """Return whether one ready runtime instance is out of date with current agent files."""
+        if state is None or not state.agent_path:
+            return False
+
+        current_fingerprint = self._compute_agent_config_fingerprint(state.agent_path, state.business_unit_id)
+        return current_fingerprint != state.config_fingerprint
+
     async def _close_agent_resources(self, key: str, agent_instance: Any) -> None:
         """Release build-time resources held by one loaded agent instance."""
         if agent_instance is None:
@@ -269,7 +277,6 @@ class AgentRuntimeService:
                 agent = await engine.build_agent(
                     agent_path=resolved_agent_path,
                     business_unit_id=business_unit_id,
-                    debug=False,
                 )
 
                 task_dir = Path(resolved_agent_path) / "output" / ".task"
@@ -304,8 +311,11 @@ class AgentRuntimeService:
         key = self._get_agent_key(business_unit_id, agent_name)
         state = self._agents.get(key)
         if state and state.status == AgentStatus.READY:
-            return state
-        return await self.load_agent(business_unit_id, agent_name)
+            if not self._has_runtime_config_changed(state):
+                return state
+            logger.info("Detected config change before execution, reloading agent runtime: %s", key)
+            return await self.load_agent(business_unit_id, agent_name, agent_path=state.agent_path)
+        return await self.load_agent(business_unit_id, agent_name, agent_path=state.agent_path if state else None)
 
     async def _mark_agent_running(self, state: AgentRuntimeState, execution_id: str) -> None:
         async with self._lock:

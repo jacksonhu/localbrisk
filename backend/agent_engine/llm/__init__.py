@@ -1,36 +1,28 @@
-"""
-LLM Package - Large Language Model Management Module
+"""LLM package exports.
 
 This module provides:
-- Unified LLM provider configuration management
-- Model instantiation and request debugging
-- Consistent configuration data across frontend and backend
-- LLM Client Factory
+- Unified provider configuration management
+- Model registry access
+- Consistent configuration data shared across backend services
 
-Note: This module is designed to be imported independently, without depending on other agent_engine submodules
+The package is intentionally lightweight and avoids depending on runtime engine modules.
 """
 
-# Import directly from submodules to avoid circular dependencies
 from agent_engine.llm.config.providers import (
-    ProviderType,
     ModelInfo,
     ProviderConfig,
+    ProviderType,
+    get_all_providers,
     get_endpoint_providers,
     get_local_providers,
-    get_provider_models,
     get_provider_default_url,
-    get_all_providers,
+    get_provider_models,
 )
 from agent_engine.llm.config.registry import ModelRegistry
-from agent_engine.llm.client_factory import (
-    LLMClientFactory,
-    get_llm_client_factory,
-    create_llm_client_for_agent,
-)
 
 __all__ = [
     "ProviderType",
-    "ModelInfo", 
+    "ModelInfo",
     "ProviderConfig",
     "ModelRegistry",
     "get_endpoint_providers",
@@ -38,8 +30,4 @@ __all__ = [
     "get_provider_models",
     "get_provider_default_url",
     "get_all_providers",
-    # LLM Client Factory
-    "LLMClientFactory",
-    "get_llm_client_factory",
-    "create_llm_client_for_agent",
 ]

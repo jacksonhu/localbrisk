@@ -7,3 +7,4 @@ export * from './useAsyncState';
 export * from './useConfigManager';
 export * from './useToast';
 export * from './useSSEClient';
+export * from './useForemanChat';

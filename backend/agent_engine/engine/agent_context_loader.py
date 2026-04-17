@@ -27,11 +27,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SkillConfig:
-    """Normalized runtime skill mount configuration."""
+    """Normalized runtime config for one native skill agent."""
 
     name: str
-    absolute_path: str
-    mount_path: str
+    skill_path: str
+    display_name: str
+    description: str
+    tool_name: str
+    instructions: str
 
 
 @dataclass
@@ -105,13 +108,15 @@ def compute_agent_context_fingerprint(agent_path: str | Path, business_unit_id: 
             _iter_config_files(directory, allowed_suffixes=(".yaml", ".yml", ".md", ".markdown"))
         )
 
-    fingerprint_files.extend(
-        _iter_config_files(
-            path / AGENT_SKILLS_DIR,
-            allowed_suffixes=(".yaml", ".yml"),
-            allowed_names=("skill.md",),
+    agent_spec = load_agent_spec(path) if spec_path.exists() else {}
+    for skill_name in _extract_named_entries(agent_spec.get("capabilities", {}).get("native_skills", [])):
+        fingerprint_files.extend(
+            _iter_config_files(
+                path / AGENT_SKILLS_DIR / skill_name,
+                allowed_suffixes=(".yaml", ".yml"),
+                allowed_names=("skill.md",),
+            )
         )
-    )
 
     if business_unit_id:
         business_unit_path = path.parent.parent
@@ -308,19 +313,55 @@ def _extract_named_entries(entries: Any) -> List[str]:
     return names
 
 
-def _iter_memory_file_candidates(memories_dir: Path, memory_name: str) -> Iterable[Path]:
-    """Yield possible memory files for one configured memory name."""
-    for suffix in (".md", ".markdown"):
-        yield memories_dir / f"{memory_name}{suffix}"
+def _iter_memory_files(memories_dir: Path) -> Iterable[Path]:
+    """Yield visible markdown memory files in stable order."""
+    for file_path in sorted(memories_dir.iterdir()):
+        if not file_path.is_file() or file_path.name.startswith("."):
+            continue
+        if file_path.suffix.lower() not in {".md", ".markdown"}:
+            continue
+        yield file_path
+
+
+def _build_memory_lookup(memories_dir: Path) -> Dict[str, Path]:
+    """Build a lookup that accepts both file names and stem names."""
+    lookup: Dict[str, Path] = {}
+    for memory_file in _iter_memory_files(memories_dir):
+        lookup.setdefault(memory_file.name.lower(), memory_file)
+        lookup.setdefault(memory_file.stem.lower(), memory_file)
+    return lookup
+
+
+def _iter_memory_lookup_keys(memory_name: str) -> Iterable[str]:
+    """Yield normalized lookup keys for one configured memory entry."""
+    normalized = memory_name.strip()
+    if not normalized:
+        return
+
+    yielded: set[str] = set()
+    candidates = [normalized.lower()]
+    suffix = Path(normalized).suffix.lower()
+    if suffix in {".md", ".markdown"}:
+        candidates.append(Path(normalized).stem.lower())
+    else:
+        candidates.extend((f"{normalized}.md".lower(), f"{normalized}.markdown".lower()))
+
+    for candidate in candidates:
+        if candidate in yielded:
+            continue
+        yielded.add(candidate)
+        yield candidate
 
 
 def _resolve_configured_memory_files(memories_dir: Path, configured_names: List[str]) -> List[str]:
     """Resolve configured memory names into mounted memory paths."""
+    memory_lookup = _build_memory_lookup(memories_dir)
     resolved: List[str] = []
     for memory_name in configured_names:
-        for candidate in _iter_memory_file_candidates(memories_dir, memory_name):
-            if candidate.exists():
-                resolved.append(f"/{AGENT_MEMORIES_DIR}/{candidate.name}")
+        for lookup_key in _iter_memory_lookup_keys(memory_name):
+            memory_file = memory_lookup.get(lookup_key)
+            if memory_file is not None:
+                resolved.append(f"/{AGENT_MEMORIES_DIR}/{memory_file.name}")
                 break
         else:
             logger.warning("Configured memory '%s' was not found under %s", memory_name, memories_dir)
@@ -356,35 +397,146 @@ def load_memories(agent_path: Path, agent_spec: Optional[Dict[str, Any]] = None)
 
 
 def load_skills(agent_path: Path, agent_spec: Optional[Dict[str, Any]] = None) -> List[SkillConfig]:
-    """Load enabled skills for an agent."""
+    """Load only native skills explicitly enabled in ``agent_spec.yaml``."""
     skills_dir = agent_path / AGENT_SKILLS_DIR
     if not skills_dir.exists():
         return []
 
     configured_names = _extract_named_entries((agent_spec or {}).get("capabilities", {}).get("native_skills", []))
-    skill_dirs: List[Path]
-    if configured_names:
-        skill_dirs = [skills_dir / name for name in configured_names]
-    else:
-        skill_dirs = sorted(path for path in skills_dir.iterdir() if path.is_dir())
+    if not configured_names:
+        return []
 
     skills: List[SkillConfig] = []
-    for skill_dir in skill_dirs:
+    for skill_name in configured_names:
+        skill_dir = skills_dir / skill_name
         if not skill_dir.is_dir():
-            logger.warning("Configured skill directory was not found: %s", skill_dir)
+            logger.warning("Configured native skill directory was not found: %s", skill_dir)
             continue
+
         skill_md = skill_dir / "SKILL.md"
         if not skill_md.exists():
-            logger.warning("Skipping skill without SKILL.md: %s", skill_dir)
+            logger.warning("Skipping native skill without SKILL.md: %s", skill_dir)
             continue
+
+        skill_front_matter, instructions = _read_skill_markdown(skill_md)
+        if not instructions:
+            logger.warning("Skipping native skill with empty SKILL.md body: %s", skill_md)
+            continue
+
+        skill_config = _load_skill_directory_config(skill_dir, skill_name)
+        baseinfo = skill_config.get("baseinfo", {}) if isinstance(skill_config, dict) else {}
+        display_name = _first_text(
+            baseinfo.get("display_name"),
+            skill_config.get("display_name") if isinstance(skill_config, dict) else None,
+            skill_name,
+        )
+        description = _first_text(
+            skill_front_matter.get("description"),
+            f"Use the native skill '{display_name}' when the delegated task matches this capability.",
+        )
+        tool_name = _first_text(
+            baseinfo.get("tool_name"),
+            skill_config.get("tool_name") if isinstance(skill_config, dict) else None,
+            _build_skill_tool_name(skill_name),
+        )
         skills.append(
             SkillConfig(
-                name=skill_dir.name,
-                absolute_path=str(skill_dir),
-                mount_path=f"/{AGENT_SKILLS_DIR}/{skill_dir.name}/",
+                name=skill_name,
+                skill_path=str(skill_dir),
+                display_name=display_name,
+                description=description,
+                tool_name=tool_name,
+                instructions=instructions,
             )
         )
     return skills
+
+
+def _read_skill_markdown(skill_md: Path) -> tuple[Dict[str, Any], str]:
+    """Read one SKILL.md file and split front matter metadata from body instructions."""
+    raw_content = skill_md.read_text(encoding="utf-8").lstrip("\ufeff")
+    if not raw_content.strip():
+        return {}, ""
+
+    lines = raw_content.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, raw_content.strip()
+
+    closing_index: Optional[int] = None
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            closing_index = index
+            break
+
+    if closing_index is None:
+        logger.warning("Failed to find closing front matter marker in %s", skill_md)
+        return {}, raw_content.strip()
+
+    front_matter_text = "\n".join(lines[1:closing_index]).strip()
+    body = "\n".join(lines[closing_index + 1 :]).strip()
+    if not front_matter_text:
+        return {}, body
+
+    try:
+        payload = yaml.safe_load(front_matter_text) or {}
+    except Exception as exc:
+        logger.warning("Failed to parse SKILL.md front matter %s: %s", skill_md, exc)
+        return {}, body
+
+    if not isinstance(payload, dict):
+        logger.warning("Skipping non-object SKILL.md front matter in %s", skill_md)
+        return {}, body
+
+    return payload, body
+
+
+def _load_skill_directory_config(skill_dir: Path, skill_name: str) -> Dict[str, Any]:
+    """Load one optional skill YAML config file from the skill directory."""
+    candidate_paths = [
+        skill_dir / f"{skill_name}.yaml",
+        skill_dir / f"{skill_name}.yml",
+        *sorted(skill_dir.glob("*.yaml")),
+        *sorted(skill_dir.glob("*.yml")),
+    ]
+    seen: set[Path] = set()
+    for candidate in candidate_paths:
+        if candidate in seen or not candidate.exists() or not candidate.is_file():
+            continue
+        seen.add(candidate)
+        try:
+            with open(candidate, "r", encoding="utf-8") as file:
+                payload = yaml.safe_load(file) or {}
+        except Exception as exc:
+            logger.warning("Failed to load native skill config %s: %s", candidate, exc)
+            continue
+        if isinstance(payload, dict):
+            return payload
+        logger.warning("Skipping native skill config with non-object payload: %s", candidate)
+    return {}
+
+
+def _first_text(*values: Any) -> str:
+    """Return the first non-empty text value from a candidate list."""
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    return ""
+
+
+def _build_skill_tool_name(skill_name: str) -> str:
+    """Build a stable SDK tool name for one native skill."""
+    normalized_chars = [char.lower() if char.isalnum() else "_" for char in skill_name.strip()]
+    normalized = "".join(normalized_chars).strip("_")
+    while "__" in normalized:
+        normalized = normalized.replace("__", "_")
+    if not normalized:
+        normalized = "native_skill"
+    if normalized[0].isdigit():
+        normalized = f"skill_{normalized}"
+    return f"skill_{normalized}"
 
 
 def load_asset_bundles(business_unit_path: Path, business_unit_id: str) -> List[AssetBundleBackendConfig]:

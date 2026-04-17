@@ -12,20 +12,9 @@ from ..core.exceptions import AgentConfigError
 from ..llm.provider_adapter import build_openai_model_bundle
 from ..tools.openai_tool_adapter import OpenAIToolAdapter
 from ..tools.registry import build_builtin_tools
-from .agent_context_loader import (
-    AgentBuildContext,
-    AssetBundleBackendConfig,
-    SkillConfig,
-    load_active_model,
-    load_agent_context,
-    load_asset_bundles,
-    load_memories,
-    load_single_bundle_config,
-    load_skills,
-    load_volumes_config,
-)
+from .agent_context_loader import AgentBuildContext, AssetBundleBackendConfig, SkillConfig, load_agent_context
 from .handoff_registry import build_openai_handoffs
-from .workspace_factory import create_workspace_backend
+from .native_skill_registry import build_openai_native_skills
 
 logger = logging.getLogger(__name__)
 
@@ -210,10 +199,8 @@ class OpenAIAgentsEngine:
         agent_path: str,
         business_unit_id: str,
         tools: Optional[List[Any]] = None,
-        debug: bool = False,
     ) -> OpenAIAgentRuntime:
         """Build and return one session-aware OpenAI Agents runtime."""
-        del debug
         check_openai_agents_dependencies(raise_error=True)
         logger.info("Building OpenAI agent runtime from %s for business unit %s", agent_path, business_unit_id)
 
@@ -236,17 +223,27 @@ class OpenAIAgentsEngine:
         )
         instructions = self._build_instructions(context)
 
-        workspace_backend = create_workspace_backend(context)
         task_root = Path(context.output_path) / ".task"
         task_root.mkdir(parents=True, exist_ok=True)
-        builtin_tools = build_builtin_tools(workspace_backend=workspace_backend, task_root=str(task_root))
-        runtime_tools = builtin_tools + (tools or [])
-        sdk_tools = OpenAIToolAdapter.adapt_tools(runtime_tools)
+        runtime_tools = build_builtin_tools(
+            agent_path=context.agent_path,
+            task_root=str(task_root),
+            business_unit_path=context.business_unit_path,
+            asset_bundles=context.asset_bundles or [],
+        ) + (tools or [])
+        sdk_runtime_tools = OpenAIToolAdapter.adapt_tools(runtime_tools)
+        native_skill_collection = build_openai_native_skills(
+            agent_cls=Agent,
+            parent_model=model_bundle.model,
+            parent_model_settings=model_bundle.model_settings,
+            parent_tools=sdk_runtime_tools,
+            skills=context.skills,
+        )
+        sdk_tools = sdk_runtime_tools + native_skill_collection.tools
         handoff_collection = build_openai_handoffs(
             parent_model=model_bundle.model,
             parent_model_settings=model_bundle.model_settings,
             parent_tools=runtime_tools,
-            parent_backend=workspace_backend,
             business_unit_path=context.business_unit_path,
             asset_bundles=context.asset_bundles or [],
         )
@@ -275,7 +272,6 @@ class OpenAIAgentsEngine:
             handoffs=handoff_collection.handoffs,
             resources=handoff_collection.resources,
         )
-        runtime.workspace = workspace_backend
         runtime.model_settings = model_bundle.model_settings
         runtime.provider = model_bundle.provider
         runtime.model_id = model_bundle.model_id
@@ -287,11 +283,12 @@ class OpenAIAgentsEngine:
             self._text2sql_services[id(runtime)] = text2sql_service
 
         logger.info(
-            "OpenAI agent runtime built successfully: agent=%s provider=%s model=%s tools=%s handoffs=%s session_db=%s",
+            "OpenAI agent runtime built successfully: agent=%s provider=%s model=%s tools=%s skill_tools=%s handoffs=%s session_db=%s",
             context.agent_name,
             model_bundle.provider,
             model_bundle.model_id,
-            len(sdk_tools),
+            len(sdk_runtime_tools),
+            len(native_skill_collection.tools),
             len(handoff_collection.handoffs),
             session_db_path,
         )
@@ -317,36 +314,6 @@ class OpenAIAgentsEngine:
     async def _load_agent_context(self, agent_path: str, business_unit_id: str) -> AgentBuildContext:
         """Load the framework-neutral build context for one agent."""
         return await load_agent_context(agent_path, business_unit_id, self._model_resolver)
-
-    async def _load_active_model(
-        self,
-        agent_path: Path,
-        agent_spec: Dict[str, Any],
-        business_unit_id: str,
-        agent_name: str,
-    ) -> Optional[Dict[str, Any]]:
-        """Load the resolved active model config for one agent."""
-        return await load_active_model(agent_path, agent_spec, business_unit_id, agent_name, self._model_resolver)
-
-    def _load_memories(self, agent_path: Path) -> List[str]:
-        """Load enabled memory mounts for one agent."""
-        return load_memories(agent_path)
-
-    def _load_skills(self, agent_path: Path) -> List[SkillConfig]:
-        """Load enabled skills for one agent."""
-        return load_skills(agent_path)
-
-    def _load_asset_bundles(self, business_unit_path: Path, business_unit_id: str) -> List[AssetBundleBackendConfig]:
-        """Load mounted asset bundle config for one business unit."""
-        return load_asset_bundles(business_unit_path, business_unit_id)
-
-    def _load_single_bundle_config(self, bundle_path: Path, business_unit_id: str) -> Optional[AssetBundleBackendConfig]:
-        """Load one normalized asset bundle configuration."""
-        return load_single_bundle_config(bundle_path, business_unit_id)
-
-    def _load_volumes_config(self, volumes_dir: Path) -> List[Dict[str, Any]]:
-        """Load local volume configuration files."""
-        return load_volumes_config(volumes_dir)
 
     def _build_instructions(self, context: AgentBuildContext) -> str:
         """Assemble a single SDK instructions string from the current agent context."""
@@ -376,10 +343,6 @@ class OpenAIAgentsEngine:
         if memory_block:
             parts.append(memory_block)
 
-        skill_block = self._build_skill_block(context)
-        if skill_block:
-            parts.append(skill_block)
-
         parts.append(
             "When you use tools, keep outputs grounded in tool results and do not invent file contents, SQL results, or command outcomes."
         )
@@ -398,19 +361,6 @@ class OpenAIAgentsEngine:
             return ""
         return "## Memory\n\n" + "\n\n".join(sections)
 
-    def _build_skill_block(self, context: AgentBuildContext) -> str:
-        """Render enabled skill markdown prompts into one instructions block."""
-        sections: List[str] = []
-        for skill in context.skills:
-            skill_md = Path(skill.absolute_path) / "SKILL.md"
-            content = self._read_text_file(skill_md)
-            if not content:
-                continue
-            sections.append(f"### Skill: {skill.name}\n{content}")
-        if not sections:
-            return ""
-        return "## Skills\n\n" + "\n\n".join(sections)
-
     @staticmethod
     def _read_text_file(path: Path) -> str:
         """Read one UTF-8 text file and return stripped content."""
@@ -425,40 +375,18 @@ class OpenAIAgentsEngine:
 
     @staticmethod
     def _build_asset_bundle_prompt(asset_bundles: List[AssetBundleBackendConfig]) -> str:
-        """Build safe asset bundle instructions for the runtime system prompt."""
+        """Build a lightweight asset bundle hint for the runtime system prompt."""
         if not asset_bundles:
-            return "- Asset bundles: none."
+            return ""
 
-        mounted_entries: List[str] = []
-        for bundle in asset_bundles:
-            bundle_mount = f"{bundle.mount_path.rstrip('/')}/"
-            if bundle.bundle_type == "external":
-                mounted_entries.append(f"- Bundle `{bundle.bundle_name}` tables: `{bundle_mount}`")
-                continue
-
-            if bundle.bundle_type != "local":
-                continue
-
-            for volume in bundle.volumes:
-                volume_name = str(volume.get("name") or "").strip()
-                volume_type = str(volume.get("volume_type") or "local").strip()
-                if volume_type != "local" or not volume_name:
-                    continue
-                mounted_entries.append(
-                    f"- Bundle `{bundle.bundle_name}` volume `{volume_name}`: `{bundle.mount_path}_{volume_name}/`"
-                )
-
-        if not mounted_entries:
-            mounted_entries.append("- No asset bundle mounts are currently available.")
-
-        instructions = [
-            "- Asset bundles are exposed through virtual mount paths only.",
-            "- Never access `../../asset_bundles`, never use `..`, and never guess real OS paths.",
-            "- Use only the mounted paths below when reading bundle tables or files:",
-            *mounted_entries,
-            "- User queries and bundle names may be in Chinese, English, or mixed language. Match the best bundle based on the request.",
+        lines = [
+            "## Asset Bundles",
+            "The current business unit has data bundles available for analysis.",
+            "Prefer bundle-aware analysis tools or handoffs when the user asks about business data.",
         ]
-        return "\n".join(instructions)
+        for bundle in asset_bundles:
+            lines.append(f"- `{bundle.bundle_name}` ({bundle.bundle_type})")
+        return "\n".join(lines)
 
 
 def check_openai_agents_dependencies(raise_error: bool = True) -> bool:
@@ -479,7 +407,6 @@ def check_openai_agents_dependencies(raise_error: bool = True) -> bool:
 
 
 _engine_instance: Optional[OpenAIAgentsEngine] = None
-
 
 
 def get_openai_agents_engine() -> OpenAIAgentsEngine:

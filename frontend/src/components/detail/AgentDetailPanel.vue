@@ -339,10 +339,18 @@ const agentConfigManager = useConfigManager({
     }
   },
   onSaved: async () => {
-    // 刷新 agent 数据
-    if (selectedBusinessUnit.value && selectedAgent.value) {
-      await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
+    if (!selectedBusinessUnit.value || !selectedAgent.value) {
+      return;
     }
+
+    const businessUnitId = selectedBusinessUnit.value.id;
+    const agentName = selectedAgent.value.name;
+
+    // Refresh agent detail data first so the panel reflects the new file content.
+    await store.selectAgent(businessUnitId, agentName);
+
+    // Proactively ask backend runtime to reload the agent when config changed.
+    await agentRuntimeApi.load(businessUnitId, agentName);
   },
 });
 
