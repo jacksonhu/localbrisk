@@ -160,7 +160,84 @@ export function useSSEClient(options: SSEClientOptions = {}) {
   }
 
   /**
-   * 断开连接
+   * Generic POST-SSE stream execution with custom URL and body.
+   * Used by Foreman and any future non-single-agent SSE consumer.
+   */
+  async function executeStreamGeneric(
+    url: string,
+    body: Record<string, any>,
+  ): Promise<void> {
+    disconnect();
+
+    isConnecting.value = true;
+    lastError.value = null;
+    retryCount.value = 0;
+
+    try {
+      abortController = new AbortController();
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      reader = response.body?.getReader() || null;
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      isConnected.value = true;
+      isConnecting.value = false;
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const msg: StreamMessage = JSON.parse(line.slice(6));
+              if (msg.execution_id) {
+                lastExecutionId.value = msg.execution_id;
+              }
+              onMessage?.(msg);
+            } catch {
+              // Ignore JSON parse errors
+            }
+          }
+        }
+      }
+
+      isConnected.value = false;
+      onClose?.();
+    } catch (err: any) {
+      isConnecting.value = false;
+      isConnected.value = false;
+
+      if (err.name === "AbortError") {
+        return;
+      }
+
+      lastError.value = err;
+      onError?.(err);
+    }
+  }
+
+  /**
+   * Disconnect active SSE connection.
    */
   function disconnect() {
     if (abortController) {
@@ -182,8 +259,9 @@ export function useSSEClient(options: SSEClientOptions = {}) {
     lastError,
     retryCount,
     lastExecutionId,
-    // 方法
+    // Methods
     executeStreamV2,
+    executeStreamGeneric,
     fetchSnapshot,
     disconnect,
   };

@@ -60,7 +60,7 @@ class BusinessUnitTreeBuilder:
                         {
                             "business_unit_id": business_unit.id,
                             "agent_name": agent.name,
-                            "active_model": agent.active_model,
+                            "llm_model": agent.llm_config.llm_model if agent.llm_config else None,
                         },
                     )
                 )
@@ -90,7 +90,7 @@ class BusinessUnitTreeBuilder:
                     metadata={
                         "description": agent.description,
                         "business_unit_id": business_unit.id,
-                        "active_model": agent.active_model,
+                        "llm_model": agent.llm_config.llm_model if agent.llm_config else None,
                     },
                 )
             )

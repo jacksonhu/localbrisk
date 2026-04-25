@@ -57,6 +57,19 @@ from app.models.business_unit import (
     MemoryUpdate,
 )
 
+from app.models.foreman import (
+    ForemanAgentInfo,
+    ConversationMember,
+    ConversationSummary,
+    ConversationDetail,
+    TimelineMessage,
+    CreateConversationRequest,
+    AddMembersRequest,
+    SendMessageRequest,
+    ConversationListResponse,
+    TimelineResponse,
+)
+
 __all__ = [
     # Base models
     "BaseInfo",
@@ -109,4 +122,15 @@ __all__ = [
     "Memory",
     "MemoryCreate",
     "MemoryUpdate",
+    # Foreman
+    "ForemanAgentInfo",
+    "ConversationMember",
+    "ConversationSummary",
+    "ConversationDetail",
+    "TimelineMessage",
+    "CreateConversationRequest",
+    "AddMembersRequest",
+    "SendMessageRequest",
+    "ConversationListResponse",
+    "TimelineResponse",
 ]

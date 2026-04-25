@@ -213,32 +213,6 @@ def parse_skill_config(file_path: Union[str, Path]) -> Dict[str, Any]:
     return data
 
 
-def load_prompts_from_directory(
-    prompts_dir: Union[str, Path]
-) -> Dict[str, str]:
-    """Load all prompt templates from directory
-    
-    Args:
-        prompts_dir: prompts directory path
-        
-    Returns:
-        {模板名称: 模板内容} 的字典
-    """
-    prompts_dir = Path(prompts_dir)
-    prompts = {}
-    
-    if not prompts_dir.exists():
-        return prompts
-    
-    for file_path in prompts_dir.iterdir():
-        if file_path.is_file() and file_path.suffix in [".md", ".txt", ".prompt"]:
-            name = file_path.stem
-            with open(file_path, "r", encoding="utf-8") as f:
-                prompts[name] = f.read()
-    
-    return prompts
-
-
 def load_skills_from_directory(
     skills_dir: Union[str, Path]
 ) -> List[Dict[str, Any]]:

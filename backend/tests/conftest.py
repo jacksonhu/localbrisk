@@ -111,9 +111,15 @@ def _create_sample_catalog_data(catalogs_dir: Path):
     test_agent_dir.mkdir(exist_ok=True)
     
     agent_config = {
-        "description": "测试智能体",
-        "system_prompt": "你是一个测试助手",
-        "model_reference": "data.gpt-4",
+        "baseinfo": {
+            "name": "test_agent",
+            "description": "测试智能体",
+        },
+        "instruction": "You are agent test_agent\nWorking directory: {{agent_path}}\nCurrent date: {{now}}",
+        "llm_config": {
+            "llm_model": "gpt-4"
+        },
+        "skills": [],
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat()
     }
@@ -125,10 +131,10 @@ def _create_sample_catalog_data(catalogs_dir: Path):
     skills_dir.mkdir(exist_ok=True)
     (skills_dir / "search.py").write_text('# 搜索技能')
     
-    # 创建 prompts 子目录
-    prompts_dir = test_agent_dir / "prompts"
-    prompts_dir.mkdir(exist_ok=True)
-    (prompts_dir / "system.md").write_text('# 系统提示词')
+    # 创建 memories 子目录
+    memories_dir = test_agent_dir / "memories"
+    memories_dir.mkdir(exist_ok=True)
+    (memories_dir / "AGENTS.md").write_text('# Agent Memory\n\nThis is a default memory file.')
     
     # ==================== 创建 schemas 目录结构 ====================
     schemas_dir = catalog_path / "schemas"

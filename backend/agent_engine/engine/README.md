@@ -39,7 +39,7 @@
 - 调用 `build_openai_model_bundle()` 把 YAML 模型配置转换为 SDK model；
 - 调用 `build_builtin_tools(agent_path=...)` 构建内建工具；
 - 调用 `OpenAIToolAdapter.adapt_tools()` 转成 SDK `FunctionTool`；
-- 调用 `build_openai_native_skills()` 把 `native_skills` 构造成 skill agent tools；
+- 调用 `build_openai_skills()` 把 `skills` 构造成 skill agent tools；
 - 调用 `build_openai_handoffs()` 构建 SDK handoff Agent；
 - 创建 SDK `Agent`，并包装成 `OpenAIAgentRuntime`；
 - 管理 SQLite session 与少量 runtime 资源清理。
@@ -58,21 +58,6 @@
 - 确保 `output/` 目录存在；
 - 读取 business unit 级别的 asset bundle 配置；
 - 计算配置指纹 `compute_agent_context_fingerprint()`，供上层做热重载判断。
-
-### `agent_loader.py`
-
-这是**偏展示/管理视角**的轻量配置加载器。
-
-它更适合：
-
-- 详情页展示；
-- 配置扫描；
-- 查看启用的 model / prompt / skill。
-
-和 `agent_context_loader.py` 的区别是：
-
-- `agent_loader.py` 更偏“管理视图”；
-- `agent_context_loader.py` 更偏“运行时视图”。
 
 ### `handoff_registry.py`
 
@@ -173,13 +158,10 @@ AgentRuntimeService
 
 其中 `instructions` 来自以下几部分：
 
-- agent 基本说明；
-- 当前工作目录；
-- 当前时间；
+- `instruction`（纯字符串模板，支持 `{{agent_name}}`/`{{agent_path}}`/`{{now}}` 变量渲染）；
 - `baseinfo.description`；
-- `instruction.system_prompt/prompt/role`；
 - asset bundle 简要提示；
-- memory 内容；
+- memory 内容（自动加载 `memories/*.md`）；
 - 工具使用约束。
 
 skill 不再直接参与这里的 `instructions` 拼装，而是通过独立 skill agent 进入 `tools` 集合。
@@ -268,13 +250,13 @@ session 默认保存在：
 3. 在 `build_builtin_tools()` 中接入；
 4. 由 `OpenAIToolAdapter` 自动转成 SDK tool。
 
-### 新增一个 native skill
+### 新增一个 skill
 
 推荐路径：
 
 1. 在 `skills/<skill_name>/` 下放置 `SKILL.md`；
 2. 如需更好的展示名或 tool 描述，可补充同目录 YAML；
-3. 在 `agent_spec.yaml -> capabilities.native_skills` 中声明该 skill；
+3. 在 `agent_spec.yaml -> skills` 列表中声明该 skill；
 4. runtime 会自动把它构造成 skill agent，并通过 `Agent.as_tool()` 暴露给主 Agent。
 
 ### 新增一个 handoff 子代理
@@ -288,7 +270,7 @@ session 默认保存在：
 ### 新增运行时配置来源
 
 - 如果是**运行时真正依赖的数据**，优先接到 `agent_context_loader.py`；
-- 如果是**展示/管理视图需要的数据**，优先接到 `agent_loader.py`。
+- 如果是**展示/管理视图需要的数据**，优先接到 `agent_service.py`。
 
 ---
 

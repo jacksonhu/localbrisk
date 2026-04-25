@@ -156,21 +156,42 @@
             </div>
           </div>
 
-          <!-- 系统提示词 -->
-          <div v-if="selectedAgent?.system_prompt" class="card-float p-4">
+          <!-- Instruction（可编辑的 system prompt 模板） -->
+          <div class="card-float p-4">
             <div class="flex items-center justify-between mb-3">
               <h3 class="font-medium">{{ t('businessUnit.systemPrompt') }}</h3>
+              <div class="flex items-center gap-2">
+                <button
+                  v-if="instructionDirty"
+                  @click="resetInstruction"
+                  class="px-3 py-1 text-xs border border-border rounded hover:bg-muted transition-colors"
+                >
+                  {{ t('common.cancel') }}
+                </button>
+                <button
+                  :disabled="!instructionDirty || savingInstruction"
+                  @click="saveInstruction"
+                  class="px-3 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {{ savingInstruction ? t('common.saving') : t('common.save') }}
+                </button>
+              </div>
             </div>
-            <div class="bg-muted/50 rounded-lg p-4 text-sm font-mono whitespace-pre-wrap max-h-48 overflow-y-auto">
-              {{ selectedAgent.system_prompt }}
-            </div>
+            <!-- Placeholders {{agent_name}} / {{agent_path}} / {{now}} 将在运行时由后端渲染 -->
+            <textarea
+              v-model="instructionDraft"
+              rows="6"
+              spellcheck="false"
+              class="w-full bg-muted/50 rounded-lg p-3 text-sm font-mono whitespace-pre-wrap resize-y focus:outline-none focus:ring-2 focus:ring-primary"
+              :placeholder="defaultInstructionHint"
+            ></textarea>
           </div>
 
           <!-- Skills 列表 -->
           <ItemListCard
             title="Skills"
             :title-icon="Code"
-            :items="selectedAgent?.skills || []"
+            :items="selectedAgent?.available_skills || []"
             :columns="skillColumns"
             key-field="name"
             show-count
@@ -181,7 +202,7 @@
             @toggle="handleSkillToggleEvent"
           />
 
-          <!-- Memories 列表 -->
+          <!-- Memories 列表（纯展示，无启停开关） -->
           <ItemListCard
             title="Memories"
             :title-icon="FileText"
@@ -193,7 +214,6 @@
             :empty-text="t('agent.noMemories')"
             row-clickable
             @row-click="handleMemoryRowClick"
-            @toggle="handleMemoryToggleEvent"
           />
 
           <!-- Models 列表 -->
@@ -293,7 +313,7 @@ import ConfigEditor from "@/components/common/ConfigEditor.vue";
 import type { ColumnConfig } from "@/components/common/ItemListCard.vue";
 import { useBusinessUnitStore } from "@/stores/businessUnitStore";
 import { useConfigManager } from "@/composables/useConfigManager";
-import { agentApi, modelApi } from "@/services/api";
+import { agentApi, agentRuntimeApi } from "@/services/api";
 import { formatDate } from "@/utils/formatUtils";
 import type { MemoryCreate, ModelCreate } from "@/types/catalog";
 
@@ -386,11 +406,10 @@ const skillColumns: ColumnConfig[] = [
   { key: 'enabled', type: 'toggle', isEnabled: isSkillEnabled },
 ];
 
-// Prompts 列配置
+// Memories 列配置（纯只读：不再有 enabled 列）
 const memoryColumns: ColumnConfig[] = [
   { key: 'icon', type: 'icon', icon: FileText, class: 'text-blue-500' },
   { key: 'name', type: 'text', field: 'name', flex: true, class: 'font-medium' },
-  { key: 'enabled', type: 'toggle', isEnabled: isMemoryEnabled },
 ];
 
 // Models 列配置
@@ -399,6 +418,56 @@ const modelColumns: ColumnConfig[] = [
   { key: 'name', type: 'text', field: 'name', flex: true, class: 'font-medium' },
   { key: 'enabled', type: 'toggle', isEnabled: isModelEnabled },
 ];
+
+// ================= Instruction 编辑 =================
+
+// Default instruction hint shown when an agent has no custom instruction yet.
+const defaultInstructionHint = computed(() =>
+  'You are agent {{agent_name}}\nWorking directory: {{agent_path}}\nCurrent date: {{now}}'
+);
+
+// Draft and baseline values used to compute the dirty flag.
+const instructionDraft = ref<string>('');
+const instructionBaseline = ref<string>('');
+const savingInstruction = ref(false);
+
+const instructionDirty = computed(() => instructionDraft.value !== instructionBaseline.value);
+
+// Sync draft buffer whenever the selected agent or its instruction changes.
+watch(
+  () => selectedAgent.value?.instruction ?? '',
+  (val) => {
+    instructionBaseline.value = val ?? '';
+    instructionDraft.value = val ?? '';
+  },
+  { immediate: true },
+);
+
+function resetInstruction() {
+  instructionDraft.value = instructionBaseline.value;
+}
+
+async function saveInstruction() {
+  if (!selectedBusinessUnit.value || !selectedAgent.value) return;
+  if (!instructionDirty.value) return;
+
+  savingInstruction.value = true;
+  try {
+    const updated = await store.updateAgent(
+      selectedBusinessUnit.value.id,
+      selectedAgent.value.name,
+      { instruction: instructionDraft.value },
+    );
+    if (updated) {
+      instructionBaseline.value = updated.instruction ?? '';
+      instructionDraft.value = updated.instruction ?? '';
+    }
+  } catch (e) {
+    console.error('Failed to update instruction:', e);
+  } finally {
+    savingInstruction.value = false;
+  }
+}
 
 // 点击外部关闭下拉菜单
 function handleClickOutside(event: MouseEvent) {
@@ -488,67 +557,41 @@ function handleMemoryRowClick(payload: { item: ItemType; index: number }) {
   openMemoryDetail(payload.item as string | Record<string, unknown>);
 }
 
-// 检查 Skill 是否启用（从 capabilities.native_skills）
+// Skill enabled state: driven purely by the top-level ``skills`` list in agent_spec.yaml.
 function isSkillEnabled(item: ItemType): boolean {
   const skillName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
-  const nativeSkills = selectedAgent.value?.capabilities?.native_skills || [];
-  return nativeSkills.some(s => s.name === skillName);
+  return (selectedAgent.value?.skills || []).includes(skillName);
 }
 
-// 检查 Memory 是否启用（从 instruction.user_prompt_templates）
-function isMemoryEnabled(item: ItemType): boolean {
-  const memoryName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
-  const memoryTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
-  return memoryTemplates.some(p => p.name === memoryName);
-}
-
-// 检查 Model 是否启用（从 active_model 或 llm_config.llm_model）
+// Model enabled state: only look at llm_config.llm_model (single source of truth).
 function isModelEnabled(item: ItemType): boolean {
   const modelName = typeof item === 'string' ? item : String((item as Record<string, unknown>).name || '');
-  // 检查 active_model 字段
-  if (selectedAgent.value?.active_model === modelName) {
-    return true;
-  }
-  // 也检查 llm_config.llm_model 是否包含该模型名称
-  const llmModel = selectedAgent.value?.llm_config?.llm_model || '';
-  return llmModel.includes(modelName);
+  return selectedAgent.value?.llm_config?.llm_model === modelName;
 }
 
-// 处理 Skill 开关切换事件
+// Skill toggle: add or remove the name in the enabled list and persist via update agent.
 async function handleSkillToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
   if (!selectedBusinessUnit.value || !selectedAgent.value) return;
-  
-  const skillName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
+
+  const skillName = typeof payload.item === 'string'
+    ? payload.item
+    : String((payload.item as Record<string, unknown>).name || '');
+
+  const current = new Set(selectedAgent.value.skills || []);
+  if (payload.enabled) {
+    current.add(skillName);
+  } else {
+    current.delete(skillName);
+  }
+
   try {
-    await agentApi.toggleSkillEnabled(
+    await store.updateAgent(
       selectedBusinessUnit.value.id,
       selectedAgent.value.name,
-      skillName,
-      payload.enabled
+      { skills: Array.from(current) },
     );
-    // 刷新 Agent 详情以更新状态
-    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   } catch (e) {
     console.error('Failed to toggle skill enabled:', e);
-  }
-}
-
-// 处理 Memory 开关切换事件
-async function handleMemoryToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
-  if (!selectedBusinessUnit.value || !selectedAgent.value) return;
-  
-  const memoryName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
-  try {
-    await agentApi.toggleMemoryEnabled(
-      selectedBusinessUnit.value.id,
-      selectedAgent.value.name,
-      memoryName,
-      payload.enabled
-    );
-    // 刷新 Agent 详情以更新状态
-    await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
-  } catch (e) {
-    console.error('Failed to toggle prompt enabled:', e);
   }
 }
 
@@ -560,42 +603,23 @@ function handleModelRowClick(payload: { item: ItemType; index: number }) {
   }
 }
 
-// 处理 Model 开关切换事件（一个 Agent 只能启用一个 Model）
+// 处理 Model 开关切换事件（通过 updateAgent 统一更新 llm_config.llm_model）
 async function handleModelToggleEvent(payload: { column: ColumnConfig; item: ItemType; index: number; enabled: boolean }) {
   if (!selectedBusinessUnit.value || !selectedAgent.value) return;
   
   const modelName = typeof payload.item === 'string' ? payload.item : String((payload.item as Record<string, unknown>).name || '');
   
-  // 如果是要禁用，不做任何操作（一个 Agent 必须有一个启用的 Model，或者都禁用）
-  // 如果是要启用，则调用 enable API（后端会自动禁用其他 Model）
-  if (!payload.enabled) {
-    // 禁用当前模型（清除 active_model）
-    try {
-      await modelApi.update(
-        selectedBusinessUnit.value.id,
-        selectedAgent.value.name,
-        modelName,
-        { enabled: false }
-      );
-      // 刷新 Agent 详情以更新状态
-      await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
-    } catch (e) {
-      console.error('Failed to disable model:', e);
-    }
-    return;
-  }
-  
   try {
-    // 启用指定 Model（后端会自动禁用其他 Model）
-    await modelApi.enable(
+    // 统一通过 updateAgent 更新 llm_config.llm_model
+    await store.updateAgent(
       selectedBusinessUnit.value.id,
       selectedAgent.value.name,
-      modelName
+      { llm_config: { llm_model: payload.enabled ? modelName : '' } }
     );
     // 刷新 Agent 详情以更新状态
     await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
   } catch (e) {
-    console.error('Failed to enable model:', e);
+    console.error('Failed to toggle model:', e);
   }
 }
 

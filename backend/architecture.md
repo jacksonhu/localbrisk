@@ -82,8 +82,8 @@ Detailed steps:
 3. If reuse is allowed, the already-loaded runtime is returned; otherwise a rebuild is triggered.
 4. `load_agent_context(...)` loads:
    - `agent_spec.yaml`
-   - the resolved active model from `active_model` or `llm_config.llm_model`
-   - enabled memory files from `memories/`
+   - the resolved model from `llm_config.llm_model`
+   - auto-loaded memory files from `memories/`
    - enabled skills from `skills/`
    - writable `output/`
    - BusinessUnit-level asset bundles
@@ -116,7 +116,6 @@ Catalogs/{business_unit}/
 │   ├── models/*.yaml
 │   ├── memories/*.md
 │   ├── skills/{skill_name}/SKILL.md
-│   ├── prompts/*.md               # legacy/helper prompt assets
 │   └── output/
 └── asset_bundles/{bundle_name}/
     ├── bundle.yaml
@@ -127,17 +126,17 @@ Catalogs/{business_unit}/
 Key runtime rules:
 
 - `agent_spec.yaml` is the entry point and must be a YAML object.
-- `active_model` is the preferred model selector; `llm_config.llm_model` remains a compatibility fallback.
-- `instruction.user_prompt_templates` resolves files from `memories/`.
-- `capabilities.native_skills` resolves directories from `skills/`.
+- `llm_config.llm_model` is the sole model selector.
+- `instruction` is a plain string template; `memories/*.md` are auto-loaded at runtime.
+- `skills` (top-level list) resolves directories from `skills/`.
 - BusinessUnit `asset_bundles/` metadata is loaded and exposed to the runtime workspace.
 
 ### 中文速览
 
 - 当前运行时就是直接从目录结构构建出来的，**没有独立数据库保存 Agent 定义**。
-- `active_model` 是优先模型选择字段，`llm_config.llm_model` 是兼容回退字段。
-- `instruction.user_prompt_templates` 对应 `memories/` 里的 Markdown 文件。
-- `capabilities.native_skills` 对应 `skills/<name>/SKILL.md`。
+- `llm_config.llm_model` 是唯一的模型选择字段。
+- `instruction` 是纯字符串模板；`memories/*.md` 在运行时自动加载。
+- `skills`（顶层列表）对应 `skills/<name>/SKILL.md`。
 
 ---
 
@@ -151,7 +150,6 @@ The fingerprint currently includes metadata from:
 - `models/`
 - `memories/`
 - `skills/`
-- `prompts/`
 - BusinessUnit `asset_bundles/`
 
 Reload semantics:
@@ -161,12 +159,12 @@ Reload semantics:
 - **Changed fingerprint + RUNNING**: keep the current execution alive, and apply the new config to the following request.
 - **Manual unload**: still available through the runtime API.
 
-This behavior fixes the previous issue where changing `agent_spec.yaml` (for example `active_model`) did not take effect because the old READY runtime was reused blindly.
+This behavior fixes the previous issue where changing `agent_spec.yaml` (for example `llm_config.llm_model`) did not take effect because the old READY runtime was reused blindly.
 
 ### 中文速览
 
 - 现在 runtime 会记录 `config_fingerprint`，复用前先比较文件签名。
-- `agent_spec.yaml`、模型、memory、skill、prompt、asset bundle 变更都会影响签名。
+- `agent_spec.yaml`、模型、memory、skill、asset bundle 变更都会影响签名。
 - **READY** 状态下配置变更会自动重建。
 - **RUNNING** 状态下不会打断当前执行，而是下一次请求再切新配置。
 

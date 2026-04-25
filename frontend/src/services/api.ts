@@ -412,22 +412,6 @@ export const agentApi = {
     }),
 
   /**
-   * 切换 Memory 启用状态
-   */
-  toggleMemoryEnabled: (businessUnitId: string, agentName: string, memoryName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
-    request<{ message: string; enabled: boolean }>(`/api/business_units/${businessUnitId}/agents/${agentName}/memories/${memoryName}/toggle?enabled=${enabled}`, {
-      method: "POST",
-    }),
-
-  /**
-   * 切换 Skill 启用状态
-   */
-  toggleSkillEnabled: (businessUnitId: string, agentName: string, skillName: string, enabled: boolean): Promise<{ message: string; enabled: boolean }> =>
-    request<{ message: string; enabled: boolean }>(`/api/business_units/${businessUnitId}/agents/${agentName}/skills/${skillName}/toggle?enabled=${enabled}`, {
-      method: "POST",
-    }),
-
-  /**
    * 从本地 zip 文件路径导入 Skill
    * 本地桌面应用场景，直接传递本地文件路径
    */
@@ -485,13 +469,6 @@ export const modelApi = {
       method: "DELETE",
     }),
 
-  /**
-   * 启用 Model（禁用其他 Model）
-   */
-  enable: (businessUnitId: string, agentName: string, modelName: string): Promise<{ message: string; model_name: string }> =>
-    request<{ message: string; model_name: string }>(`/api/business_units/${businessUnitId}/agents/${agentName}/models/${modelName}/enable`, {
-      method: "POST",
-    }),
 };
 
 // ============ MCP API（Agent 级别）============
@@ -729,6 +706,60 @@ export const modelRuntimeApi = {
     }),
 };
 
+// ============ Foreman API ============
+
+import type {
+  ForemanAgentDirectoryItem,
+  ForemanConversationDetail,
+  ForemanConversationSummary,
+  ForemanMessage,
+} from "@/types/foreman";
+
+interface ForemanConversationListResponse {
+  conversations: ForemanConversationSummary[];
+}
+
+interface ForemanTimelineResponse {
+  conversation_id: string;
+  messages: ForemanMessage[];
+  total: number;
+}
+
+export const foremanApi = {
+  listAgents: (): Promise<ForemanAgentDirectoryItem[]> =>
+    request("/api/foreman/agents"),
+
+  createConversation: (agentIds: string[], title?: string): Promise<ForemanConversationDetail> =>
+    request("/api/foreman/conversations", {
+      method: "POST",
+      body: JSON.stringify({ agent_ids: agentIds, title }),
+    }),
+
+  listConversations: (): Promise<ForemanConversationListResponse> =>
+    request("/api/foreman/conversations"),
+
+  getConversation: (id: string): Promise<ForemanConversationDetail> =>
+    request(`/api/foreman/conversations/${id}`),
+
+  deleteConversation: (id: string): Promise<{ message: string; success: boolean }> =>
+    request(`/api/foreman/conversations/${id}`, { method: "DELETE" }),
+
+  addMembers: (id: string, agentIds: string[]): Promise<ForemanConversationDetail> =>
+    request(`/api/foreman/conversations/${id}/members`, {
+      method: "POST",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    }),
+
+  getMessages: (id: string, limit = 50, offset = 0): Promise<ForemanTimelineResponse> =>
+    request(`/api/foreman/conversations/${id}/messages?limit=${limit}&offset=${offset}`),
+
+  getStreamUrl: (id: string): string =>
+    `${API_BASE_URL}/api/foreman/conversations/${id}/messages/stream`,
+
+  clearContext: (id: string): Promise<{ message: string; results: any[] }> =>
+    request(`/api/foreman/conversations/${id}/context`, { method: "DELETE" }),
+};
+
 // ============ 默认导出 ============
 
 // 导入 LLM API
@@ -746,6 +777,7 @@ export default {
   mcp: mcpApi,
   agentRuntime: agentRuntimeApi,
   modelRuntime: modelRuntimeApi,
+  foreman: foremanApi,
   llm: llmApi,
 };
 

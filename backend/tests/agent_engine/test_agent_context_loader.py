@@ -1,4 +1,4 @@
-"""Unit tests for the shared agent context loader."""
+"""Unit tests for the shared agent context loader under the simplified schema."""
 
 from __future__ import annotations
 
@@ -10,24 +10,28 @@ import yaml
 
 @pytest.fixture
 def temp_business_unit_agent_dir(tmp_path: Path) -> dict:
-    """Create a BusinessUnit-like structure with one external asset bundle."""
+    """Build a BusinessUnit-like tree with one external asset bundle."""
     business_unit_dir = tmp_path / "test_unit"
     agent_dir = business_unit_dir / "agents" / "test_data_analyst"
     asset_bundle_dir = business_unit_dir / "asset_bundles" / "sales_bundle"
     tables_dir = asset_bundle_dir / "tables"
     models_dir = agent_dir / "models"
     skills_dir = agent_dir / "skills" / "test_skill"
+    memories_dir = agent_dir / "memories"
     output_dir = agent_dir / "output"
 
-    tables_dir.mkdir(parents=True, exist_ok=True)
-    models_dir.mkdir(parents=True, exist_ok=True)
-    skills_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    for directory in (tables_dir, models_dir, skills_dir, memories_dir, output_dir):
+        directory.mkdir(parents=True, exist_ok=True)
 
     agent_spec = {
         "baseinfo": {"name": "test_data_analyst", "description": "Test agent"},
-        "active_model": "test_model",
-        "llm_config": {"temperature": 0.2, "max_tokens": 1024},
+        "instruction": "You are agent {{agent_name}}",
+        "llm_config": {
+            "llm_model": "test_model",
+            "temperature": 0.2,
+            "max_tokens": 1024,
+        },
+        "skills": [],
     }
     model_config = {
         "model_type": "endpoint",
@@ -58,16 +62,19 @@ def temp_business_unit_agent_dir(tmp_path: Path) -> dict:
         ],
     }
 
-    with open(agent_dir / "agent_spec.yaml", "w", encoding="utf-8") as file:
-        yaml.safe_dump(agent_spec, file, allow_unicode=True, sort_keys=False)
-    with open(models_dir / "test_model.yaml", "w", encoding="utf-8") as file:
-        yaml.safe_dump(model_config, file, allow_unicode=True, sort_keys=False)
-    with open(skills_dir / "SKILL.md", "w", encoding="utf-8") as file:
-        file.write("# Test Skill\n\nSkill content.")
-    with open(asset_bundle_dir / "bundle.yaml", "w", encoding="utf-8") as file:
-        yaml.safe_dump(bundle_yaml, file, allow_unicode=True, sort_keys=False)
-    with open(tables_dir / "orders.yaml", "w", encoding="utf-8") as file:
-        yaml.safe_dump(table_yaml, file, allow_unicode=True, sort_keys=False)
+    (agent_dir / "agent_spec.yaml").write_text(
+        yaml.safe_dump(agent_spec, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    (models_dir / "test_model.yaml").write_text(
+        yaml.safe_dump(model_config, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    (skills_dir / "SKILL.md").write_text("# Test Skill\n\nSkill content.", encoding="utf-8")
+    (asset_bundle_dir / "bundle.yaml").write_text(
+        yaml.safe_dump(bundle_yaml, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    (tables_dir / "orders.yaml").write_text(
+        yaml.safe_dump(table_yaml, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
 
     return {
         "business_unit_dir": business_unit_dir,
@@ -123,24 +130,23 @@ class TestAgentContextLoader:
         assert bundle.bundle_type == "external"
         assert bundle.bundle_path.endswith("sales_bundle")
 
-    def test_compute_agent_context_fingerprint_changes_when_active_model_changes(self, temp_agent_dir):
-        from agent_engine.engine.agent_context_loader import compute_agent_context_fingerprint, load_agent_spec
+    def test_compute_agent_context_fingerprint_changes_when_llm_model_changes(self, temp_agent_dir):
+        from agent_engine.engine.agent_context_loader import (
+            compute_agent_context_fingerprint,
+            load_agent_spec,
+        )
 
         agent_path = Path(temp_agent_dir["agent_path"])
         initial_fingerprint = compute_agent_context_fingerprint(agent_path, "test_unit")
 
         spec = load_agent_spec(agent_path)
-        spec["active_model"] = "gpt5"
+        spec["llm_config"]["llm_model"] = "gpt5"
         (agent_path / "agent_spec.yaml").write_text(
-            yaml.safe_dump(spec, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
+            yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8"
         )
         (agent_path / "models" / "gpt5.yaml").write_text(
             yaml.safe_dump(
-                {
-                    **temp_agent_dir["data"]["model_config"],
-                    "model_id": "gpt-5",
-                },
+                {**temp_agent_dir["data"]["model_config"], "model_id": "gpt-5"},
                 allow_unicode=True,
                 sort_keys=False,
             ),
@@ -148,52 +154,48 @@ class TestAgentContextLoader:
         )
 
         updated_fingerprint = compute_agent_context_fingerprint(agent_path, "test_unit")
-
         assert updated_fingerprint != initial_fingerprint
 
     def test_compute_agent_context_fingerprint_ignores_unselected_skills(self, temp_agent_dir):
-        from agent_engine.engine.agent_context_loader import compute_agent_context_fingerprint, load_agent_spec
+        from agent_engine.engine.agent_context_loader import (
+            compute_agent_context_fingerprint,
+            load_agent_spec,
+        )
 
         agent_path = Path(temp_agent_dir["agent_path"])
         spec = load_agent_spec(agent_path)
-        spec["capabilities"] = {"native_skills": [{"name": "test_skill"}]}
+        spec["skills"] = ["test_skill"]
         (agent_path / "agent_spec.yaml").write_text(
-            yaml.safe_dump(spec, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
+            yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8"
         )
 
         baseline = compute_agent_context_fingerprint(agent_path, "test_unit")
         ignored_skill_dir = agent_path / "skills" / "ignored_skill"
         ignored_skill_dir.mkdir(parents=True, exist_ok=True)
-        (ignored_skill_dir / "SKILL.md").write_text("# Ignored Skill\n\nShould not affect runtime.", encoding="utf-8")
+        (ignored_skill_dir / "SKILL.md").write_text(
+            "# Ignored Skill\n\nShould not affect runtime.", encoding="utf-8"
+        )
 
         assert compute_agent_context_fingerprint(agent_path, "test_unit") == baseline
 
-    def test_load_memories_prefers_instruction_templates(self, temp_agent_dir):
-        from agent_engine.engine.agent_context_loader import load_memories, load_agent_spec
+    def test_load_memories_returns_every_markdown_under_memories_dir(self, temp_agent_dir):
+        from agent_engine.engine.agent_context_loader import load_memories
 
         agent_path = Path(temp_agent_dir["agent_path"])
         memories_dir = agent_path / "memories"
-        memories_dir.mkdir(exist_ok=True)
-        (memories_dir / "AGENTS.md").write_text("# Default memory", encoding="utf-8")
         (memories_dir / "project.md").write_text("# Project memory", encoding="utf-8")
-        (memories_dir / "ignored.md").write_text("# Ignored memory", encoding="utf-8")
+        (memories_dir / "extra.md").write_text("# Extra memory", encoding="utf-8")
 
-        spec_path = agent_path / "agent_spec.yaml"
-        spec = load_agent_spec(agent_path)
-        spec["instruction"] = {
-            "user_prompt_templates": [
-                {"name": "project"},
-                {"name": "AGENTS.md"},
-            ]
-        }
-        spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        memories = load_memories(agent_path)
 
-        memories = load_memories(agent_path, agent_spec=load_agent_spec(agent_path))
+        # Seeded AGENTS.md plus the two files above, in stable alphabetical order.
+        assert memories == [
+            "/memories/AGENTS.md",
+            "/memories/extra.md",
+            "/memories/project.md",
+        ]
 
-        assert memories == ["/memories/project.md", "/memories/AGENTS.md"]
-
-    def test_load_skills_returns_empty_when_native_skills_not_declared(self, temp_agent_dir):
+    def test_load_skills_returns_empty_when_skills_not_declared(self, temp_agent_dir):
         from agent_engine.engine.agent_context_loader import load_skills
 
         agent_path = Path(temp_agent_dir["agent_path"])
@@ -201,7 +203,7 @@ class TestAgentContextLoader:
 
         assert skills == []
 
-    def test_load_skills_reads_only_declared_native_skills(self, temp_agent_dir):
+    def test_load_skills_reads_only_declared_skills(self, temp_agent_dir):
         from agent_engine.engine.agent_context_loader import load_agent_spec, load_skills
 
         agent_path = Path(temp_agent_dir["agent_path"])
@@ -231,12 +233,10 @@ class TestAgentContextLoader:
 
         spec_path = agent_path / "agent_spec.yaml"
         spec = load_agent_spec(agent_path)
-        spec["capabilities"] = {
-            "native_skills": [
-                {"name": "extra_skill"},
-            ]
-        }
-        spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        spec["skills"] = ["extra_skill"]
+        spec_path.write_text(
+            yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8"
+        )
 
         skills = load_skills(agent_path, agent_spec=load_agent_spec(agent_path))
 

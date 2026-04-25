@@ -8,7 +8,7 @@ App_Data/Catalogs/{catalog_name}/
 ├── agents/                        # Agent 目录
 │   └── {agent_name}/
 │       ├── agent_spec.yaml             # Agent 配置
-│       ├── prompts/               # Prompts 子目录
+│       ├── memories/              # Memories 子目录
 │       └── skills/                # Skills 子目录
 └── schemas/                       # Schema 目录
     └── {schema_name}/
@@ -396,8 +396,8 @@ class TestCatalogTree:
         tree = catalog_service_with_temp_dir.get_catalog_tree()
         assert tree == []
     
-    def test_tree_contains_agent_with_skills_and_prompts(self, catalog_service_with_temp_dir, sample_catalog):
-        """测试导航树中 Agent 包含 skills 和 prompts 子节点"""
+    def test_tree_contains_agent_with_skills_and_memories(self, catalog_service_with_temp_dir, sample_catalog):
+        """测试导航树中 Agent 包含 skills 和 memories 子节点"""
         tree = catalog_service_with_temp_dir.get_catalog_tree()
         catalog_node = tree[0]
         
@@ -411,13 +411,13 @@ class TestCatalogTree:
         
         child_names = [c.name for c in agent_node.children]
         assert "skills" in child_names
-        assert "prompts" in child_names
+        assert "memories" in child_names
         
         skills_node = [c for c in agent_node.children if c.name == "skills"][0]
         assert len(skills_node.children) >= 1
         
-        prompts_node = [c for c in agent_node.children if c.name == "prompts"][0]
-        assert len(prompts_node.children) >= 1
+        memories_node = [c for c in agent_node.children if c.name == "memories"][0]
+        assert len(memories_node.children) >= 1
 
 
 class TestLoadCatalogConfig:
@@ -573,7 +573,7 @@ class TestAgentOperations:
         assert agent_path.exists()
         assert (agent_path / AGENT_CONFIG_FILE).exists()
         assert (agent_path / "skills").exists()
-        assert (agent_path / "prompts").exists()
+        assert (agent_path / "memories").exists()
     
     def test_create_duplicate_agent(self, catalog_service_with_temp_dir, sample_catalog):
         """测试创建重复的 Agent 抛出异常"""
@@ -589,7 +589,7 @@ class TestAgentOperations:
         assert agent is not None
         assert agent.name == "test_agent"
         assert len(agent.skills) >= 1
-        assert len(agent.prompts) >= 1
+        assert len(agent.memories) >= 1
     
     def test_delete_agent(self, catalog_service_with_temp_dir, sample_catalog, temp_catalogs_dir):
         """测试删除 Agent"""

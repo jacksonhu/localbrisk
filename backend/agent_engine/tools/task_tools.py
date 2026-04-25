@@ -10,6 +10,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from .task_board import ProjectTaskBoard
+from .write_todo import WriteTodoTool
 
 
 class TaskCreateInput(BaseModel):
@@ -119,6 +120,7 @@ class TaskClaimTool(_TaskBoardTool):
 
 
 def create_task_tools(task_root: Optional[str] = None) -> list[BaseTool]:
+    """Create all task management tools sharing one ProjectTaskBoard instance."""
     root = Path(task_root) if task_root else (Path.cwd() / ".task")
     board = ProjectTaskBoard(root=root)
 
@@ -131,4 +133,9 @@ def create_task_tools(task_root: Optional[str] = None) -> list[BaseTool]:
     ]
     for tool in tools:
         tool._board = board
-    return tools
+
+    # write_todo shares the same board for consistent task state.
+    write_todo = WriteTodoTool()
+    write_todo._board = board
+
+    return [*tools, write_todo]

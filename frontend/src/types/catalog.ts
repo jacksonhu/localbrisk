@@ -309,11 +309,6 @@ export interface AgentMetadata {
   description?: string;
 }
 
-/** 用户提示词模板 */
-export interface AgentPromptTemplate {
-  name: string;
-}
-
 /** Agent LLM 配置 */
 export interface AgentLLMConfig {
   llm_model?: string;
@@ -322,80 +317,49 @@ export interface AgentLLMConfig {
   response_format?: "text" | "json_object";
 }
 
-/** Agent 指令配置 */
-export interface AgentInstruction {
-  system_prompt?: string;
-  user_prompt_template?: string;
-  user_prompt_templates?: AgentPromptTemplate[];
-}
-
-/** Agent 路由配置 */
-export interface AgentRouting {
-  trigger_keywords?: string[];
-  required_context_keys?: string[];
-  next_possible_agents?: string[];
-}
-
-/** 原生技能 */
-export interface AgentNativeSkill {
-  name: string;
-}
-
-/** MCP 工具配置 */
-export interface AgentMCPTool {
-  mcp_name: string;
-  tools?: string[];
-}
-
-/** Agent 能力配置 */
-export interface AgentCapabilities {
-  native_skills?: AgentNativeSkill[];
-  mcp_tools?: AgentMCPTool[];
-}
-
-/** 人机协作配置 */
-export interface AgentHumanInTheLoop {
-  trigger?: string;
-}
-
-/** Agent 治理配置 */
-export interface AgentGovernance {
-  human_in_the_loop?: AgentHumanInTheLoop;
-  termination_criteria?: string;
-}
-
-/** Agent 信息 */
+/**
+ * Agent 信息
+ *
+ * 对应后端简化后的 agent_spec.yaml：
+ * - instruction: 字符串形式的 system prompt 模板（运行时渲染占位符）
+ * - skills: 在 yaml 中已启用的原生技能名称列表
+ * - available_skills: 目录扫描得到的全部可用技能
+ * - memories: 目录扫描得到的 markdown 文件名列表（运行时全部自动加载）
+ * - models: 目录扫描得到的模型配置名称列表
+ * - mcps: 目录扫描得到的 MCP 配置名称列表
+ * - llm_config.llm_model 是当前激活模型的唯一来源
+ */
 export interface Agent extends BaseEntity {
   id: string;
   business_unit_id: string;
   entity_type?: "agent";
   owner?: string;
-  
+
   // 配置节
+  instruction?: string;
   llm_config?: AgentLLMConfig;
-  instruction?: AgentInstruction;
-  routing?: AgentRouting;
-  capabilities?: AgentCapabilities;
-  governance?: AgentGovernance;
-  
-  // 目录扫描结果
+
+  // 启用态 + 目录扫描结果
   skills: string[];
+  available_skills: string[];
   memories: string[];
   models: string[];
   mcps: string[];
-  active_model?: string;
 }
 
 /** 创建 Agent 请求 */
 export interface AgentCreate extends BaseEntityCreate {}
 
-/** 更新 Agent 请求 */
+/**
+ * 更新 Agent 请求（支持部分更新）
+ * - instruction: 直接修改 system prompt 模板
+ * - llm_config.llm_model: 切换激活模型
+ * - skills: 启用的原生技能名称列表（后端会与目录扫描结果取交集）
+ */
 export interface AgentUpdate extends BaseEntityUpdate {
+  instruction?: string;
   llm_config?: AgentLLMConfig;
-  instruction?: AgentInstruction;
-  routing?: AgentRouting;
-  capabilities?: AgentCapabilities;
-  governance?: AgentGovernance;
+  skills?: string[];
 }
 
 // ============ Model 相关 ============
@@ -519,7 +483,6 @@ export interface OutputFileContent {
 export interface Memory extends BaseEntity {
   entity_type?: "prompt";
   content: string;
-  enabled: boolean;
 }
 
 /** 创建 Memory 请求 */

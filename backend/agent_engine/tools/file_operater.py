@@ -7,10 +7,12 @@ import logging
 import mimetypes
 import os
 from pathlib import Path
-from typing import Optional, Type
+from typing import Any, Optional, Sequence, Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
+
+from .bundle_path_resolver import BundlePathResolver
 
 logger = logging.getLogger(__name__)
 
@@ -428,11 +430,19 @@ class _BaseFileTool(BaseTool):
     """Common path resolution utilities shared by local file tools."""
 
     _base_path: Optional[str] = None
+    _bundle_resolver: Optional[BundlePathResolver] = None
 
     def _resolve_file_path(self, path: str) -> Path:
         raw_path = (path or "").strip()
         if not raw_path:
             raise ValueError("path cannot be empty")
+
+        # 处理 @ 前缀路径
+        if self._bundle_resolver is not None and self._bundle_resolver.is_bundle_path(raw_path):
+            resolved = self._bundle_resolver.resolve(raw_path)
+            if not resolved.success:
+                raise ValueError(resolved.error_message)
+            return resolved.physical_path
 
         candidate = Path(os.path.expanduser(raw_path))
         if candidate.is_absolute():
@@ -719,17 +729,25 @@ class FileWriteTool(_BaseFileTool):
 # ══════════════════════════════════════════════════════════════
 
 
-def create_file_read_tool(base_path: Optional[str] = None) -> FileReadTool:
+def create_file_read_tool(
+    base_path: Optional[str] = None,
+    asset_bundles: Optional[Sequence[Any]] = None,
+) -> FileReadTool:
     """Create a file_read tool resolved from one base directory."""
     tool = FileReadTool()
     tool._base_path = base_path
+    tool._bundle_resolver = BundlePathResolver(asset_bundles) if asset_bundles else None
     return tool
 
 
-def create_file_write_tool(base_path: Optional[str] = None) -> FileWriteTool:
+def create_file_write_tool(
+    base_path: Optional[str] = None,
+    asset_bundles: Optional[Sequence[Any]] = None,
+) -> FileWriteTool:
     """Create a file_write tool resolved from one base directory."""
     tool = FileWriteTool()
     tool._base_path = base_path
+    tool._bundle_resolver = BundlePathResolver(asset_bundles) if asset_bundles else None
     return tool
 
 

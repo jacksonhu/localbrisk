@@ -12,6 +12,7 @@ from .agent_runtime_service import (
     get_agent_runtime_service,
 )
 from .runtime_event_adapter import RuntimeEventAdapter
+from .foreman_runtime_service import ForemanRuntimeService, get_foreman_runtime_service
 
 __all__ = [
     "AgentRuntimeService",
@@ -20,4 +21,6 @@ __all__ = [
     "MessageTranslator",
     "RuntimeEventAdapter",
     "get_agent_runtime_service",
+    "ForemanRuntimeService",
+    "get_foreman_runtime_service",
 ]

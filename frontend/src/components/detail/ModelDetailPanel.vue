@@ -284,17 +284,10 @@ const selectedBusinessUnit = computed(() => store.selectedBusinessUnit.value);
 const selectedAgent = computed(() => store.selectedAgent.value);
 const selectedModel = computed(() => store.selectedModel.value);
 
-// 检查当前 Model 是否启用（通过 Agent 的 active_model 或 llm_config.llm_model）
+// Model enabled state: only driven by llm_config.llm_model (single source of truth).
 const isModelEnabled = computed(() => {
   if (!selectedModel.value || !selectedAgent.value) return false;
-  const modelName = selectedModel.value.name;
-  // 检查 active_model 字段
-  if (selectedAgent.value.active_model === modelName) {
-    return true;
-  }
-  // 也检查 llm_config.llm_model 是否包含该模型名称
-  const llmModel = selectedAgent.value.llm_config?.llm_model || '';
-  return llmModel.includes(modelName);
+  return selectedAgent.value.llm_config?.llm_model === selectedModel.value.name;
 });
 
 // 启用/禁用 Model 状态
@@ -439,7 +432,7 @@ async function handleConfirmDelete() {
   }
 }
 
-// 切换 Model 启用状态
+// 切换 Model 启用状态（通过 agentApi.update 统一更新 llm_config.llm_model）
 async function toggleModelEnabled() {
   if (!selectedBusinessUnit.value || !selectedAgent.value || !selectedModel.value) return;
   
@@ -447,22 +440,12 @@ async function toggleModelEnabled() {
   enablingModel.value = true;
   
   try {
-    if (newEnabled) {
-      // 启用模型
-      await modelApi.enable(
-        selectedBusinessUnit.value.id,
-        selectedAgent.value.name,
-        selectedModel.value.name
-      );
-    } else {
-      // 禁用模型
-      await modelApi.update(
-        selectedBusinessUnit.value.id,
-        selectedAgent.value.name,
-        selectedModel.value.name,
-        { enabled: false }
-      );
-    }
+    // 统一通过 updateAgent 更新 llm_config.llm_model
+    await store.updateAgent(
+      selectedBusinessUnit.value.id,
+      selectedAgent.value.name,
+      { llm_config: { llm_model: newEnabled ? selectedModel.value.name : '' } }
+    );
     // 刷新 Agent 详情以更新状态
     await store.selectAgent(selectedBusinessUnit.value.id, selectedAgent.value.name);
     // 刷新 Model 详情

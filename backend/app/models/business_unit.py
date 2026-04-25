@@ -19,7 +19,7 @@ Directory tree structure:
 ├── BusinessUnit
 │   ├── agents/{agent_name}/
 │   │   ├── agent_spec.yaml
-│   │   ├── prompts/
+│   │   ├── memories/
 │   │   ├── skills/
 │   │   ├── models/                    # Model config directory
 │   │   │   └── {model_name}.yaml
@@ -365,8 +365,16 @@ class AgentCreate(BaseInfoCreate):
 
 
 class AgentUpdate(BaseInfoUpdate):
-    """Update Agent request."""
+    """Update Agent request.
+
+    Supports partial updates of:
+    - ``instruction``: free-form system prompt template string.
+    - ``llm_config``: active model selection for the runtime.
+    - ``skills``: enabled native skill names (subset of the ``skills/`` directory).
+    """
+    instruction: Optional[str] = None
     llm_config: Optional[AgentLLMConfig] = None
+    skills: Optional[List[str]] = None
 
 
 class Agent(BaseModel):
@@ -382,19 +390,19 @@ class Agent(BaseModel):
     path: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    # Agent-specific configuration
+
+    # System prompt template (rendered at runtime with {{agent_name}}, {{agent_path}}, {{now}})
+    instruction: Optional[str] = None
+    # Active LLM model configuration
     llm_config: Optional[AgentLLMConfig] = None
-    # Directory scan results
+
+    # Enabled native skills (subset of available_skills, persisted in agent_spec.yaml)
     skills: List[str] = Field(default_factory=list)
+    # Directory scan results (available but not necessarily enabled)
+    available_skills: List[str] = Field(default_factory=list)
     memories: List[str] = Field(default_factory=list)
     models: List[str] = Field(default_factory=list)
     mcps: List[str] = Field(default_factory=list)
-    active_model: Optional[str] = None
-
-    @property
-    def prompts(self) -> List[str]:
-        """Backward compatibility: prompts is equivalent to memories (internal access only)."""
-        return self.memories
 
 
 # ==================== Memory Models ====================
@@ -417,7 +425,6 @@ class Memory(BaseModel):
     tags: List[str] = Field(default_factory=list)
     entity_type: EntityType = EntityType.PROMPT
     content: str
-    enabled: bool = False
     path: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

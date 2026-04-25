@@ -27,21 +27,6 @@
           </button>
         </div>
       </div>
-      
-      <!-- 启用开关 -->
-      <div class="flex items-center gap-3">
-        <span class="text-sm text-muted-foreground">{{ t('memory.enabled') }}</span>
-        <label class="relative inline-flex items-center cursor-pointer" @click.stop>
-          <input
-            type="checkbox"
-            :checked="isEnabled"
-            @change.stop="toggleEnabled"
-            class="sr-only peer"
-          />
-          <div class="w-11 h-6 bg-muted rounded-full peer-checked:bg-primary transition-colors"></div>
-          <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow peer-checked:translate-x-5 transition-transform"></div>
-        </label>
-      </div>
     </div>
 
     <!-- Tab 切换 -->
@@ -78,23 +63,6 @@
             <div>
               <label class="text-muted-foreground">{{ t('common.name') }}</label>
               <p class="font-medium">{{ selectedMemory?.name }}</p>
-            </div>
-            <div>
-              <label class="text-muted-foreground">{{ t('memory.enabled') }}</label>
-              <p class="font-medium">
-                <span 
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
-                  :class="isEnabled 
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'"
-                >
-                  <span 
-                    class="w-1.5 h-1.5 rounded-full"
-                    :class="isEnabled ? 'bg-green-500' : 'bg-gray-400'"
-                  ></span>
-                  {{ isEnabled ? '已启用' : '已禁用' }}
-                </span>
-              </p>
             </div>
             <div v-if="selectedMemory?.path" class="col-span-2">
               <label class="text-muted-foreground">{{ t('memory.filePath') }}</label>
@@ -185,12 +153,6 @@ const selectedMemory = ref<Memory | null>(null);
 const memoryContent = ref('');
 const isLoading = ref(false);
 
-// 启用状态从 agent 的 instruction.user_prompt_templates 中计算得出
-const isEnabled = computed(() => {
-  const promptTemplates = selectedAgent.value?.instruction?.user_prompt_templates || [];
-  return promptTemplates.some(p => p.name === props.memoryName);
-});
-
 // Editor 引用
 const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
 
@@ -210,34 +172,17 @@ const deleteDescription = ref('');
 // 加载 Memory 详情
 async function loadMemory() {
   if (!props.businessUnitId || !props.agentName || !props.memoryName) return;
-  
+
   isLoading.value = true;
   try {
     const prompt = await agentApi.getMemory(props.businessUnitId, props.agentName, props.memoryName);
     selectedMemory.value = prompt;
     memoryContent.value = prompt.content || '';
-    // 启用状态通过 computed 从 agent.instruction.user_prompt_templates 中获取，无需手动设置
   } catch (e) {
     console.error('Failed to load prompt:', e);
     handleError(t('errors.loadMemoryFailed'));
   } finally {
     isLoading.value = false;
-  }
-}
-
-// 切换启用状态
-async function toggleEnabled() {
-  if (!selectedMemory.value) return;
-  
-  const newEnabled = !isEnabled.value;
-  try {
-    await agentApi.toggleMemoryEnabled(props.businessUnitId, props.agentName, props.memoryName, newEnabled);
-    // 刷新 Agent 数据以更新 instruction.user_prompt_templates 列表，但不改变选中状态
-    // 使用 refreshSelectedAgent 而不是 selectAgent，避免清除 Memory 选中状态
-    await store.refreshSelectedAgent();
-  } catch (e) {
-    console.error('Failed to toggle enabled:', e);
-    handleError(t('errors.updateMemoryFailed'));
   }
 }
 

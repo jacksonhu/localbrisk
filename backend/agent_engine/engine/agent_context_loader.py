@@ -103,13 +103,15 @@ def compute_agent_context_fingerprint(agent_path: str | Path, business_unit_id: 
     if spec_path.exists():
         fingerprint_files.append(spec_path)
 
-    for directory in (path / AGENT_MODELS_DIR, path / "prompts", path / AGENT_MEMORIES_DIR):
+    # Scan resource directories that directly influence the runtime.
+    for directory in (path / AGENT_MODELS_DIR, path / AGENT_MEMORIES_DIR):
         fingerprint_files.extend(
             _iter_config_files(directory, allowed_suffixes=(".yaml", ".yml", ".md", ".markdown"))
         )
 
     agent_spec = load_agent_spec(path) if spec_path.exists() else {}
-    for skill_name in _extract_named_entries(agent_spec.get("capabilities", {}).get("native_skills", [])):
+    # Only fingerprint skills that the spec actually enables.
+    for skill_name in _extract_skill_names(agent_spec.get("skills")):
         fingerprint_files.extend(
             _iter_config_files(
                 path / AGENT_SKILLS_DIR / skill_name,
@@ -208,7 +210,7 @@ async def load_agent_context(
     agent_spec = load_agent_spec(path)
     agent_name = agent_spec.get("baseinfo", {}).get("name", path.name)
     model_configs = load_model_configs(path)
-    model_config = await load_active_model(
+    model_config = await load_llm_model(
         path,
         agent_spec,
         business_unit_id,
@@ -245,7 +247,7 @@ async def load_agent_context(
     )
 
 
-async def load_active_model(
+async def load_llm_model(
     agent_path: Path,
     agent_spec: Dict[str, Any],
     business_unit_id: str,
@@ -253,17 +255,26 @@ async def load_active_model(
     model_resolver: Optional[Callable[[str, str, str], Awaitable[Optional[Dict[str, Any]]]]] = None,
     model_configs: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Load the active model configuration for an agent."""
-    active_model = agent_spec.get("active_model") or agent_spec.get("llm_config", {}).get("llm_model")
-    if not active_model:
-        logger.warning("Agent %s has no active model configured", agent_name)
+    """Load the selected LLM model configuration for an agent.
+
+    The model is strictly determined by ``llm_config.llm_model`` in
+    ``agent_spec.yaml``. Resolution order:
+      1. Cached model configs loaded from the agent's ``models/`` directory.
+      2. Re-read the matching ``models/{name}.yaml`` file from disk.
+      3. Delegate to the supplied async model resolver, if any.
+    """
+    llm_config = agent_spec.get("llm_config") or {}
+    llm_model = llm_config.get("llm_model")
+    if not isinstance(llm_model, str) or not llm_model.strip():
+        logger.warning("Agent %s has no llm_model configured", agent_name)
         return None
+    llm_model = llm_model.strip()
 
     resolved_model_configs = model_configs if model_configs is not None else load_model_configs(agent_path)
-    if active_model in resolved_model_configs:
-        return resolved_model_configs[active_model]
+    if llm_model in resolved_model_configs:
+        return resolved_model_configs[llm_model]
 
-    model_file = agent_path / AGENT_MODELS_DIR / f"{active_model}.yaml"
+    model_file = agent_path / AGENT_MODELS_DIR / f"{llm_model}.yaml"
     if model_file.exists():
         with open(model_file, "r", encoding="utf-8") as file:
             payload = yaml.safe_load(file) or {}
@@ -271,28 +282,32 @@ async def load_active_model(
 
     if model_resolver is None:
         logger.warning(
-            "Active model '%s' for %s/%s was not found locally and no resolver is configured",
-            active_model,
+            "LLM model '%s' for %s/%s was not found locally and no resolver is configured",
+            llm_model,
             business_unit_id,
             agent_name,
         )
         return None
 
     try:
-        return await model_resolver(business_unit_id, agent_name, active_model)
+        return await model_resolver(business_unit_id, agent_name, llm_model)
     except Exception as exc:
         logger.error(
             "Failed to resolve model config for %s/%s/%s: %s",
             business_unit_id,
             agent_name,
-            active_model,
+            llm_model,
             exc,
         )
         return None
 
 
-def _extract_named_entries(entries: Any) -> List[str]:
-    """Extract ordered names from a config list containing strings or objects."""
+def _extract_skill_names(entries: Any) -> List[str]:
+    """Extract a stable, deduplicated skill name list from a yaml-loaded value.
+
+    Accepts either a list of plain strings or (for tolerance) a list of dicts
+    with a ``name`` key. Always returns the unique names in original order.
+    """
     if not isinstance(entries, list):
         return []
 
@@ -301,8 +316,10 @@ def _extract_named_entries(entries: Any) -> List[str]:
     for entry in entries:
         if isinstance(entry, dict):
             name = entry.get("name")
-        else:
+        elif isinstance(entry, str):
             name = entry
+        else:
+            name = None
         if not isinstance(name, str):
             continue
         normalized = name.strip()
@@ -315,6 +332,8 @@ def _extract_named_entries(entries: Any) -> List[str]:
 
 def _iter_memory_files(memories_dir: Path) -> Iterable[Path]:
     """Yield visible markdown memory files in stable order."""
+    if not memories_dir.exists():
+        return
     for file_path in sorted(memories_dir.iterdir()):
         if not file_path.is_file() or file_path.name.startswith("."):
             continue
@@ -323,86 +342,29 @@ def _iter_memory_files(memories_dir: Path) -> Iterable[Path]:
         yield file_path
 
 
-def _build_memory_lookup(memories_dir: Path) -> Dict[str, Path]:
-    """Build a lookup that accepts both file names and stem names."""
-    lookup: Dict[str, Path] = {}
-    for memory_file in _iter_memory_files(memories_dir):
-        lookup.setdefault(memory_file.name.lower(), memory_file)
-        lookup.setdefault(memory_file.stem.lower(), memory_file)
-    return lookup
-
-
-def _iter_memory_lookup_keys(memory_name: str) -> Iterable[str]:
-    """Yield normalized lookup keys for one configured memory entry."""
-    normalized = memory_name.strip()
-    if not normalized:
-        return
-
-    yielded: set[str] = set()
-    candidates = [normalized.lower()]
-    suffix = Path(normalized).suffix.lower()
-    if suffix in {".md", ".markdown"}:
-        candidates.append(Path(normalized).stem.lower())
-    else:
-        candidates.extend((f"{normalized}.md".lower(), f"{normalized}.markdown".lower()))
-
-    for candidate in candidates:
-        if candidate in yielded:
-            continue
-        yielded.add(candidate)
-        yield candidate
-
-
-def _resolve_configured_memory_files(memories_dir: Path, configured_names: List[str]) -> List[str]:
-    """Resolve configured memory names into mounted memory paths."""
-    memory_lookup = _build_memory_lookup(memories_dir)
-    resolved: List[str] = []
-    for memory_name in configured_names:
-        for lookup_key in _iter_memory_lookup_keys(memory_name):
-            memory_file = memory_lookup.get(lookup_key)
-            if memory_file is not None:
-                resolved.append(f"/{AGENT_MEMORIES_DIR}/{memory_file.name}")
-                break
-        else:
-            logger.warning("Configured memory '%s' was not found under %s", memory_name, memories_dir)
-    return resolved
-
-
 def load_memories(agent_path: Path, agent_spec: Optional[Dict[str, Any]] = None) -> List[str]:
-    """Load enabled memory files for an agent."""
+    """Return the mount paths for every markdown memory under an agent.
+
+    All markdown files under ``memories/`` are auto-loaded at runtime; there
+    is no per-memory enable/disable flag.
+    """
+    del agent_spec  # Kept for signature compatibility; memory loading ignores the spec.
+
     memories_dir = agent_path / AGENT_MEMORIES_DIR
-    if not memories_dir.exists():
-        return []
-
-    configured_names = _extract_named_entries(
-        (agent_spec or {}).get("instruction", {}).get("user_prompt_templates", [])
-    )
-    if configured_names:
-        return _resolve_configured_memory_files(memories_dir, configured_names)
-
-    memories: List[str] = []
-    for markdown_file in sorted(list(memories_dir.glob("*.md")) + list(memories_dir.glob("*.markdown"))):
-        if markdown_file.name.startswith("."):
-            continue
-        memory_name = markdown_file.stem
-        metadata_file = memories_dir / f".{memory_name}.meta.yaml"
-        metadata: Dict[str, Any] = {}
-        if metadata_file.exists():
-            with open(metadata_file, "r", encoding="utf-8") as file:
-                metadata = yaml.safe_load(file) or {}
-        if not metadata.get("enabled", True):
-            continue
-        memories.append(f"/{AGENT_MEMORIES_DIR}/{markdown_file.name}")
-    return memories
+    return [f"/{AGENT_MEMORIES_DIR}/{memory_file.name}" for memory_file in _iter_memory_files(memories_dir)]
 
 
 def load_skills(agent_path: Path, agent_spec: Optional[Dict[str, Any]] = None) -> List[SkillConfig]:
-    """Load only native skills explicitly enabled in ``agent_spec.yaml``."""
+    """Load native skills explicitly enabled in ``agent_spec.yaml``.
+
+    The top-level ``skills:`` list in the spec is the single source of truth
+    for which skill directories should be exposed to the runtime.
+    """
     skills_dir = agent_path / AGENT_SKILLS_DIR
     if not skills_dir.exists():
         return []
 
-    configured_names = _extract_named_entries((agent_spec or {}).get("capabilities", {}).get("native_skills", []))
+    configured_names = _extract_skill_names((agent_spec or {}).get("skills"))
     if not configured_names:
         return []
 
@@ -631,7 +593,7 @@ __all__ = [
     "SkillConfig",
     "compute_agent_context_fingerprint",
     "ensure_output_dir",
-    "load_active_model",
+    "load_llm_model",
     "load_agent_context",
     "load_agent_spec",
     "load_asset_bundles",

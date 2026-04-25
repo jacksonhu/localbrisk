@@ -8,7 +8,7 @@ App_Data/Catalogs/{catalog_name}/
 ├── agents/                        # Agent 目录
 │   └── {agent_name}/
 │       ├── agent_spec.yaml             # Agent 配置
-│       ├── prompts/               # Prompts 子目录
+│       ├── memories/              # Memories 子目录
 │       └── skills/                # Skills 子目录
 └── schemas/                       # Schema 目录
     └── {schema_name}/
@@ -222,8 +222,8 @@ class TestCatalogTreeEndpoint:
         assert len(agent_nodes) >= 1
         assert len(schema_nodes) >= 3
     
-    def test_catalog_tree_contains_agent_with_skills_prompts(self, test_client, sample_catalog):
-        """测试导航树中 Agent 包含 skills 和 prompts"""
+    def test_catalog_tree_contains_agent_with_skills_memories(self, test_client, sample_catalog):
+        """测试导航树中 Agent 包含 skills 和 memories"""
         response = test_client.get("/api/catalogs/tree")
         data = response.json()
         
@@ -233,10 +233,10 @@ class TestCatalogTreeEndpoint:
         assert len(agent_nodes) >= 1
         agent = agent_nodes[0]
         
-        # 验证 Agent 包含 skills 和 prompts 子节点
+        # 验证 Agent 包含 skills 和 memories 子节点
         child_names = [c["name"] for c in agent["children"]]
         assert "skills" in child_names
-        assert "prompts" in child_names
+        assert "memories" in child_names
 
 
 class TestSchemaEndpoints:
@@ -468,7 +468,7 @@ class TestAgentEndpoints:
         data = response.json()
         assert data["name"] == "test_agent"
         assert len(data["skills"]) >= 1
-        assert len(data["prompts"]) >= 1
+        assert len(data["memories"]) >= 1
     
     def test_delete_agent(self, test_client, sample_catalog, temp_catalogs_dir):
         """测试删除 Agent"""

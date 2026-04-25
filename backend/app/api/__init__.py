@@ -4,7 +4,7 @@ API routing module.
 
 from fastapi import APIRouter
 
-from app.api.endpoints import business_unit, health, agent_runtime, llm_providers, model_runtime, compute_engine
+from app.api.endpoints import business_unit, health, agent_runtime, llm_providers, model_runtime, compute_engine, foreman_runtime
 
 router = APIRouter()
 
@@ -15,3 +15,4 @@ router.include_router(agent_runtime.router, prefix="/runtime", tags=["Agent Runt
 router.include_router(model_runtime.router, prefix="/runtime", tags=["Model Runtime"])
 router.include_router(llm_providers.router, prefix="/llm", tags=["LLM Configuration"])
 router.include_router(compute_engine.router, prefix="/compute", tags=["Compute Engine"])
+router.include_router(foreman_runtime.router, prefix="/foreman", tags=["Foreman"])

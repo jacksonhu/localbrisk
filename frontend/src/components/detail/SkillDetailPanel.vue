@@ -258,10 +258,9 @@ const skillMdContent = ref('');
 const skillPath = ref('');  // 从后端获取的完整路径
 const isLoading = ref(false);
 
-// 启用状态从 agent 的 capabilities.native_skills 中计算得出
+// Skill enabled state: driven by the top-level ``skills`` list in agent_spec.yaml.
 const isEnabled = computed(() => {
-  const nativeSkills = selectedAgent.value?.capabilities?.native_skills || [];
-  return nativeSkills.some(s => s.name === props.skillName);
+  return (selectedAgent.value?.skills || []).includes(props.skillName);
 });
 
 // Editor 引用
@@ -327,13 +326,23 @@ function handleFileClick(file: FileInfo) {
   }
 }
 
-// 切换启用状态
+// Toggle skill enablement by patching the agent's ``skills`` list via update agent.
 async function toggleEnabled() {
-  const newEnabled = !isEnabled.value;
+  if (!selectedAgent.value || !selectedBusinessUnit.value) return;
+
+  const current = new Set(selectedAgent.value.skills || []);
+  if (isEnabled.value) {
+    current.delete(props.skillName);
+  } else {
+    current.add(props.skillName);
+  }
+
   try {
-    await agentApi.toggleSkillEnabled(props.businessUnitId, props.agentName, props.skillName, newEnabled);
-    // 刷新 Agent 数据以更新 capabilities.native_skills 列表
-    await store.refreshSelectedAgent();
+    await store.updateAgent(
+      selectedBusinessUnit.value.id,
+      selectedAgent.value.name,
+      { skills: Array.from(current) },
+    );
   } catch (e) {
     console.error('Failed to toggle enabled:', e);
     handleError(t('errors.updateSkillFailed'));

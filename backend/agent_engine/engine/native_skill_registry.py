@@ -1,4 +1,4 @@
-"""Helpers for turning configured native skills into OpenAI Agents SDK tools."""
+"""Helpers for turning configured skills into OpenAI Agents SDK tools."""
 
 from __future__ import annotations
 
@@ -12,23 +12,23 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class OpenAINativeSkillCollection:
-    """Built native skill agents and the SDK tools exposed from them."""
+class OpenAISkillCollection:
+    """Built skill agents and the SDK tools exposed from them."""
 
     agents: List[Any] = field(default_factory=list)
     tools: List[Any] = field(default_factory=list)
 
 
-def build_openai_native_skills(
+def build_openai_skills(
     *,
     agent_cls: Any,
     parent_model: Any,
     parent_model_settings: Any = None,
     parent_tools: Optional[Sequence[Any]] = None,
     skills: Optional[Sequence[SkillConfig]] = None,
-) -> OpenAINativeSkillCollection:
+) -> OpenAISkillCollection:
     """Build one skill-agent collection and expose each skill via ``Agent.as_tool()``."""
-    collection = OpenAINativeSkillCollection()
+    collection = OpenAISkillCollection()
     if not skills:
         return collection
 
@@ -51,7 +51,7 @@ def build_openai_native_skills(
         )
         collection.agents.append(skill_agent)
         collection.tools.append(skill_tool)
-        logger.info("Built native skill tool: skill=%s tool_name=%s", skill.name, skill.tool_name)
+        logger.info("Built skill tool: skill=%s tool_name=%s", skill.name, skill.tool_name)
 
     return collection
 
@@ -89,6 +89,6 @@ def _build_skill_instructions(skill: SkillConfig) -> str:
 
 
 __all__ = [
-    "OpenAINativeSkillCollection",
-    "build_openai_native_skills",
+    "OpenAISkillCollection",
+    "build_openai_skills",
 ]

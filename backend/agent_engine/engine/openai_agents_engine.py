@@ -14,7 +14,7 @@ from ..tools.openai_tool_adapter import OpenAIToolAdapter
 from ..tools.registry import build_builtin_tools
 from .agent_context_loader import AgentBuildContext, AssetBundleBackendConfig, SkillConfig, load_agent_context
 from .handoff_registry import build_openai_handoffs
-from .native_skill_registry import build_openai_native_skills
+from .native_skill_registry import build_openai_skills
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,6 @@ Runner = None
 SQLiteSession = None
 _OPENAI_AGENTS_AVAILABLE = False
 _OPENAI_AGENTS_IMPORT_ERROR: Optional[str] = None
-
-
 def _refresh_openai_agents_dependencies() -> bool:
     """Try importing OpenAI Agents SDK symbols and refresh cached availability state."""
     global Agent, Runner, SQLiteSession, _OPENAI_AGENTS_AVAILABLE, _OPENAI_AGENTS_IMPORT_ERROR
@@ -209,11 +207,11 @@ class OpenAIAgentsEngine:
             raise AgentConfigError(
                 message=(
                     f"Agent '{context.agent_name}' has no OpenAI-compatible model configured. "
-                    "Please set 'active_model' or 'llm_config.llm_model' in agent_spec.yaml "
-                    "and provide a matching model definition file under the models/ directory."
+                    "Please set 'llm_config.llm_model' in agent_spec.yaml and provide a matching "
+                    "model definition file under the models/ directory."
                 ),
                 config_path=str(Path(agent_path) / "agent_spec.yaml"),
-                field="active_model",
+                field="llm_config.llm_model",
             )
 
         model_bundle = build_openai_model_bundle(
@@ -232,14 +230,14 @@ class OpenAIAgentsEngine:
             asset_bundles=context.asset_bundles or [],
         ) + (tools or [])
         sdk_runtime_tools = OpenAIToolAdapter.adapt_tools(runtime_tools)
-        native_skill_collection = build_openai_native_skills(
+        skill_collection = build_openai_skills(
             agent_cls=Agent,
             parent_model=model_bundle.model,
             parent_model_settings=model_bundle.model_settings,
             parent_tools=sdk_runtime_tools,
             skills=context.skills,
         )
-        sdk_tools = sdk_runtime_tools + native_skill_collection.tools
+        sdk_tools = sdk_runtime_tools + skill_collection.tools
         handoff_collection = build_openai_handoffs(
             parent_model=model_bundle.model,
             parent_model_settings=model_bundle.model_settings,
@@ -288,7 +286,7 @@ class OpenAIAgentsEngine:
             model_bundle.provider,
             model_bundle.model_id,
             len(sdk_runtime_tools),
-            len(native_skill_collection.tools),
+            len(skill_collection.tools),
             len(handoff_collection.handoffs),
             session_db_path,
         )
@@ -316,24 +314,21 @@ class OpenAIAgentsEngine:
         return await load_agent_context(agent_path, business_unit_id, self._model_resolver)
 
     def _build_instructions(self, context: AgentBuildContext) -> str:
-        """Assemble a single SDK instructions string from the current agent context."""
-        baseinfo = context.agent_spec.get("baseinfo", {}) if isinstance(context.agent_spec, dict) else {}
-        instruction_config = context.agent_spec.get("instruction", {}) if isinstance(context.agent_spec, dict) else {}
+        """Assemble the SDK instructions string from the current agent context.
 
-        parts: List[str] = [
-            f"You are agent '{context.agent_name}'.",
-            f"Working directory: {context.agent_path}/",
-            f"Current date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        ]
+        Composition order:
+          1. Rendered ``instruction`` template from agent_spec.yaml (the user
+             authors this freely; placeholders are substituted at runtime).
+          2. Optional asset-bundle hint so the agent knows which data bundles
+             are mounted under the business unit.
+          3. Memory block built from every markdown file under ``memories/``.
+          4. A trailing guard rail reminding the agent to stay grounded.
+        """
+        parts: List[str] = []
 
-        description = baseinfo.get("description")
-        if isinstance(description, str) and description.strip():
-            parts.append(description.strip())
-
-        for key in ("system_prompt", "prompt", "role"):
-            prompt_text = instruction_config.get(key)
-            if isinstance(prompt_text, str) and prompt_text.strip():
-                parts.append(prompt_text.strip())
+        rendered_instruction = self._render_instruction(context)
+        if rendered_instruction:
+            parts.append(rendered_instruction)
 
         asset_bundle_prompt = self._build_asset_bundle_prompt(context.asset_bundles or [])
         if asset_bundle_prompt:
@@ -344,9 +339,39 @@ class OpenAIAgentsEngine:
             parts.append(memory_block)
 
         parts.append(
-            "When you use tools, keep outputs grounded in tool results and do not invent file contents, SQL results, or command outcomes."
+            "When you use tools, keep outputs grounded in tool results and do not invent "
+            "file contents, SQL results, or command outcomes."
         )
         return "\n\n".join(part for part in parts if isinstance(part, str) and part.strip())
+
+    def _render_instruction(self, context: AgentBuildContext) -> str:
+        """Render the instruction template, substituting runtime placeholders.
+
+        Supported placeholders:
+        - ``{{agent_name}}`` -> the agent's logical name.
+        - ``{{agent_path}}`` -> the agent's on-disk directory.
+        - ``{{now}}``        -> the current local timestamp.
+
+        Falls back to a minimal default when the spec has no instruction set.
+        """
+        agent_spec = context.agent_spec if isinstance(context.agent_spec, dict) else {}
+        template = agent_spec.get("instruction")
+        if not isinstance(template, str) or not template.strip():
+            template = (
+                "You are agent {{agent_name}}\n"
+                "Working directory: {{agent_path}}\n"
+                "Current date: {{now}}"
+            )
+
+        replacements = {
+            "{{agent_name}}": context.agent_name,
+            "{{agent_path}}": f"{context.agent_path}/",
+            "{{now}}": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        rendered = template
+        for placeholder, value in replacements.items():
+            rendered = rendered.replace(placeholder, value)
+        return rendered.strip()
 
     def _build_memory_block(self, context: AgentBuildContext) -> str:
         """Render loaded memory markdown files into one instructions block."""

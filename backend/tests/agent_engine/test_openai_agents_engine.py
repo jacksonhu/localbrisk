@@ -184,8 +184,8 @@ class TestOpenAIAgentsEngineBuild:
             agent_name="test_agent",
             business_unit_id="test_unit",
             agent_spec={
-                "baseinfo": {"name": "test_agent", "description": "Analyze business data."},
-                "instruction": {"system_prompt": "Always explain your reasoning."},
+                "baseinfo": {"name": "test_agent"},
+                "instruction": "Always explain your reasoning. Agent: {{agent_name}}",
             },
             model_config={"model_id": "gpt-4o-mini"},
             memories=[memory_path],
@@ -196,13 +196,14 @@ class TestOpenAIAgentsEngineBuild:
         engine = engine_module.OpenAIAgentsEngine()
         instructions = engine._build_instructions(context)
 
-        assert "Analyze business data." in instructions
         assert "Always explain your reasoning." in instructions
+        # Runtime placeholder substitution happens inside _render_instruction.
+        assert "Agent: test_agent" in instructions
         assert "Remember to verify results before responding." in instructions
         assert "Use tabular reasoning when data is present." not in instructions
 
     @pytest.mark.asyncio
-    async def test_build_agent_adapts_tools_and_exposes_native_skills_as_tools(self, openai_runtime_context, monkeypatch):
+    async def test_build_agent_adapts_tools_and_exposes_skills_as_tools(self, openai_runtime_context, monkeypatch):
         from agent_engine.engine import openai_agents_engine as engine_module
 
         captured: dict = {}
@@ -222,8 +223,9 @@ class TestOpenAIAgentsEngineBuild:
             business_unit_id="test_unit",
             agent_spec={
                 "baseinfo": {"name": "test_agent", "description": "Analyze business data."},
-                "llm_config": {"temperature": 0.4, "max_tokens": 2048},
-                "capabilities": {"native_skills": [{"name": "analysis_skill"}]},
+                "instruction": "Analyze business data.",
+                "llm_config": {"llm_model": "gpt-4o-mini", "temperature": 0.4, "max_tokens": 2048},
+                "skills": ["analysis_skill"],
             },
             model_config={
                 "model_id": "gpt-4o-mini",

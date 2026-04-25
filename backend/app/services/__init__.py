@@ -10,6 +10,7 @@ from app.services.business_unit_service import (
 from app.services.base_service import BaseService
 from app.services.asset_bundle_service import AssetBundleService
 from app.services.agent_service import AgentService
+from app.services.foreman_service import ForemanService, get_foreman_service
 
 __all__ = [
     # Core service instance
@@ -19,4 +20,7 @@ __all__ = [
     "BaseService",
     "AssetBundleService",
     "AgentService",
+    # Foreman
+    "ForemanService",
+    "get_foreman_service",
 ]

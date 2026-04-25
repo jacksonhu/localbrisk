@@ -41,8 +41,8 @@ async def main():
     try:
         # ========== 测试非流式执行 ==========
         logger.debug("=" * 60)
-        logger.debug("开始非流式执行: input='基于本地文件，总结一下统一语义层的核心概念'")
-        result = await runtime.run("基于本地文件，总结一下统一语义层的核心概念")
+        logger.debug("开始非流式执行: input='本地有哪些关于统一语义层的文档'")
+        result = await runtime.run("本地有哪些关于统一语义层的文档")
         final_output = getattr(result, "final_output", result)
         logger.debug("非流式执行完成, final_output 类型: %s", type(final_output).__name__)
         print("\n===== 非流式执行结果 =====")

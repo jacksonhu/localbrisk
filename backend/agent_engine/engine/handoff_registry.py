@@ -16,7 +16,6 @@ Agent = None
 _OPENAI_HANDOFFS_AVAILABLE = False
 _OPENAI_HANDOFFS_IMPORT_ERROR: Optional[str] = None
 
-
 def _refresh_openai_handoff_dependencies() -> bool:
     """Try importing OpenAI handoff primitives and refresh cached availability state."""
     global Agent, _OPENAI_HANDOFFS_AVAILABLE, _OPENAI_HANDOFFS_IMPORT_ERROR
@@ -104,7 +103,6 @@ def build_openai_handoffs(
             agent_kwargs["tools"] = sdk_tools
         if model_settings is not None:
             agent_kwargs["model_settings"] = model_settings
-
         handoffs.append(Agent(**agent_kwargs))
 
     logger.info("Built %d OpenAI handoff agent(s)", len(handoffs))

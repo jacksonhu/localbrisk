@@ -60,14 +60,6 @@ async def delete_agent_memory(business_unit_id: str, agent_name: str, memory_nam
     return crud.success_message("deleted", "Memory")
 
 
-@router.post("/{business_unit_id}/agents/{agent_name}/memories/{memory_name}/toggle")
-async def toggle_agent_memory_enabled(business_unit_id: str, agent_name: str, memory_name: str, enabled: bool):
-    """Toggle a memory enablement flag."""
-    if not get_agent_service().toggle_memory_enabled(business_unit_id, agent_name, memory_name, enabled):
-        raise HTTPException(status_code=404, detail="Memory not found")
-    return {"message": "Memory enabled status updated successfully", "enabled": enabled}
-
-
 @router.get("/{business_unit_id}/agents/{agent_name}/skills/{skill_name}")
 async def get_agent_skill(business_unit_id: str, agent_name: str, skill_name: str):
     """Return skill content."""
@@ -81,14 +73,6 @@ async def delete_agent_skill(business_unit_id: str, agent_name: str, skill_name:
     if not get_agent_service().delete_skill(business_unit_id, agent_name, skill_name):
         raise HTTPException(status_code=404, detail="Skill not found")
     return crud.success_message("deleted", "Skill")
-
-
-@router.post("/{business_unit_id}/agents/{agent_name}/skills/{skill_name}/toggle")
-async def toggle_agent_skill_enabled(business_unit_id: str, agent_name: str, skill_name: str, enabled: bool):
-    """Toggle a skill enablement flag."""
-    if not get_agent_service().toggle_skill_enabled(business_unit_id, agent_name, skill_name, enabled):
-        raise HTTPException(status_code=404, detail="Skill not found")
-    return {"message": "Skill enabled status updated successfully", "enabled": enabled}
 
 
 @router.get("/{business_unit_id}/agents/{agent_name}/models", response_model=List[Model])

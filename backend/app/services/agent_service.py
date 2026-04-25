@@ -1,5 +1,26 @@
 """
-Agent Service - manages Agent, Memory, Skill, Model, MCP
+Agent Service - manages Agent, Memory, Skill, Model, MCP.
+
+On-disk ``agent_spec.yaml`` schema (simplified):
+
+    baseinfo:
+      name: ...
+      display_name: ...
+      description: ...
+    instruction: |
+      Free-form system prompt template string. Supports runtime-rendered
+      placeholders: {{agent_name}}, {{agent_path}}, {{now}}.
+    llm_config:
+      llm_model: <model-name>
+    skills:
+      - <enabled-native-skill-name>
+
+Notes:
+- Memories are auto-loaded from ``{agent_path}/memories/*.md`` by the runtime;
+  there is no per-memory enabled flag in yaml.
+- ``skills`` at the top level is the enabled list. The available pool comes
+  from scanning the ``skills/`` directory.
+- Active model selection is controlled only by ``llm_config.llm_model``.
 """
 
 import logging
@@ -33,6 +54,8 @@ if TYPE_CHECKING:
     from app.services.business_unit_service import BusinessUnitService
 
 logger = logging.getLogger(__name__)
+
+# Directories initialized under every new agent.
 AGENT_BASE_SUBDIRS = (
     AGENT_SKILLS_DIR,
     AGENT_MEMORIES_DIR,
@@ -40,12 +63,57 @@ AGENT_BASE_SUBDIRS = (
     AGENT_MCPS_DIR,
     AGENT_OUTPUT_DIR,
 )
+
+# Hidden runtime bookkeeping directories under ``output/``.
 AGENT_OUTPUT_SYSTEM_SUBDIRS = (
     ".task",
     ".checkpoints",
     ".large_tool_results",
     ".conversation_history",
 )
+
+# Default instruction template persisted into new agents. Placeholders are
+# rendered by the runtime engine, not here, so the template stays stable.
+DEFAULT_INSTRUCTION_TEMPLATE = (
+    "You are agent {{agent_name}}\n"
+    "Working directory: {{agent_path}}\n"
+    "Current date: {{now}}"
+)
+
+# Seed content written into ``memories/AGENTS.md`` on agent creation.
+DEFAULT_AGENTS_MEMORY = (
+    "# Agent Memory\n\n"
+    "Capture reusable context, domain facts, and long-term preferences for this agent here.\n"
+    "All markdown files under this directory are auto-loaded as memory at runtime.\n"
+)
+
+
+def _normalize_skill_list(value: Any) -> List[str]:
+    """Normalize a yaml-loaded ``skills`` value into a deduplicated ordered list.
+
+    Accepts either ``["skill_a", "skill_b"]`` or the legacy object-style
+    ``[{"name": "skill_a"}, ...]`` and always returns plain strings.
+    """
+    if not isinstance(value, list):
+        return []
+    names: List[str] = []
+    seen: set[str] = set()
+    for entry in value:
+        name: Optional[str]
+        if isinstance(entry, dict):
+            name = entry.get("name")
+        elif isinstance(entry, str):
+            name = entry
+        else:
+            name = None
+        if not isinstance(name, str):
+            continue
+        normalized = name.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        names.append(normalized)
+    return names
 
 
 class AgentService(BaseService):
@@ -78,13 +146,8 @@ class AgentService(BaseService):
         """Get Output directory under Agent"""
         return agent_path / AGENT_OUTPUT_DIR
 
-    def _get_memory_dir_candidates(self, agent_path: Path) -> List[Path]:
-        """Get Memory directory candidates (memories only)"""
-        memories_dir = agent_path / AGENT_MEMORIES_DIR
-        return [memories_dir] if memories_dir.exists() else []
-
-    def _get_primary_memory_dir(self, agent_path: Path, create: bool = False) -> Path:
-        """Get primary Memory directory (unified memories)"""
+    def _get_memory_dir(self, agent_path: Path, create: bool = False) -> Path:
+        """Get the memories directory for an agent."""
         memories_dir = agent_path / AGENT_MEMORIES_DIR
         if create:
             memories_dir.mkdir(parents=True, exist_ok=True)
@@ -98,33 +161,31 @@ class AgentService(BaseService):
         return self._scan_subdirs(agents_dir, lambda p: self._load_agent(business_unit_id, p))
     
     def _load_agent(self, business_unit_id: str, agent_path: Path) -> Optional[Agent]:
-        """Load Agent"""
+        """Load an agent from disk into its DTO representation."""
         config_path = self._get_config_path(agent_path)
         if not config_path.exists():
-            logger.debug(f"Agent config file does not exist, skipping: {agent_path.name}")
+            logger.debug("Agent config file does not exist, skipping: %s", agent_path.name)
             return None
         config = self._load_yaml(config_path) or {}
         baseinfo = self._extract_baseinfo(config, agent_path.name)
-        
-        # Scan subdirectories
-        skills = self._scan_dir_names(agent_path / AGENT_SKILLS_DIR, is_dir=True)
-        memories: List[str] = []
-        for memory_dir in self._get_memory_dir_candidates(agent_path):
-            memories.extend(self._scan_dir_names(memory_dir, suffixes=[".md", ".markdown"]))
-        memories = sorted(set(memories))
+
+        # Scan on-disk resource pool.
+        available_skills = self._scan_dir_names(agent_path / AGENT_SKILLS_DIR, is_dir=True)
+        memories = self._scan_dir_names(
+            agent_path / AGENT_MEMORIES_DIR, suffixes=[".md", ".markdown"]
+        )
         models = self._scan_dir_names(agent_path / AGENT_MODELS_DIR, suffixes=[".yaml", ".yml"])
         mcps = self._scan_dir_names(agent_path / AGENT_MCPS_DIR, suffixes=[".yaml", ".yml"])
-        
-        # Get active model
-        active_model = config.get("active_model")
-        if not active_model and models:
-            # Check if any model has enabled=True
-            for model_name in models:
-                model_config = self._load_yaml(agent_path / AGENT_MODELS_DIR / f"{model_name}.yaml")
-                if model_config and model_config.get("enabled"):
-                    active_model = model_name
-                    break
-        
+
+        # Enabled skills = intersection of declared list and on-disk skills.
+        declared_skills = _normalize_skill_list(config.get("skills"))
+        enabled_skills = [name for name in declared_skills if name in available_skills]
+
+        # Instruction is a plain string; fall back to the default template when missing.
+        instruction = config.get("instruction")
+        if not isinstance(instruction, str):
+            instruction = DEFAULT_INSTRUCTION_TEMPLATE
+
         return Agent(
             id=f"{business_unit_id}_agent_{agent_path.name}",
             name=agent_path.name,
@@ -137,21 +198,27 @@ class AgentService(BaseService):
             path=str(agent_path),
             created_at=self._parse_datetime(baseinfo.get("created_at")),
             updated_at=self._parse_datetime(baseinfo.get("updated_at")),
+            instruction=instruction,
             llm_config=self._parse_llm_config(config.get("llm_config")),
-            skills=skills,
+            skills=enabled_skills,
+            available_skills=available_skills,
             memories=memories,
             models=models,
             mcps=mcps,
-            active_model=active_model,
         )
-    
-    def _scan_dir_names(self, dir_path: Path, is_dir: bool = False, suffixes: List[str] = None) -> List[str]:
-        """Scan directory, return name list"""
+
+    def _scan_dir_names(
+        self,
+        dir_path: Path,
+        is_dir: bool = False,
+        suffixes: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Scan a directory and return item names in a stable order."""
         if not dir_path.exists():
             return []
-        
-        result = []
-        for item in dir_path.iterdir():
+
+        result: List[str] = []
+        for item in sorted(dir_path.iterdir()):
             if item.name.startswith("."):
                 continue
             if is_dir and item.is_dir():
@@ -163,13 +230,12 @@ class AgentService(BaseService):
                 else:
                     result.append(item.name)
         return result
-    
-    def _parse_llm_config(self, data: Dict) -> Optional[AgentLLMConfig]:
+
+    def _parse_llm_config(self, data: Optional[Dict[str, Any]]) -> Optional[AgentLLMConfig]:
+        """Parse the ``llm_config`` section from yaml into a typed model."""
         if not data:
             return None
-        return AgentLLMConfig(
-            llm_model=data.get("llm_model"),
-        )
+        return AgentLLMConfig(llm_model=data.get("llm_model"))
     
     def list_agents(self, business_unit_id: str) -> List[Agent]:
         """Get Agent list"""
@@ -201,64 +267,99 @@ class AgentService(BaseService):
             raise RuntimeError(f"Failed to create Agent virtual environment: {e}") from e
 
     def _initialize_agent_directories(self, agent_path: Path) -> None:
-        """Initialize Agent directory structure."""
+        """Initialize the fixed directory layout for a new agent."""
         agent_path.mkdir(parents=True, exist_ok=True)
         for directory in AGENT_BASE_SUBDIRS:
             (agent_path / directory).mkdir(exist_ok=True)
 
+        # Bookkeeping directories live under output/.
+        output_dir = agent_path / AGENT_OUTPUT_DIR
         for system_dir in AGENT_OUTPUT_SYSTEM_SUBDIRS:
-            (agent_path / system_dir).mkdir(exist_ok=True)
+            (output_dir / system_dir).mkdir(parents=True, exist_ok=True)
+
+        # Seed default memory so the runtime always has something to load.
         agents_md_path = agent_path / AGENT_MEMORIES_DIR / "AGENTS.md"
         if not agents_md_path.exists():
-            agents_md_path.write_text(build_default_agents_memory(agent_path), encoding="utf-8")
+            agents_md_path.write_text(DEFAULT_AGENTS_MEMORY, encoding="utf-8")
 
     def create_agent(self, business_unit_id: str, data: AgentCreate) -> Agent:
-        """Create Agent"""
+        """Create a new agent with the simplified default config."""
         bu_path = self.business_unit_service.get_business_unit_path(business_unit_id)
         if not bu_path.exists():
             raise ValueError(f"BusinessUnit '{business_unit_id}' does not exist")
-        
+
         agents_dir = self.business_unit_service.get_agents_dir(bu_path)
         agents_dir.mkdir(parents=True, exist_ok=True)
-        
+
         agent_path = agents_dir / data.name
         if agent_path.exists():
             raise ValueError(f"Agent '{data.name}' already exists")
-        
-        # Create directory structure
+
         self._initialize_agent_directories(agent_path)
         self._create_agent_venv(agent_path)
-        
-        # Create config (simplified: only baseinfo and llm_config)
+
+        # Minimal default config: baseinfo + default instruction + empty llm/skills.
         config = {
-            "baseinfo": self._create_baseinfo(data.name, data.display_name, data.description, data.tags, data.owner or "admin"),
+            "baseinfo": self._create_baseinfo(
+                data.name,
+                data.display_name,
+                data.description,
+                data.tags,
+                data.owner or "admin",
+            ),
+            "instruction": DEFAULT_INSTRUCTION_TEMPLATE,
             "llm_config": {"llm_model": ""},
+            "skills": [],
         }
-        
+
         self._save_yaml(self._get_config_path(agent_path), config)
+        logger.info("Created agent: %s/%s", business_unit_id, data.name)
         return self._load_agent(business_unit_id, agent_path)
-    
-    def update_agent(self, business_unit_id: str, agent_name: str, update: AgentUpdate) -> Optional[Agent]:
-        """Update Agent"""
+
+    def update_agent(
+        self,
+        business_unit_id: str,
+        agent_name: str,
+        update: AgentUpdate,
+    ) -> Optional[Agent]:
+        """Partially update an agent's ``agent_spec.yaml``."""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
         if not agent_path.exists():
             return None
-        
+
         config_path = self._get_config_path(agent_path)
         config = self._load_yaml(config_path) or {}
-        
-        # Update baseinfo
+
+        # Update baseinfo (display_name/description/tags + updated_at).
         baseinfo = self._extract_baseinfo(config, agent_path.name)
-        baseinfo = self._update_baseinfo(baseinfo, update.display_name, update.description, update.tags)
+        baseinfo = self._update_baseinfo(
+            baseinfo, update.display_name, update.description, update.tags
+        )
         config["baseinfo"] = baseinfo
-        
-        # Update llm_config
-        if update.llm_config:
+
+        # Update instruction string. None means unchanged; empty string clears it.
+        if update.instruction is not None:
+            config["instruction"] = update.instruction
+
+        # Update llm_config.llm_model.
+        if update.llm_config is not None:
             lc = config.setdefault("llm_config", {})
             if update.llm_config.llm_model is not None:
                 lc["llm_model"] = update.llm_config.llm_model
-        
+
+        # Update enabled skills list (validated against on-disk skills/).
+        if update.skills is not None:
+            available = set(self._scan_dir_names(agent_path / AGENT_SKILLS_DIR, is_dir=True))
+            seen: set[str] = set()
+            filtered: List[str] = []
+            for name in update.skills:
+                if name in available and name not in seen:
+                    filtered.append(name)
+                    seen.add(name)
+            config["skills"] = filtered
+
         self._save_yaml(config_path, config)
+        logger.info("Updated agent: %s/%s", business_unit_id, agent_name)
         return self._load_agent(business_unit_id, agent_path)
     
     def delete_agent(self, business_unit_id: str, agent_name: str) -> bool:
@@ -360,9 +461,9 @@ class AgentService(BaseService):
         
         self._save_yaml(model_path, config)
         
-        # If this model is enabled, disable others and update active_model
+        # If this model is enabled, disable others and update llm_model
         if data.enabled:
-            self._set_active_model(business_unit_id, agent_name, data.name)
+            self._set_llm_model(business_unit_id, agent_name, data.name)
         
         logger.info(f"Model created successfully: {data.name}")
         return self._load_model(business_unit_id, agent_name, model_path)
@@ -392,68 +493,69 @@ class AgentService(BaseService):
         if update.enabled is not None:
             config["enabled"] = update.enabled
             if update.enabled:
-                # Enable: set as active model
-                self._set_active_model(business_unit_id, agent_name, model_name)
+                # Enable: set as llm_model
+                self._set_llm_model(business_unit_id, agent_name, model_name)
             else:
-                # Disable: clear active_model and llm_config.llm_model if it's the current active model
-                self._clear_active_model_if_matches(business_unit_id, agent_name, model_name)
+                # Disable: clear llm_config.llm_model if it's the current model
+                self._clear_llm_model_if_matches(business_unit_id, agent_name, model_name)
         
         self._save_yaml(model_path, config)
         return self._load_model(business_unit_id, agent_name, model_path)
     
-    def _clear_active_model_if_matches(self, business_unit_id: str, agent_name: str, model_name: str):
-        """Clear active_model and llm_config.llm_model if the specified model is the current active model"""
+    def _clear_llm_model_if_matches(
+        self, business_unit_id: str, agent_name: str, model_name: str
+    ) -> None:
+        """If the given model is the current one, clear ``llm_config.llm_model``."""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
         agent_config_path = self._get_config_path(agent_path)
         agent_config = self._load_yaml(agent_config_path) or {}
-        
-        current_active = agent_config.get("active_model")
-        llm_model = agent_config.get("llm_config", {}).get("llm_model", "")
-        
-        # Check if active_model or llm_config.llm_model matches
-        if current_active == model_name or model_name in llm_model:
-            agent_config["active_model"] = None
-            if "llm_config" in agent_config:
-                agent_config["llm_config"]["llm_model"] = ""
+        llm_config = agent_config.get("llm_config") or {}
+        if llm_config.get("llm_model") == model_name:
+            llm_config["llm_model"] = ""
+            agent_config["llm_config"] = llm_config
             self._save_yaml(agent_config_path, agent_config)
-    
-    def delete_model(self, business_unit_id: str, agent_name: str, model_name: str) -> bool:
-        """Delete Model"""
+            logger.info(
+                "Cleared llm_model for %s/%s (was %s)",
+                business_unit_id,
+                agent_name,
+                model_name,
+            )
+
+    def delete_model(
+        self, business_unit_id: str, agent_name: str, model_name: str
+    ) -> bool:
+        """Delete a model yaml; clear llm_model selection if it matched."""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
         model_path = self._get_models_dir(agent_path) / f"{model_name}.yaml"
-        
-        # If it's the current active model, clear active_model
-        agent_config_path = self._get_config_path(agent_path)
-        agent_config = self._load_yaml(agent_config_path) or {}
-        if agent_config.get("active_model") == model_name:
-            agent_config["active_model"] = None
-            self._save_yaml(agent_config_path, agent_config)
-        
+        self._clear_llm_model_if_matches(business_unit_id, agent_name, model_name)
         return self._delete_file(model_path)
-    
-    def _set_active_model(self, business_unit_id: str, agent_name: str, model_name: str):
-        """Set active Model (disable others and update llm_config.llm_model)"""
+
+    def _set_llm_model(
+        self, business_unit_id: str, agent_name: str, model_name: str
+    ) -> None:
+        """Mark one model as the selected llm_model and disable siblings for UI consistency."""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
         models_dir = self._get_models_dir(agent_path)
-        
-        # Disable other models
+
+        # Disable sibling models so ``enabled`` stays a single-writer flag.
         if models_dir.exists():
             for model_file in models_dir.glob("*.yaml"):
-                if model_file.stem != model_name:
-                    config = self._load_yaml(model_file) or {}
-                    config["enabled"] = False
-                    self._save_yaml(model_file, config)
-        
-        # Update active_model and llm_config.llm_model in Agent config
+                if model_file.stem == model_name:
+                    continue
+                sibling_config = self._load_yaml(model_file) or {}
+                if sibling_config.get("enabled"):
+                    sibling_config["enabled"] = False
+                    self._save_yaml(model_file, sibling_config)
+
+        # Persist the model name into llm_config.llm_model.
         agent_config_path = self._get_config_path(agent_path)
         agent_config = self._load_yaml(agent_config_path) or {}
-        agent_config["active_model"] = model_name
-        
-        # Also update llm_config.llm_model
         llm_config = agent_config.setdefault("llm_config", {})
         llm_config["llm_model"] = model_name
-        
         self._save_yaml(agent_config_path, agent_config)
+        logger.info(
+            "Set llm_model for %s/%s -> %s", business_unit_id, agent_name, model_name
+        )
     
     def enable_model(self, business_unit_id: str, agent_name: str, model_name: str) -> bool:
         """Enable specified Model (disable others)"""
@@ -466,7 +568,7 @@ class AgentService(BaseService):
         config["enabled"] = True
         self._save_yaml(model_path, config)
         
-        self._set_active_model(business_unit_id, agent_name, model_name)
+        self._set_llm_model(business_unit_id, agent_name, model_name)
         return True
     
     # ==================== MCP Operations ====================
@@ -575,68 +677,25 @@ class AgentService(BaseService):
         return self._delete_file(self._get_mcps_dir(agent_path) / f"{mcp_name}.yaml")
     
     # ==================== Memory Operations ====================
-    
-    def _get_enabled_memories(self, business_unit_id: str, agent_name: str) -> List[str]:
-        """Get enabled Memory names"""
-        config = self._load_yaml(self._get_config_path(self._get_agent_path(business_unit_id, agent_name))) or {}
-        templates = config.get("instruction", {}).get("user_prompt_templates", [])
-        return [p.get("name") if isinstance(p, dict) else p for p in templates]
+    #
+    # Memories are plain markdown files under ``{agent_path}/memories/``.
+    # They are always auto-loaded at runtime; there is no per-memory toggle.
 
-    def _find_memory_file(self, memory_dirs: List[Path], memory_name: str) -> Optional[Path]:
-        """Find file across multiple Memory directories"""
-        for memory_dir in memory_dirs:
-            for name in [memory_name, f"{memory_name}.md"]:
-                path = memory_dir / name
-                if path.exists():
-                    return path
+    def _find_memory_file(self, memory_dir: Path, memory_name: str) -> Optional[Path]:
+        """Resolve a memory name (with or without ``.md``) to its on-disk file."""
+        if not memory_dir.exists():
+            return None
+        for candidate in (memory_name, f"{memory_name}.md"):
+            path = memory_dir / candidate
+            if path.exists() and path.is_file():
+                return path
         return None
 
-    def list_memories(self, business_unit_id: str, agent_name: str) -> Optional[List[Memory]]:
-        """Get Memory list"""
-        agent_path = self._get_agent_path(business_unit_id, agent_name)
-        memory_dirs = self._get_memory_dir_candidates(agent_path)
-        if not memory_dirs:
-            return []
-
-        enabled = self._get_enabled_memories(business_unit_id, agent_name)
-        memories_map: Dict[str, Memory] = {}
-
-        for memory_dir in memory_dirs:
-            for item in memory_dir.iterdir():
-                if not item.is_file() or item.suffix.lower() not in [".md", ".markdown"] or item.name.startswith("."):
-                    continue
-                if item.name in memories_map:
-                    continue
-
-                content = self._read_file(item) or ""
-                meta = self._load_yaml(memory_dir / f".{item.stem}.meta.yaml") or {}
-
-                memories_map[item.name] = Memory(
-                    name=item.name,
-                    display_name=meta.get("display_name") or item.stem,
-                    description=meta.get("description"),
-                    tags=meta.get("tags", []),
-                    entity_type=EntityType.PROMPT,
-                    content=content,
-                    enabled=item.name in enabled,
-                    path=str(item),
-                    created_at=self._parse_datetime(meta.get("created_at")),
-                    updated_at=self._parse_datetime(meta.get("updated_at")),
-                )
-
-        return [memories_map[name] for name in sorted(memories_map.keys())]
-
-    def get_memory(self, business_unit_id: str, agent_name: str, memory_name: str) -> Optional[Memory]:
-        """Get Memory details"""
-        agent_path = self._get_agent_path(business_unit_id, agent_name)
-        memory_dirs = self._get_memory_dir_candidates(agent_path)
-        memory_path = self._find_memory_file(memory_dirs, memory_name)
-        if not memory_path:
-            return None
-
+    def _build_memory(self, memory_path: Path) -> Memory:
+        """Build a Memory DTO from one markdown file plus its optional metadata."""
         content = self._read_file(memory_path) or ""
-        meta = self._load_yaml(memory_path.parent / f".{memory_path.stem}.meta.yaml") or {}
-        enabled = self._get_enabled_memories(business_unit_id, agent_name)
+        meta_path = memory_path.parent / f".{memory_path.stem}.meta.yaml"
+        meta = self._load_yaml(meta_path) or {}
 
         return Memory(
             name=memory_path.name,
@@ -645,32 +704,74 @@ class AgentService(BaseService):
             tags=meta.get("tags", []),
             entity_type=EntityType.PROMPT,
             content=content,
-            enabled=memory_path.name in enabled,
+            # Any markdown under memories/ is auto-loaded at runtime.
+            enabled=True,
             path=str(memory_path),
             created_at=self._parse_datetime(meta.get("created_at")),
             updated_at=self._parse_datetime(meta.get("updated_at")),
         )
 
-    def create_memory(self, business_unit_id: str, agent_name: str, data: MemoryCreate) -> bool:
-        """Create Memory"""
+    def list_memories(
+        self, business_unit_id: str, agent_name: str
+    ) -> Optional[List[Memory]]:
+        """Return all markdown memories under an agent."""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
-        memory_dir = self._get_primary_memory_dir(agent_path, create=True)
+        memory_dir = self._get_memory_dir(agent_path)
+        if not memory_dir.exists():
+            return []
 
-        name = data.name if data.name.endswith(".md") else f"{data.name}.md"
-        memory_path = memory_dir / name
+        memories: List[Memory] = []
+        for item in sorted(memory_dir.iterdir()):
+            if not item.is_file() or item.name.startswith("."):
+                continue
+            if item.suffix.lower() not in {".md", ".markdown"}:
+                continue
+            memories.append(self._build_memory(item))
+        return memories
 
+    def get_memory(
+        self, business_unit_id: str, agent_name: str, memory_name: str
+    ) -> Optional[Memory]:
+        """Return a single memory file."""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        memory_path = self._find_memory_file(self._get_memory_dir(agent_path), memory_name)
+        if not memory_path:
+            return None
+        return self._build_memory(memory_path)
+
+    def create_memory(
+        self, business_unit_id: str, agent_name: str, data: MemoryCreate
+    ) -> bool:
+        """Create a new markdown memory under an agent."""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        memory_dir = self._get_memory_dir(agent_path, create=True)
+
+        file_name = data.name if data.name.endswith(".md") else f"{data.name}.md"
+        memory_path = memory_dir / file_name
         if memory_path.exists():
             raise ValueError(f"Memory '{data.name}' already exists")
 
         self._write_file(memory_path, data.content)
-        self._save_yaml(memory_dir / f".{memory_path.stem}.meta.yaml", {"created_at": self._now_iso(), "updated_at": self._now_iso()})
+        now = self._now_iso()
+        self._save_yaml(
+            memory_dir / f".{memory_path.stem}.meta.yaml",
+            {"created_at": now, "updated_at": now},
+        )
+        logger.info(
+            "Created memory: %s/%s/%s", business_unit_id, agent_name, memory_path.name
+        )
         return True
 
-    def update_memory(self, business_unit_id: str, agent_name: str, memory_name: str, update: MemoryUpdate) -> bool:
-        """Update Memory"""
+    def update_memory(
+        self,
+        business_unit_id: str,
+        agent_name: str,
+        memory_name: str,
+        update: MemoryUpdate,
+    ) -> bool:
+        """Update a memory file's content and bump its metadata."""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
-        memory_dirs = self._get_memory_dir_candidates(agent_path)
-        memory_path = self._find_memory_file(memory_dirs, memory_name)
+        memory_path = self._find_memory_file(self._get_memory_dir(agent_path), memory_name)
         if not memory_path:
             return False
 
@@ -683,11 +784,12 @@ class AgentService(BaseService):
         self._save_yaml(meta_path, meta)
         return True
 
-    def delete_memory(self, business_unit_id: str, agent_name: str, memory_name: str) -> bool:
-        """Delete Memory"""
+    def delete_memory(
+        self, business_unit_id: str, agent_name: str, memory_name: str
+    ) -> bool:
+        """Delete a memory file plus its sidecar metadata."""
         agent_path = self._get_agent_path(business_unit_id, agent_name)
-        memory_dirs = self._get_memory_dir_candidates(agent_path)
-        memory_path = self._find_memory_file(memory_dirs, memory_name)
+        memory_path = self._find_memory_file(self._get_memory_dir(agent_path), memory_name)
         if not memory_path:
             return False
 
@@ -697,81 +799,48 @@ class AgentService(BaseService):
             meta_path.unlink()
         return True
 
-    def toggle_memory_enabled(self, business_unit_id: str, agent_name: str, memory_name: str, enabled: bool) -> bool:
-        """Toggle Memory enabled status"""
-        agent_path = self._get_agent_path(business_unit_id, agent_name)
-        config_path = self._get_config_path(agent_path)
-
-        if not config_path.exists():
-            return False
-
-        memory_path = self._find_memory_file(self._get_memory_dir_candidates(agent_path), memory_name)
-        if not memory_path:
-            return False
-        actual_name = memory_path.name
-
-        config = self._load_yaml(config_path) or {}
-        inst = config.setdefault("instruction", {})
-        templates = inst.get("user_prompt_templates", [])
-        names = [p.get("name") if isinstance(p, dict) else p for p in templates]
-
-        if enabled and actual_name not in names:
-            templates.append({"name": actual_name})
-        elif not enabled:
-            templates = [p for p in templates if (p.get("name") if isinstance(p, dict) else p) != actual_name]
-
-        inst["user_prompt_templates"] = templates
-        config["baseinfo"] = self._update_baseinfo(self._extract_baseinfo(config, agent_path.name))
-
-        self._save_yaml(config_path, config)
-        return True
-    
     # ==================== Skill Operations ====================
-    
-    def get_skill(self, business_unit_id: str, agent_name: str, skill_name: str) -> Optional[Dict[str, Any]]:
-        """Get Skill content and path"""
-        skill_path = self._get_agent_path(business_unit_id, agent_name) / AGENT_SKILLS_DIR / skill_name
+    #
+    # Skills live as subdirectories under ``{agent_path}/skills/``. The top-level
+    # ``skills:`` list in ``agent_spec.yaml`` stores which ones are enabled.
+
+    def get_skill(
+        self, business_unit_id: str, agent_name: str, skill_name: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return skill SKILL.md content plus its on-disk path."""
+        skill_path = (
+            self._get_agent_path(business_unit_id, agent_name)
+            / AGENT_SKILLS_DIR
+            / skill_name
+        )
         if not skill_path.exists() or not skill_path.is_dir():
             return None
-        
+
         content = self._read_file(skill_path / "SKILL.md") or ""
         return {"content": content, "path": str(skill_path)}
-    
-    def delete_skill(self, business_unit_id: str, agent_name: str, skill_name: str) -> bool:
-        """Delete Skill"""
-        skill_path = self._get_agent_path(business_unit_id, agent_name) / AGENT_SKILLS_DIR / skill_name
+
+    def delete_skill(
+        self, business_unit_id: str, agent_name: str, skill_name: str
+    ) -> bool:
+        """Delete a skill directory and drop it from the enabled list."""
+        agent_path = self._get_agent_path(business_unit_id, agent_name)
+        skill_path = agent_path / AGENT_SKILLS_DIR / skill_name
         if not skill_path.exists():
             return False
-        
+
         if skill_path.is_dir():
             shutil.rmtree(skill_path)
         else:
             skill_path.unlink()
-        return True
-    
-    def toggle_skill_enabled(self, business_unit_id: str, agent_name: str, skill_name: str, enabled: bool) -> bool:
-        """Toggle Skill enabled status"""
-        agent_path = self._get_agent_path(business_unit_id, agent_name)
+
+        # Remove the skill from the enabled list in agent_spec.yaml if present.
         config_path = self._get_config_path(agent_path)
-        skills_dir = agent_path / AGENT_SKILLS_DIR
-        
-        if not config_path.exists() or not (skills_dir / skill_name).exists():
-            return False
-        
-        config = self._load_yaml(config_path) or {}
-        caps = config.setdefault("capabilities", {})
-        skills = caps.get("native_skills", [])
-        names = [s.get("name") if isinstance(s, dict) else s for s in skills]
-        
-        if enabled and skill_name not in names:
-            skills.append({"name": skill_name})
-        elif not enabled:
-            skills = [s for s in skills if (s.get("name") if isinstance(s, dict) else s) != skill_name]
-        
-        caps["native_skills"] = skills
-        config["baseinfo"] = self._update_baseinfo(self._extract_baseinfo(config, agent_path.name))
-        
-        self._save_yaml(config_path, config)
+        if config_path.exists():
+            config = self._load_yaml(config_path) or {}
+            declared = _normalize_skill_list(config.get("skills"))
+            if skill_name in declared:
+                config["skills"] = [name for name in declared if name != skill_name]
+                self._save_yaml(config_path, config)
         return True
     
     def import_skill_from_zip(self, business_unit_id: str, agent_name: str, zip_file_path: Path, original_filename: str = None) -> Dict[str, Any]:

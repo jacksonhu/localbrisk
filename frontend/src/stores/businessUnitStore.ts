@@ -18,6 +18,7 @@ import type {
   AssetCreate,
   Agent,
   AgentCreate,
+  AgentUpdate,
   Model,
   ModelCreate,
   MCP,
@@ -1061,7 +1062,7 @@ function clearSelectedAgent(): void {
 
 /**
  * 刷新当前选中的 Agent 数据
- * 不改变选中状态，只更新 Agent 数据（如 capabilities 配置）
+ * 不改变选中状态，只更新 Agent 数据
  */
 async function refreshSelectedAgent(): Promise<void> {
   if (!selectedAgent.value || !selectedBusinessUnit.value) return;
@@ -1072,6 +1073,32 @@ async function refreshSelectedAgent(): Promise<void> {
   } catch (e) {
     error.value = e instanceof Error ? e.message : "刷新 Agent 数据失败";
     console.error("refreshSelectedAgent error:", e);
+  }
+}
+
+/**
+ * 更新 Agent 配置（instruction / llm_config / skills / baseinfo）
+ * 统一走 agent update 接口，避免碎片化的 toggle/enable 调用。
+ * 成功后刷新选中 Agent 数据，保持 UI 状态一致。
+ */
+async function updateAgent(
+  businessUnitId: string,
+  agentName: string,
+  data: AgentUpdate,
+): Promise<Agent | null> {
+  try {
+    const updated = await agentApi.update(businessUnitId, agentName, data);
+    if (
+      selectedAgent.value?.name === agentName &&
+      selectedBusinessUnit.value?.id === businessUnitId
+    ) {
+      selectedAgent.value = updated;
+    }
+    return updated;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "更新 Agent 失败";
+    console.error("updateAgent error:", e);
+    return null;
   }
 }
 
@@ -1209,22 +1236,6 @@ async function selectModel(businessUnitId: string, agentName: string, modelName:
   } catch (e) {
     error.value = e instanceof Error ? e.message : "获取模型详情失败";
     console.error("selectModel error:", e);
-  }
-}
-
-/**
- * 启用 Model（禁用其他 Model）
- */
-async function enableModel(businessUnitId: string, agentName: string, modelName: string): Promise<boolean> {
-  try {
-    await modelApi.enable(businessUnitId, agentName, modelName);
-    // 刷新树和 Agent
-    await Promise.all([fetchTree(), refreshSelectedAgent()]);
-    return true;
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "启用模型失败";
-    console.error("enableModel error:", e);
-    return false;
   }
 }
 
@@ -1424,6 +1435,7 @@ export function useBusinessUnitStore() {
     deleteAgent,
     selectAgent,
     refreshSelectedAgent,  // 刷新 Agent 数据但不改变选中状态
+    updateAgent,           // 统一的 Agent 更新入口（instruction/llm_config/skills）
     clearSelectedAgent,
     selectMemory,
     clearSelectedMemory,
@@ -1432,7 +1444,6 @@ export function useBusinessUnitStore() {
     createModel,
     deleteModel,
     selectModel,
-    enableModel,
     clearSelectedModel,
     createMCP,
     deleteMCP,
