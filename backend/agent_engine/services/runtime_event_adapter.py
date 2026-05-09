@@ -56,7 +56,10 @@ class RuntimeEventAdapter:
             event_type = self._extract_value(event, "type") or ""
 
             if event_type == "raw_response_event":
-                content = self._extract_text(self._extract_value(event, "data"))
+                # Only extract meaningful text delta from raw OpenAI response events.
+                # Non-text events (ResponseCreatedEvent, ResponseOutputItemAddedEvent, etc.)
+                # contain no user-visible content and must be silently skipped.
+                content = self._extract_raw_response_text(self._extract_value(event, "data"))
                 if content:
                     accumulated_text += content
                     yield builder.thought(content=content, mode="append", phase="analyzing", icon="brain")
@@ -193,10 +196,17 @@ class RuntimeEventAdapter:
                     yield builder.thought(content=message_text, mode="append", phase="analyzing", icon="brain")
                     self._append_snapshot_thought(snapshot, message_text, phase="analyzing")
 
+        # Emit final output only if it provides genuinely new content.
+        # When streaming, accumulated_text already contains the incremental deltas shown
+        # in the thinking process, so we avoid repeating the same content as "final result".
         final_output = self.extract_final_output(run_result)
-        if final_output and final_output != accumulated_text:
-            yield builder.thought(content=final_output, mode="replace", phase="done", icon="check")
-            self._append_snapshot_thought(snapshot, final_output, phase="done")
+        if final_output:
+            normalized_accumulated = accumulated_text.strip()
+            normalized_final = final_output.strip()
+            # Skip if final output is identical to or a subset of what was already streamed
+            if normalized_final and normalized_final != normalized_accumulated and normalized_final not in normalized_accumulated:
+                yield builder.thought(content=final_output, mode="replace", phase="done", icon="check")
+                self._append_snapshot_thought(snapshot, final_output, phase="done")
 
     async def _iterate_stream_events(self, run_result: Any) -> AsyncIterator[Any]:
         """Iterate stream events from a streaming run result object."""
@@ -318,6 +328,62 @@ class RuntimeEventAdapter:
                 return decoded
             return {"input": decoded}
         return None
+
+    @classmethod
+    def _extract_raw_response_text(cls, data: Any) -> str:
+        """Strictly extract text delta from a raw OpenAI response event.
+
+        Only returns content from events that actually carry user-visible text
+        (e.g. ResponseTextDeltaEvent with a 'delta' field). Events like
+        ResponseCreatedEvent, ResponseOutputItemAddedEvent, etc. are silently
+        skipped to prevent their repr() from polluting the thinking stream.
+        """
+        if data is None:
+            return ""
+
+        # For dict-like payloads, look for known text-carrying keys
+        if isinstance(data, dict):
+            for key in ("delta", "text"):
+                val = data.get(key)
+                if isinstance(val, str) and val:
+                    return val
+            return ""
+
+        # For SDK event objects, check the 'type' field to filter non-text events.
+        event_type_str = ""
+        raw_type = getattr(data, "type", None)
+        if isinstance(raw_type, str):
+            event_type_str = raw_type
+
+        # Allowlist of event types that carry user-visible text content
+        TEXT_BEARING_TYPES = {
+            "response.output_text.delta",
+            "response.text.delta",
+            "response.content_part.delta",
+            "response.output_text.done",
+            "response.text.done",
+            "response.content_part.done",
+        }
+
+        if event_type_str and event_type_str not in TEXT_BEARING_TYPES:
+            # Non-text event (ResponseCreatedEvent, ResponseOutputItemAddedEvent, etc.) — skip
+            return ""
+
+        # Extract 'delta' or 'text' attribute from the SDK event object
+        for key in ("delta", "text"):
+            val = getattr(data, key, None)
+            if isinstance(val, str) and val:
+                return val
+
+        # Some events nest text inside a 'part' sub-object
+        part = getattr(data, "part", None)
+        if part is not None:
+            for key in ("text", "delta"):
+                val = getattr(part, key, None)
+                if isinstance(val, str) and val:
+                    return val
+
+        return ""
 
     @classmethod
     def _extract_text(cls, value: Any) -> str:

@@ -56,6 +56,33 @@ export interface ForemanConversationDetail {
 
 export type ForemanMessageRole = "user" | "agent" | "system";
 
+/** Execution step status for task list display. */
+export type ForemanTaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+
+/** One step in the agent execution plan. */
+export interface ForemanTaskStep {
+  id: string;
+  title: string;
+  description?: string;
+  status: ForemanTaskStatus;
+  /** Elapsed time in seconds for display (e.g. "00:02"). */
+  elapsedSec?: number;
+  /** Thought/reasoning content for this step (expandable). */
+  thought?: string;
+}
+
+/** Tool call entry tracked during agent execution. */
+export interface ForemanToolCallEntry {
+  toolCallId?: string;
+  toolName: string;
+  toolArgs?: Record<string, any>;
+  toolResult?: string;
+  status: "running" | "completed" | "failed";
+  reason?: string;
+  expectedOutcome?: string;
+  reflection?: string;
+}
+
 export interface ForemanMessage {
   /** Primary identifier for the message. */
   id: string;
@@ -66,9 +93,32 @@ export interface ForemanMessage {
   role: ForemanMessageRole;
   senderId: string;
   senderName: string;
+  /** Accent color for the agent avatar. */
+  senderColor?: string;
   content: string;
   mentionedAgents?: string[];
   createdAt: string;
+
+  // ---- Execution process fields (agent messages only) ----
+
+  /** Whether the agent is currently executing (show loading indicators). */
+  isExecuting?: boolean;
+  /** Whether the thinking process panel is expanded. */
+  isThinkingExpanded?: boolean;
+  /** Current thought/reasoning text being streamed. */
+  thoughtText?: string;
+  /** Current execution phase label. */
+  currentPhase?: string;
+  /** Execution step list. */
+  tasks?: ForemanTaskStep[];
+  /** Tool call entries. */
+  toolCalls?: ForemanToolCallEntry[];
+  /** Done summary text. */
+  doneSummary?: string;
+  /** Suggested next steps after completion. */
+  doneNextSteps?: string[];
+  /** Error info. */
+  errorText?: string;
 }
 
 // ============ Sidebar item (unified for left panel) ============

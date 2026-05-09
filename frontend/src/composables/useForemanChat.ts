@@ -15,6 +15,7 @@ import type {
   ForemanConversationType,
   ForemanMessage,
   ForemanSidebarItem,
+  ForemanTaskStatus,
 } from "@/types/foreman";
 import { foremanApi } from "@/services/api";
 import { useSSEClient } from "@/composables/useSSEClient";
@@ -203,6 +204,46 @@ async function addAgentsToConversation(agentIds: string[]): Promise<void> {
 
 // ──────────────────── send message ────────────────────
 
+/**
+ * Find or create the current agent message block for the given round.
+ * All SSE events from a single agent in a single round go into one message.
+ */
+function findOrCreateAgentBlock(
+  conversation: ForemanConversation,
+  agentName: string,
+  roundId: string | undefined,
+): ForemanMessage {
+  const existing = conversation.messages.findLast(
+    (m) => m.role === "agent" && m.senderId === agentName && m.roundId === (roundId || ""),
+  );
+  if (existing) return existing;
+
+  const agentInfo = directoryAgents.value.find((a) => a.name === agentName);
+  const displayName = agentInfo?.displayName || agentName;
+  const color = agentInfo?.accentColor || "#2563EB";
+  const blockId = `agent-${Date.now()}-${agentName}`;
+
+  const block: ForemanMessage = {
+    id: blockId,
+    messageId: blockId,
+    conversationId: conversation.id,
+    roundId: roundId || "",
+    role: "agent",
+    senderId: agentName,
+    senderName: displayName,
+    senderColor: color,
+    content: "",
+    createdAt: new Date().toISOString(),
+    isExecuting: true,
+    isThinkingExpanded: true,
+    tasks: [],
+    toolCalls: [],
+  };
+
+  conversation.messages.push(block);
+  return block;
+}
+
 async function sendMessage(content: string): Promise<void> {
   const conversation = activeConversation.value;
   if (!conversation || !content.trim() || isSending.value) return;
@@ -228,24 +269,49 @@ async function sendMessage(content: string): Promise<void> {
   // Track which agents are "typing".
   typingAgentIds.value = [...conversation.agentIds];
 
+  // Execution timer per agent block for elapsed seconds.
+  const blockStartTimes = new Map<string, number>();
+
   // SSE streaming.
   const streamUrl = foremanApi.getStreamUrl(conversation.id);
 
   const { executeStreamGeneric, disconnect } = useSSEClient({
     onMessage: (msg: StreamMessage) => {
       const payload = msg.payload || {};
-      const agentName = payload.agent_name || "";
-      const eventKind = payload.event_kind || "";
+      const agentName: string = payload.agent_name || "";
+      const eventKind: string = payload.event_kind || "";
+      const roundId: string = payload.round_id || "";
 
-      // Handle Foreman envelope events.
+      // ---- Foreman envelope events (STATUS with event_kind) ----
       if (msg.type === "STATUS" && eventKind) {
-        if (eventKind === "member_done") {
-          typingAgentIds.value = typingAgentIds.value.filter((id) => !id.endsWith(`/${agentName}`));
+        if (eventKind === "member_started" && agentName) {
+          // Create agent block eagerly when member starts.
+          const block = findOrCreateAgentBlock(conversation, agentName, roundId);
+          blockStartTimes.set(block.id, Date.now());
         }
+
+        if (eventKind === "member_done" && agentName) {
+          typingAgentIds.value = typingAgentIds.value.filter((id) => !id.endsWith(`/${agentName}`));
+          // Mark the agent block as done executing.
+          const block = conversation.messages.findLast(
+            (m) => m.role === "agent" && m.senderId === agentName,
+          );
+          if (block) {
+            block.isExecuting = false;
+            // Mark all remaining pending tasks as completed.
+            if (block.tasks) {
+              for (const t of block.tasks) {
+                if (t.status === "running" || t.status === "pending") t.status = "completed";
+              }
+            }
+          }
+        }
+
         if (eventKind === "round_completed") {
           typingAgentIds.value = [];
         }
-        // Show coordinator decisions as system messages.
+
+        // Coordinator decisions show as system messages.
         if (eventKind === "coordinator_decision") {
           const sysId = `sys-${Date.now()}`;
           conversation.messages.push({
@@ -262,54 +328,138 @@ async function sendMessage(content: string): Promise<void> {
         return;
       }
 
-      // Handle THOUGHT messages from member agents.
+      // ---- THOUGHT: append to agent block ----
       if (msg.type === "THOUGHT" && agentName) {
-        const agentInfo = directoryAgents.value.find((a) => a.name === agentName);
-        const displayName = agentInfo?.displayName || agentName;
+        const block = findOrCreateAgentBlock(conversation, agentName, roundId);
         const mode = payload.mode || "append";
-        const content = payload.content || "";
+        const incoming = payload.content || "";
 
-        // Find or create a message bubble for this agent in this round.
-        const existingIdx = conversation.messages.findLastIndex(
-          (m) => m.role === "agent" && m.senderId === agentName && m.roundId === payload.round_id,
-        );
-
-        if (existingIdx >= 0 && mode === "append") {
-          conversation.messages[existingIdx].content += content;
-        } else if (existingIdx >= 0 && mode === "replace") {
-          conversation.messages[existingIdx].content = content;
+        if (mode === "replace") {
+          block.content = incoming;
         } else {
-          const agentMsgId = `agent-${Date.now()}-${agentName}`;
-          conversation.messages.push({
-            id: agentMsgId,
-            messageId: agentMsgId,
-            conversationId: conversation.id,
-            roundId: payload.round_id,
-            role: "agent",
-            senderId: agentName,
-            senderName: displayName,
-            content: content,
-            createdAt: new Date().toISOString(),
-          });
+          block.content += incoming;
         }
 
-        conversation.summary = content.slice(0, 72);
+        // Also update thought text for the execution panel.
+        if (payload.phase) block.currentPhase = payload.phase;
+        if (mode === "replace") {
+          block.thoughtText = incoming;
+        } else {
+          block.thoughtText = (block.thoughtText || "") + incoming;
+        }
+
+        // If there's a running task, attach the thought to it.
+        const runningTask = block.tasks?.find((t) => t.status === "running");
+        if (runningTask) {
+          runningTask.thought = (block.thoughtText || "").slice(-500);
+        }
+
+        conversation.summary = incoming.slice(0, 72);
         return;
       }
 
-      // Handle ERROR messages.
-      if (msg.type === "ERROR") {
-        const errId = `err-${Date.now()}`;
-        conversation.messages.push({
-          id: errId,
-          messageId: errId,
-          conversationId: conversation.id,
-          role: "system",
-          senderId: "system",
-          senderName: "System",
-          content: `Error: ${payload.message || "Unknown error"}`,
-          createdAt: new Date().toISOString(),
+      // ---- TASK_LIST: update step list on agent block ----
+      if (msg.type === "TASK_LIST" && agentName) {
+        const block = findOrCreateAgentBlock(conversation, agentName, roundId);
+        const incomingTasks = payload.tasks || [];
+        const startTime = blockStartTimes.get(block.id) || Date.now();
+
+        block.tasks = incomingTasks.map((t: any) => {
+          const status = normalizeTaskStatus(t.status);
+          return {
+            id: String(t.id || t.task_id || ""),
+            title: t.title || t.content || "",
+            description: t.description || "",
+            status,
+            elapsedSec: status !== "pending" ? Math.round((Date.now() - startTime) / 1000) : undefined,
+            thought: undefined,
+          };
         });
+        return;
+      }
+
+      // ---- TOOL_CALL: track tool execution ----
+      if (msg.type === "TOOL_CALL" && agentName) {
+        const block = findOrCreateAgentBlock(conversation, agentName, roundId);
+        if (!block.toolCalls) block.toolCalls = [];
+
+        if (payload.status === "running") {
+          block.toolCalls.push({
+            toolCallId: payload.tool_call_id,
+            toolName: payload.tool_name || "unknown",
+            toolArgs: payload.tool_args,
+            status: "running",
+            reason: payload.reason,
+            expectedOutcome: payload.expected_outcome,
+          });
+        } else {
+          // Match and update existing entry.
+          const idx = payload.tool_call_id
+            ? block.toolCalls.findLastIndex((tc) => tc.toolCallId === payload.tool_call_id)
+            : block.toolCalls.findLastIndex((tc) => tc.toolName === payload.tool_name && tc.status === "running");
+
+          if (idx >= 0) {
+            block.toolCalls[idx].status = payload.status;
+            block.toolCalls[idx].toolResult = payload.tool_result;
+            if (payload.reflection) block.toolCalls[idx].reflection = payload.reflection;
+          } else {
+            block.toolCalls.push({
+              toolCallId: payload.tool_call_id,
+              toolName: payload.tool_name || "unknown",
+              toolArgs: payload.tool_args,
+              toolResult: payload.tool_result,
+              status: payload.status || "completed",
+              reason: payload.reason,
+            });
+          }
+        }
+        return;
+      }
+
+      // ---- DONE: mark agent execution complete ----
+      if (msg.type === "DONE") {
+        if (agentName) {
+          const block = conversation.messages.findLast(
+            (m) => m.role === "agent" && m.senderId === agentName,
+          );
+          if (block) {
+            block.isExecuting = false;
+            block.doneSummary = payload.summary || "";
+            block.doneNextSteps = payload.next_steps;
+            if (block.tasks) {
+              for (const t of block.tasks) {
+                if (t.status !== "failed") t.status = "completed";
+              }
+            }
+          }
+        }
+        return;
+      }
+
+      // ---- ERROR ----
+      if (msg.type === "ERROR") {
+        if (agentName) {
+          const block = conversation.messages.findLast(
+            (m) => m.role === "agent" && m.senderId === agentName,
+          );
+          if (block) {
+            block.isExecuting = false;
+            block.errorText = payload.message || "Unknown error";
+          }
+        } else {
+          const errId = `err-${Date.now()}`;
+          conversation.messages.push({
+            id: errId,
+            messageId: errId,
+            conversationId: conversation.id,
+            role: "system",
+            senderId: "system",
+            senderName: "System",
+            content: `Error: ${payload.message || "Unknown error"}`,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        return;
       }
     },
     onError: (err) => {
@@ -318,6 +468,10 @@ async function sendMessage(content: string): Promise<void> {
     onClose: () => {
       typingAgentIds.value = [];
       isSending.value = false;
+      // Mark all executing blocks as done.
+      for (const m of conversation.messages) {
+        if (m.isExecuting) m.isExecuting = false;
+      }
     },
   });
 
@@ -332,6 +486,16 @@ async function sendMessage(content: string): Promise<void> {
     typingAgentIds.value = [];
     isSending.value = false;
   }
+}
+
+/** Normalize task status string variants to canonical values. */
+function normalizeTaskStatus(status?: string): ForemanTaskStatus {
+  const s = (status || "pending").toLowerCase();
+  if (s === "completed" || s === "done" || s === "success") return "completed";
+  if (s === "running" || s === "in_progress" || s === "in-progress") return "running";
+  if (s === "failed" || s === "error") return "failed";
+  if (s === "cancelled" || s === "canceled") return "cancelled";
+  return "pending";
 }
 
 // ──────────────────── computed properties ────────────────────
